@@ -1,0 +1,10 @@
+[project]
+name = "assam-exam-ai"
+version = "0.1.0"
+description = "AI-powered exam preparation and content intelligence platform for Assam competitive examinations."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv]
+package = false

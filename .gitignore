@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Build artifacts
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environment
+.venv/
+
+# Environment variables
+.env
+
+# Testing
+.pytest_cache/
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
