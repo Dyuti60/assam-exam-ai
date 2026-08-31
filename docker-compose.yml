@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: assam-exam-ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: assam_exam_ai
+      POSTGRES_USER: assam_admin
+      POSTGRES_PASSWORD: assam_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
