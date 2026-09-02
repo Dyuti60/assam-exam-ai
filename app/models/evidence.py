@@ -1,7 +1,12 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, Integer, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.verification_evidence import VerificationEvidence
 
 
 class Evidence(Base):
@@ -24,4 +29,9 @@ class Evidence(Base):
 
     location_reference: Mapped[str | None] = mapped_column(
         Text,
+    )
+
+    verification_links: Mapped[list["VerificationEvidence"]] = relationship(
+        back_populates="evidence",
+        passive_deletes="all",
     )

@@ -4,6 +4,7 @@ from app.models.claim_evidence import claim_evidence
 from app.models.evidence import Evidence
 from app.models.source import Source
 from app.models.verification import Verification
+from app.models.verification_evidence import VerificationEvidence
 
 __all__ = [
     "Base",
@@ -11,5 +12,6 @@ __all__ = [
     "Evidence",
     "Source",
     "Verification",
+    "VerificationEvidence",
     "claim_evidence",
 ]

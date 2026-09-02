@@ -1,9 +1,15 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.evidence import Evidence
+    from app.models.verification_evidence import VerificationEvidence
 
 
 class Verification(Base):
@@ -37,4 +43,15 @@ class Verification(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+    )
+
+    evidence_links: Mapped[list["VerificationEvidence"]] = relationship(
+        back_populates="verification",
+        cascade="all, delete-orphan",
+        order_by="VerificationEvidence.position",
+    )
+
+    used_evidence: AssociationProxy[list["Evidence"]] = association_proxy(
+        "evidence_links",
+        "evidence",
     )
