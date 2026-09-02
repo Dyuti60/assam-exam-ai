@@ -22,9 +22,9 @@ This section describes only the repository inspected on 2026-09-02 in Asia/Kolka
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; one initial migration exists |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; two migrations exist, including verification-evidence provenance |
 | Persistence model | `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, and claim/evidence association tables |
-| Tests | Seven tests cover settings, logging, health, database connectivity, ordered verification evidence, and invalid audit-link values |
+| Tests | Nine tests cover settings, logging, health, database connectivity, ordered verification evidence, invalid audit-link values, deletion protection, and duplicate positions |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -99,4 +99,13 @@ Evidence referenced by a `VerificationEvidence` audit row cannot be deleted. Pos
 - Add entities only when their features are implemented.
 - Change applied database history through new migrations rather than editing old migrations.
 
-The next implementation milestone has not been implemented or approved by this documentation task. The most visible foundational concern is completing and testing the provenance model before building ingestion or AI behavior.
+T-002 completed the first provenance audit link. The next milestone is a minimal internal API that makes the existing core flow usable end to end: create a source, attach evidence, create a claim, record a verification with its evidence, and retrieve that verification with provenance.
+
+
+## Working MVP approach
+
+The immediate goal is a small working internal flow, not a full product. The first usable slice will be manual and API-driven:
+
+Source → Evidence → Claim → Verification → Verification with provenance
+
+It will not use an LLM, automatic ingestion, authentication, a learner UI, payments, or PDF generation. Those features come only after this traceable flow works and is tested.

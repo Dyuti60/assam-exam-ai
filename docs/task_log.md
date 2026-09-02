@@ -26,16 +26,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-02 |
-| Status | Ready for review |
+| Status | Approved |
 | Prompt source | `docs/next_task.md` (T-002) |
 | Scope | Add only the ordered Verification → Evidence audit link, constraints, migration, ORM traversal, and PostgreSQL-backed tests |
 | Tests | `uv run pytest tests/test_verification_evidence.py -q`: 5 passed in 0.61s on the final review run. `uv run pytest -q`: 9 passed in 0.87s with one Starlette deprecation warning. |
 | Migration checks | Dedicated `assam_exam_ai_t002_test`: upgrade, downgrade to `774778a8bb78`, re-upgrade, and `uv run alembic check` all exited 0; metadata produced no new operations |
 | Lint | Changed-file Ruff check passed. `uv run ruff check .` failed with 12 pre-existing findings outside T-002. |
-| Implementation commit | Pending — user requested no commit |
+| Implementation commit | `e8d553a8816ba5d3968b96998caa8d6e9e507f99` |
+| Documentation-review commit | This documentation update |
+| Review result | Approved |
+| Notes | PostgreSQL restricts deletion of evidence referenced by a verification; Verification deletion removes only its audit-link rows. No APIs, ingestion, embeddings, LLMs, review workflow, content generation, or PDF behavior added. |
+
+### T-003 — Minimal end-to-end knowledge API
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-02 UTC |
+| Status | Ready for VS Code Codex |
+| Prompt source | docs/next_task.md (T-003) |
+| Scope | Manual API flow from Source to Evidence to Claim to Verification with returned provenance |
+| Tests | API and PostgreSQL-backed integration tests required |
+| Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | PostgreSQL restricts deletion of evidence referenced by a verification; Verification deletion removes only its audit-link rows. No APIs, ingestion, embeddings, LLMs, review workflow, content generation, or PDF behavior added. |
+| Notes | This is a small internal vertical slice, not an AI, ingestion, review, learner, or PDF feature. |
 
 ## Entry template
 

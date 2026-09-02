@@ -34,9 +34,9 @@ flowchart TD
 | `e31f71e3c2545ef9cf8fb552aba1a3eff858f994` | 2026-08-30 | FastAPI application foundation commit |
 | `3c46b45580c2ddb259ef6801fd836f7d237b828d` | 2026-08-31 | PostgreSQL, SQLAlchemy models, and Alembic migration foundation |
 | `bae213e1de35ee08d3788d7b9f42e9d0d36d503f` | 2026-09-01 | Repository operating instructions in `AGENTS.md` |
-| Pending | 2026-09-02 | T-002 adds ordered verification-evidence provenance; no commit created |
+| `e8d553a8816ba5d3968b96998caa8d6e9e507f99` | 2026-09-02 | T-002 added ordered verification-evidence provenance with deletion protection |
 
-The register reports current responsibility based on the inspected tree. It does not claim historical test results or reconstruct uninspected function-level diffs.
+The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99`; its test results are recorded below.
 
 ## Routes
 
