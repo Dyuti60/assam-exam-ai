@@ -58,6 +58,7 @@ flowchart TD
 | `1c33a89056eda9b04db2c71c9b60d17d3e8ccd0f` | 2026-09-04 | T-012 added a deterministic non-persistent Topic note-draft preview |
 | `3aacf3d2b76098092cfae072c7cfa4ca40c88e3f` | 2026-09-04 | T-013 added persistent internal note drafts with ordered Claim provenance |
 | `c595da4e9ce8aedd60bf0f881d9bb59c6618881d` | 2026-09-04 | T-014 added immutable stored NoteDraft snapshot retrieval |
+| `811f10af3ee63a22e253ff24e9450770e2cbbbc2` | 2026-09-04 | T-015 added independent human review state to stored NoteDrafts |
 
 The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99`, T-003 against `603bddf260e9016e2db9215aec831ece7f018b50`, and T-004 against `e2f9d170c335f5ab9037749654bba9edb77938ba`; their test results are recorded below.
 
@@ -576,3 +577,8 @@ flowchart TD
 ### T-014 review outcome
 
 - Reviewed pushed commit `c595da4e9ce8aedd60bf0f881d9bb59c6618881d`: the read path returns stored Markdown and original ordered Claim links without re-evaluating today’s Claim eligibility. Retrieval is internal review only, not approval or publication.
+
+
+### T-015 review outcome
+
+- Reviewed pushed commit `811f10af3ee63a22e253ff24e9450770e2cbbbc2`: draft review has constrained DRAFT/APPROVED/REJECTED states, correct reset semantics, and never changes Claim state, provenance, or stored Markdown. Approval is not publication.
