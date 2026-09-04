@@ -234,16 +234,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for review |
+| Status | Approved |
 | Prompt source | `docs/next_task.md` (T-015) |
 | Scope | Record an explicit human decision on one stored internal NoteDraft |
 | Tests | `uv run pytest tests/test_note_drafts.py -q`: 12 passed in 1.31s with one Starlette deprecation warning. `uv run pytest -q`: 50 passed in 2.10s with the same warning. |
 | Lint | Changed-file Ruff check passed. |
 | Migration checks | `d4f8a1c7e592` upgrade gave an existing draft `DRAFT` with null decision metadata; downgrade to `b7d9e2f4a610` removed the three fields; re-upgrade passed; `uv run alembic check` reported no new upgrade operations. |
+| Implementation commit | `811f10af3ee63a22e253ff24e9450770e2cbbbc2` |
+| Documentation-review commit | Review update series beginning `f99cb6e278e873e21d0f27e0be448ce3b2028f69` |
+| Review result | Approved |
+| Notes | Added a separate NoteDraft decision with APPROVED/REJECTED timestamp and note semantics plus DRAFT reset clearing. Tests confirm stored Markdown/provenance and Claim approval/verification state remain unchanged. This is human review without reviewer identity, history, or publication. |
+
+### T-016 — Read approved internal note drafts
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-016) |
+| Scope | Return only human-APPROVED stored NoteDraft snapshots for internal downstream use |
+| Tests | API/integration tests required |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Added a separate NoteDraft decision with APPROVED/REJECTED timestamp and note semantics plus DRAFT reset clearing. Tests confirm stored Markdown/provenance and Claim approval/verification state remain unchanged. This is human review without reviewer identity, history, or publication. |
+| Notes | Approved is still internal eligibility, not learner publication or PDF release. |
 
 ## Entry template
 
