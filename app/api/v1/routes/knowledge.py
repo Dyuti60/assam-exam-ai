@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.schemas.knowledge import (
+    ClaimApprovalCreate,
     ClaimCreate,
     ClaimResponse,
     EvidenceCreate,
@@ -70,6 +71,18 @@ def link_claim_evidence(
 ) -> ClaimResponse:
     try:
         return KnowledgeService(db).link_claim_evidence(claim_id, evidence_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.post("/claims/{claim_id}/approval", response_model=ClaimResponse)
+def record_claim_approval(
+    claim_id: int,
+    request: ClaimApprovalCreate,
+    db: DatabaseSession,
+) -> ClaimResponse:
+    try:
+        return KnowledgeService(db).record_claim_approval(claim_id, request)
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
 

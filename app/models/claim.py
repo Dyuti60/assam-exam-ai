@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -14,6 +14,12 @@ if TYPE_CHECKING:
 
 class Claim(Base):
     __tablename__ = "claims"
+    __table_args__ = (
+        CheckConstraint(
+            "approval_status IN ('DRAFT', 'APPROVED', 'REJECTED')",
+            name="ck_claims_approval_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -50,6 +56,19 @@ class Claim(Base):
     last_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
     )
+
+    approval_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="DRAFT",
+        server_default="DRAFT",
+    )
+
+    approval_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+    )
+
+    reviewer_note: Mapped[str | None] = mapped_column(Text)
 
     verifications: Mapped[list["Verification"]] = relationship(
         back_populates="claim",

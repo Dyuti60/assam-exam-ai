@@ -2,8 +2,9 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import engine, get_db
@@ -127,6 +128,9 @@ def test_complete_knowledge_api_flow(client: TestClient) -> None:
     assert claim_summary["verification_status"] == "SUPPORTED"
     assert claim_summary["confidence"] == 0.95
     assert claim_summary["last_verified_at"] == created_verification["created_at"]
+    assert claim_summary["approval_status"] == "DRAFT"
+    assert claim_summary["approval_decided_at"] is None
+    assert claim_summary["reviewer_note"] is None
 
     response = client.get(f"/api/v1/verifications/{verification_id}")
     assert response.status_code == 200
@@ -200,6 +204,131 @@ def test_get_claim_returns_404_for_missing_claim(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Claim 999999 not found"}
+
+
+def test_claim_defaults_to_draft_approval(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/claims",
+        json={"statement": "A claim awaiting human decision"},
+    )
+
+    assert response.status_code == 201
+    claim = response.json()
+    assert claim["approval_status"] == "DRAFT"
+    assert claim["approval_decided_at"] is None
+    assert claim["reviewer_note"] is None
+
+
+@pytest.mark.parametrize("approval_status", ["APPROVED", "REJECTED"])
+def test_record_claim_approval(
+    client: TestClient,
+    approval_status: str,
+) -> None:
+    claim_response = client.post(
+        "/api/v1/claims",
+        json={"statement": f"A claim to be {approval_status.lower()}"},
+    )
+    assert claim_response.status_code == 201
+    claim_id = claim_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={
+            "approval_status": approval_status,
+            "reviewer_note": f"Human decision: {approval_status}",
+        },
+    )
+
+    assert response.status_code == 200
+    decided_claim = response.json()
+    assert decided_claim["approval_status"] == approval_status
+    assert decided_claim["approval_decided_at"] is not None
+    assert decided_claim["reviewer_note"] == f"Human decision: {approval_status}"
+
+    retrieved_response = client.get(f"/api/v1/claims/{claim_id}")
+    assert retrieved_response.status_code == 200
+    assert retrieved_response.json() == decided_claim
+
+
+def test_returning_claim_approval_to_draft_clears_decision(
+    client: TestClient,
+) -> None:
+    claim_response = client.post(
+        "/api/v1/claims",
+        json={"statement": "A claim whose human decision is reset"},
+    )
+    assert claim_response.status_code == 201
+    claim_id = claim_response.json()["id"]
+
+    approved_response = client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={
+            "approval_status": "APPROVED",
+            "reviewer_note": "Initially approved",
+        },
+    )
+    assert approved_response.status_code == 200
+    assert approved_response.json()["approval_decided_at"] is not None
+
+    draft_response = client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={
+            "approval_status": "DRAFT",
+            "reviewer_note": "This note must be discarded",
+        },
+    )
+
+    assert draft_response.status_code == 200
+    draft_claim = draft_response.json()
+    assert draft_claim["approval_status"] == "DRAFT"
+    assert draft_claim["approval_decided_at"] is None
+    assert draft_claim["reviewer_note"] is None
+
+    retrieved_response = client.get(f"/api/v1/claims/{claim_id}")
+    assert retrieved_response.status_code == 200
+    assert retrieved_response.json() == draft_claim
+
+
+def test_record_claim_approval_rejects_invalid_status(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/claims/1/approval",
+        json={"approval_status": "INVALID"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_record_claim_approval_returns_404_for_missing_claim(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/claims/999999/approval",
+        json={"approval_status": "APPROVED"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Claim 999999 not found"}
+
+
+def test_database_rejects_invalid_claim_approval_status(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    claim_response = client.post(
+        "/api/v1/claims",
+        json={"statement": "A claim protected by the approval constraint"},
+    )
+    assert claim_response.status_code == 201
+    claim_id = claim_response.json()["id"]
+
+    savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(
+            update(Claim)
+            .where(Claim.id == claim_id)
+            .values(approval_status="INVALID")
+        )
+    savepoint.rollback()
 
 
 def test_link_claim_evidence_is_idempotent_and_retrievable(

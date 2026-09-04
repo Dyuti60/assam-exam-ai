@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -58,6 +60,17 @@ class KnowledgeRepository:
             )
         )
         self.session.execute(statement)
+
+    def update_claim_approval(
+        self,
+        claim: Claim,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        claim.approval_status = approval_status
+        claim.approval_decided_at = decided_at
+        claim.reviewer_note = reviewer_note
 
     def add_verification(self, verification: Verification) -> Verification:
         self.session.add(verification)

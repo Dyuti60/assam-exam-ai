@@ -22,6 +22,12 @@ class VerificationVerdict(StrEnum):
     NEEDS_HUMAN_REVIEW = "NEEDS_HUMAN_REVIEW"
 
 
+class ClaimApprovalStatus(StrEnum):
+    DRAFT = "DRAFT"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class SourceCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     publisher: str | None = Field(default=None, max_length=255)
@@ -67,6 +73,14 @@ class ClaimResponse(ClaimCreate):
     created_at: datetime
     last_verified_at: datetime | None
     relevant_evidence_ids: list[int] = Field(default_factory=list)
+    approval_status: ClaimApprovalStatus
+    approval_decided_at: datetime | None
+    reviewer_note: str | None
+
+
+class ClaimApprovalCreate(BaseModel):
+    approval_status: ClaimApprovalStatus
+    reviewer_note: str | None = None
 
 
 class VerificationEvidenceCreate(BaseModel):

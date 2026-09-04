@@ -205,3 +205,5 @@ Add the smallest explicit human-approval boundary for Claims. Verification remai
 - Do not add authentication yet: use a reviewer note only, not user identity. Do not add AI, ingestion, notes, MCQs, UI, payments, PDFs, or bulk/list/search endpoints.
 
 Update all project documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
+
+Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): Claims now have a constrained human approval state (`DRAFT`, `APPROVED`, or `REJECTED`), decision timestamp, and optional reviewer note. Added `POST /api/v1/claims/{claim_id}/approval`; verification remains a separate evidence assessment and never changes approval state. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

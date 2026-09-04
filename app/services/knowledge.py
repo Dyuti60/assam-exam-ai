@@ -1,8 +1,12 @@
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session
 
 from app.models import Claim, Evidence, Source, Verification, VerificationEvidence
 from app.repositories import KnowledgeRepository
 from app.schemas.knowledge import (
+    ClaimApprovalCreate,
+    ClaimApprovalStatus,
     ClaimCreate,
     ClaimResponse,
     EvidenceCreate,
@@ -64,6 +68,24 @@ class KnowledgeService:
         if refreshed_claim is None:
             raise ResourceNotFoundError("Claim", claim.id)
         return self._claim_response(refreshed_claim)
+
+    def record_claim_approval(
+        self,
+        claim_id: int,
+        request: ClaimApprovalCreate,
+    ) -> ClaimResponse:
+        claim = self.repository.get_claim(claim_id)
+        if claim is None:
+            raise ResourceNotFoundError("Claim", claim_id)
+        is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
+        self.repository.update_claim_approval(
+            claim,
+            request.approval_status.value,
+            None if is_draft else request.reviewer_note,
+            None if is_draft else datetime.now(UTC),
+        )
+        self._commit(claim)
+        return self._claim_response(claim)
 
     def create_verification(self, request: VerificationCreate) -> VerificationResponse:
         claim = self.repository.get_claim(request.claim_id)
