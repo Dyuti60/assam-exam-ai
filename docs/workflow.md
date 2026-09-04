@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file is a chronological register of committed and review-pending components and their current responsibilities. Planned work is kept separate from the implemented register. The repository was inspected on 2026-09-03 in Asia/Kolkata (UTC+05:30).
+This file is a chronological register of committed components and their current responsibilities. Planned work is kept separate from the implemented register. The repository was inspected on 2026-09-04 in Asia/Kolkata (UTC+05:30).
 
 ## Current runtime and database flow
 
@@ -40,9 +40,9 @@ flowchart TD
 | `3c46b45580c2ddb259ef6801fd836f7d237b828d` | 2026-08-31 | PostgreSQL, SQLAlchemy models, and Alembic migration foundation |
 | `bae213e1de35ee08d3788d7b9f42e9d0d36d503f` | 2026-09-01 | Repository operating instructions in `AGENTS.md` |
 | `e8d553a8816ba5d3968b96998caa8d6e9e507f99` | 2026-09-02 | T-002 added ordered verification-evidence provenance with deletion protection |
-| Pending | 2026-09-03 | T-003 adds the minimal end-to-end internal knowledge API; no commit created |
+| `603bddf260e9016e2db9215aec831ece7f018b50` | 2026-09-04 | T-003 added the minimal end-to-end internal knowledge API and atomic missing-Evidence rejection coverage |
 
-The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99`; its test results are recorded below.
+The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99` and T-003 against commit `603bddf260e9016e2db9215aec831ece7f018b50`; their test results are recorded below.
 
 ## Routes
 
@@ -173,7 +173,8 @@ flowchart LR
 - `uv run pytest tests/test_knowledge_api.py -q`: 4 passed in 0.74s with one Starlette deprecation warning on the final review run.
 - `uv run pytest -q`: 13 passed in 0.87s with one Starlette deprecation warning on the final review run.
 - Changed-file Ruff check: passed.
-- A fresh `assam_exam_ai_t003_test` database upgraded through both existing migrations to head; no database-model changes were introduced by T-003.
+- A fresh `assam_exam_ai_t003_test` database upgraded through both existing migrations to head; no database schema migration was required by T-003.
+- Post-push architecture review: Approved. The API uses eager loading for the retrieval path, and the missing-Evidence test confirms no partial Verification or provenance row is written.
 
 ## Template for future pushed changes
 
