@@ -13,7 +13,7 @@ flowchart TD
     CFG --> DB["engine + SessionLocal\napp/core/database.py"]
     APP --> V1["api_router\napp/api/v1/router.py"]
     V1 --> HEALTH["GET /api/v1/health\nhealth_check()"]
-    V1 --> KNOWLEDGE["Knowledge routes\ncreate + retrieve"]
+    V1 --> KNOWLEDGE["Knowledge routes\ncreate + retrieve Claim/Verification"]
     KNOWLEDGE --> CONTRACTS["Pydantic knowledge schemas"]
     CONTRACTS --> SERVICE["KnowledgeService"]
     SERVICE --> REPOSITORY["KnowledgeRepository"]
@@ -53,6 +53,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/sources` | `create_source()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Source |
 | `POST /api/v1/evidence` | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Validates and creates Evidence for an existing Source |
 | `POST /api/v1/claims` | `create_claim()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Claim |
+| `GET /api/v1/claims/{claim_id}` | `get_claim()` | `app/api/v1/routes/knowledge.py` | Returns a Claim and its current latest-verification summary |
 | `POST /api/v1/verifications` | `create_verification()` | `app/api/v1/routes/knowledge.py` | Creates a Verification with ordered evidence audit links |
 | `GET /api/v1/verifications/{verification_id}` | `get_verification()` | `app/api/v1/routes/knowledge.py` | Returns a Verification, its Claim, and ordered evidence provenance |
 
@@ -72,6 +73,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_source()` | `app/api/v1/routes/knowledge.py` | Delegates Source creation to `KnowledgeService` |
 | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence creation and maps a missing Source to 404 |
 | `create_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim creation to `KnowledgeService` |
+| `get_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim retrieval and maps a missing Claim to 404 |
 | `create_verification()` | `app/api/v1/routes/knowledge.py` | Delegates Verification creation and maps missing references to 404 |
 | `get_verification()` | `app/api/v1/routes/knowledge.py` | Delegates provenance retrieval and maps a missing Verification to 404 |
 
@@ -117,6 +119,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_source()` | `app/services/knowledge.py` | Creates and commits a Source |
 | `create_evidence()` | `app/services/knowledge.py` | Verifies the Source exists, then creates Evidence |
 | `create_claim()` | `app/services/knowledge.py` | Creates and commits a Claim |
+| `get_claim()` | `app/services/knowledge.py` | Retrieves a Claim through the repository or raises a missing-resource error |
 | `create_verification()` | `app/services/knowledge.py` | Validates references, records ordered audit links, and synchronizes the Claim summary atomically |
 | `get_verification()` | `app/services/knowledge.py` | Builds the nested verification-provenance response |
 | `_commit()` | `app/services/knowledge.py` | Commits a use case and rolls back on failure |
@@ -145,8 +148,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_verification_evidence_rejects_invalid_values()` | `tests/test_verification_evidence.py` | Proves PostgreSQL rejects an invalid role and a negative position | Passed twice through parametrization for T-002 |
 | `test_used_evidence_cannot_be_deleted()` | `tests/test_verification_evidence.py` | Proves PostgreSQL blocks deletion of referenced evidence and retains its audit link | Passed for T-002 |
 | `test_verification_evidence_rejects_duplicate_position()` | `tests/test_verification_evidence.py` | Proves one verification cannot assign the same position to two evidence links | Passed for T-002 |
-| `test_complete_knowledge_api_flow()` | `tests/test_knowledge_api.py` | Exercises the full flow and confirms create/get responses expose the synchronized Claim summary | Passed for T-004 |
+| `test_complete_knowledge_api_flow()` | `tests/test_knowledge_api.py` | Exercises the full flow and confirms direct Claim retrieval exposes the synchronized summary | Passed for T-005 |
 | `test_create_evidence_returns_404_for_missing_source()` | `tests/test_knowledge_api.py` | Confirms a missing Source reference returns a clear 404 | Passed for T-003 |
+| `test_get_claim_returns_404_for_missing_claim()` | `tests/test_knowledge_api.py` | Confirms retrieving a missing Claim returns a clear 404 | Passed for T-005 |
 | `test_create_verification_rejects_invalid_evidence_role()` | `tests/test_knowledge_api.py` | Confirms an invalid evidence role returns validation status 422 | Passed for T-003 |
 | `test_create_verification_returns_404_without_partial_record()` | `tests/test_knowledge_api.py` | Confirms missing Evidence creates no Verification/link and leaves the Claim summary unchanged | Passed for T-004 |
 
@@ -197,6 +201,22 @@ flowchart LR
 - Changed-file Ruff check: passed.
 - No database schema migration was required; a fresh `assam_exam_ai_t004_test` database upgraded to the existing migration head successfully.
 - Post-push architecture review: Approved. The Claim summary is explicitly the latest verification result, never human approval.
+
+### T-005 Claim summary retrieval
+
+```mermaid
+flowchart LR
+    REQUEST["GET /claims/{claim_id}"] --> ROUTE["Thin knowledge route"]
+    ROUTE --> SERVICE["KnowledgeService.get_claim()"]
+    SERVICE --> REPOSITORY["KnowledgeRepository.get_claim()"]
+    REPOSITORY --> CLAIM["Claim + latest verification summary"]
+    REPOSITORY -->|"missing"| NOT_FOUND["404 Claim not found"]
+```
+
+- `uv run pytest tests/test_knowledge_api.py -q`: 5 passed in 1.51s with one Starlette deprecation warning.
+- `uv run pytest -q`: 14 passed in 1.01s with one Starlette deprecation warning.
+- Changed-file Ruff check: passed.
+- No database schema migration was required; a fresh `assam_exam_ai_t005_test` database upgraded through both existing migrations to head successfully.
 
 ## Template for future pushed changes
 

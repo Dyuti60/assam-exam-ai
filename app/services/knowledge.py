@@ -38,6 +38,12 @@ class KnowledgeService:
         claim = Claim(**request.model_dump())
         return self._commit(self.repository.add_claim(claim))
 
+    def get_claim(self, claim_id: int) -> Claim:
+        claim = self.repository.get_claim(claim_id)
+        if claim is None:
+            raise ResourceNotFoundError("Claim", claim_id)
+        return claim
+
     def create_verification(self, request: VerificationCreate) -> VerificationResponse:
         claim = self.repository.get_claim(request.claim_id)
         if claim is None:

@@ -117,6 +117,16 @@ def test_complete_knowledge_api_flow(client: TestClient) -> None:
         created_verification["created_at"]
     )
 
+    claim_summary_response = client.get(f"/api/v1/claims/{claim_id}")
+    assert claim_summary_response.status_code == 200
+    claim_summary = claim_summary_response.json()
+    assert claim_summary["statement"] == (
+        "A test claim supported by official evidence"
+    )
+    assert claim_summary["verification_status"] == "SUPPORTED"
+    assert claim_summary["confidence"] == 0.95
+    assert claim_summary["last_verified_at"] == created_verification["created_at"]
+
     response = client.get(f"/api/v1/verifications/{verification_id}")
     assert response.status_code == 200
     result = response.json()
@@ -146,6 +156,13 @@ def test_create_evidence_returns_404_for_missing_source(client: TestClient) -> N
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Source 999999 not found"}
+
+
+def test_get_claim_returns_404_for_missing_claim(client: TestClient) -> None:
+    response = client.get("/api/v1/claims/999999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Claim 999999 not found"}
 
 
 def test_create_verification_rejects_invalid_evidence_role(

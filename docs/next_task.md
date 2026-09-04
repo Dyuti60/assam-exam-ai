@@ -147,3 +147,5 @@ It must return the existing `ClaimResponse`, including the Claim statement and i
 Before handoff, update `docs/architecture.md`, `docs/workflow.md`, and `docs/task_log.md` with confirmed changes, functions, tests, and exact results. Keep this `docs/next_task.md` history append-only; do not delete prior task prompts. Append a short implementation note beneath T-005.
 
 Run relevant tests, the full suite, Ruff on changed files, `git diff --check`, and migration checks if applicable. Do not commit or push. Report changed files, exact results, and any concern.
+
+Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added `GET /api/v1/claims/{claim_id}` through the existing route, service, and repository layers. The response uses `ClaimResponse` to expose the current latest-verification summary, and a missing Claim returns the established clear 404. Exact verification results are recorded in `docs/task_log.md` and `docs/workflow.md`.
