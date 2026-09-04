@@ -138,14 +138,16 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for VS Code Codex |
+| Status | Ready for review |
 | Prompt source | `docs/next_task.md` (T-009) |
 | Scope | Return only human-approved Claims as safe future content input |
-| Tests | API/integration tests required |
+| Tests | `uv run pytest tests/test_knowledge_api.py -q`: 19 passed in 1.23s with one Starlette deprecation warning. `uv run pytest -q`: 28 passed in 1.62s with the same warning. |
+| Lint | Changed-file Ruff check passed. |
+| Migration checks | No database schema migration required. Fresh `assam_exam_ai_t009_test` upgrade to `c31a8f4d2b90` exited 0; `uv run alembic check` reported no new upgrade operations. |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | First approved-knowledge query; no content generation yet. |
+| Notes | Added only `GET /api/v1/claims/approved`. PostgreSQL filters to `APPROVED` and orders by Claim ID; responses reuse `ClaimResponse` with relevant Evidence IDs and verification/approval summaries. No content generation was added. |
 
 ## Entry template
 

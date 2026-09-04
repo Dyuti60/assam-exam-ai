@@ -206,6 +206,94 @@ def test_get_claim_returns_404_for_missing_claim(client: TestClient) -> None:
     assert response.json() == {"detail": "Claim 999999 not found"}
 
 
+def test_get_approved_claims_returns_empty_list(client: TestClient) -> None:
+    response = client.get("/api/v1/claims/approved")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_approved_claims_filters_orders_and_retains_summaries(
+    client: TestClient,
+) -> None:
+    source_response = client.post(
+        "/api/v1/sources",
+        json={
+            "title": "Approved-claim evidence source",
+            "source_type": "official_notification",
+            "authority_tier": 1,
+            "location": "https://example.test/approved-claims",
+            "license_status": "TEST_ONLY",
+        },
+    )
+    assert source_response.status_code == 201
+    evidence_response = client.post(
+        "/api/v1/evidence",
+        json={
+            "source_id": source_response.json()["id"],
+            "content": "Evidence retained in the approved Claim response",
+        },
+    )
+    assert evidence_response.status_code == 201
+    evidence_id = evidence_response.json()["id"]
+
+    claim_ids: dict[str, int] = {}
+    for state in ["APPROVED", "DRAFT", "APPROVED", "REJECTED"]:
+        claim_response = client.post(
+            "/api/v1/claims",
+            json={"statement": f"Claim in {state} state {len(claim_ids)}"},
+        )
+        assert claim_response.status_code == 201
+        claim_id = claim_response.json()["id"]
+        claim_ids[f"{state}-{len(claim_ids)}"] = claim_id
+        if state != "DRAFT":
+            approval_response = client.post(
+                f"/api/v1/claims/{claim_id}/approval",
+                json={"approval_status": state},
+            )
+            assert approval_response.status_code == 200
+
+    first_approved_id = claim_ids["APPROVED-0"]
+    second_approved_id = claim_ids["APPROVED-2"]
+    link_response = client.post(
+        f"/api/v1/claims/{second_approved_id}/evidence/{evidence_id}"
+    )
+    assert link_response.status_code == 200
+    verification_response = client.post(
+        "/api/v1/verifications",
+        json={
+            "claim_id": second_approved_id,
+            "verdict": "SUPPORTED",
+            "confidence": 0.91,
+            "evidence": [
+                {
+                    "evidence_id": evidence_id,
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    assert verification_response.status_code == 201
+
+    response = client.get("/api/v1/claims/approved")
+
+    assert response.status_code == 200
+    approved_claims = response.json()
+    assert [claim["id"] for claim in approved_claims] == [
+        first_approved_id,
+        second_approved_id,
+    ]
+    assert all(claim["approval_status"] == "APPROVED" for claim in approved_claims)
+    assert approved_claims[1]["relevant_evidence_ids"] == [evidence_id]
+    assert approved_claims[1]["verification_status"] == "SUPPORTED"
+    assert approved_claims[1]["confidence"] == 0.91
+    assert approved_claims[1]["last_verified_at"] == (
+        verification_response.json()["created_at"]
+    )
+    assert approved_claims[1]["approval_decided_at"] is not None
+
+
 def test_claim_defaults_to_draft_approval(client: TestClient) -> None:
     response = client.post(
         "/api/v1/claims",

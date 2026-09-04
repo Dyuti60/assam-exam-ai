@@ -52,6 +52,11 @@ def create_claim(request: ClaimCreate, db: DatabaseSession) -> ClaimResponse:
     return KnowledgeService(db).create_claim(request)
 
 
+@router.get("/claims/approved", response_model=list[ClaimResponse])
+def get_approved_claims(db: DatabaseSession) -> list[ClaimResponse]:
+    return KnowledgeService(db).get_approved_claims()
+
+
 @router.get("/claims/{claim_id}", response_model=ClaimResponse)
 def get_claim(claim_id: int, db: DatabaseSession) -> ClaimResponse:
     try:

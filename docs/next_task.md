@@ -227,3 +227,5 @@ It returns a stable ID-ascending list of existing `ClaimResponse` objects only w
 - No migration unless a genuine database schema change is needed.
 
 Update all four project documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, git diff --check, and migration checks if applicable. Do not commit or push.
+
+Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added the static `GET /api/v1/claims/approved` route before `GET /api/v1/claims/{claim_id}`. It returns only explicitly approved Claims in stable ascending ID order using the existing route, service, repository, and `ClaimResponse` flow, retaining relevant Evidence IDs and verification/approval summaries. No migration or content-generation feature was added; exact verification results are recorded in `docs/task_log.md` and `docs/workflow.md`.
