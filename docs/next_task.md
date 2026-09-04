@@ -229,3 +229,23 @@ It returns a stable ID-ascending list of existing `ClaimResponse` objects only w
 Update all four project documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, git diff --check, and migration checks if applicable. Do not commit or push.
 
 Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added the static `GET /api/v1/claims/approved` route before `GET /api/v1/claims/{claim_id}`. It returns only explicitly approved Claims in stable ascending ID order using the existing route, service, repository, and `ClaimResponse` flow, retaining relevant Evidence IDs and verification/approval summaries. No migration or content-generation feature was added; exact verification results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-010 — Add a Topic to Claims
+
+Read `AGENTS.md` and project documents first.
+
+Add minimal topic classification needed before topic-based notes/MCQs.
+
+- Add a `topics` table/model with only: id, unique name, and created_at.
+- Add a nullable `topic_id` foreign key on Claim. No topic hierarchy, syllabus, tags, or search.
+- Add `POST /api/v1/topics` to create a Topic.
+- Extend Claim creation to accept optional `topic_id`, returning 404 when it does not exist.
+- Extend ClaimResponse to include topic_id.
+- Add one migration; do not edit prior migrations. Existing Claims must remain valid with null topic_id.
+- Add API/PostgreSQL tests for Topic creation, Claim assignment, missing Topic, unique name, and migration upgrade/downgrade.
+- Do not add LLMs, ingestion, notes/MCQs, content generation, UI, authentication, lists/search, topic hierarchy, syllabus management, payments, or PDFs.
+
+Update all project docs and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/check, and git diff --check. Do not commit or push.
