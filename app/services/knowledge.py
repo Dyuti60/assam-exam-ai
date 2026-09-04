@@ -18,6 +18,7 @@ from app.schemas.knowledge import (
     ClaimCreate,
     ClaimResponse,
     EvidenceCreate,
+    NoteDraftPreviewResponse,
     SourceCreate,
     TopicCreate,
     VerificationCreate,
@@ -95,6 +96,23 @@ class KnowledgeService:
             self._claim_response(claim)
             for claim in self.repository.get_approved_claims_by_topic(topic_id)
         ]
+
+    def create_note_draft_preview(self, topic_id: int) -> NoteDraftPreviewResponse:
+        topic = self.repository.get_topic(topic_id)
+        if topic is None:
+            raise ResourceNotFoundError("Topic", topic_id)
+        claims = self.repository.get_approved_claims_by_topic(topic_id)
+        if not claims:
+            raise ResourceConflictError(
+                f"Topic {topic_id} has no approved Claims"
+            )
+        return NoteDraftPreviewResponse(
+            topic_id=topic.id,
+            topic_name=topic.name,
+            claim_ids=[claim.id for claim in claims],
+            markdown=f"# {topic.name}\n\n"
+            + "\n".join(f"- {claim.statement}" for claim in claims),
+        )
 
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> ClaimResponse:
         claim = self.repository.get_claim(claim_id)

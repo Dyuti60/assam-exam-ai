@@ -299,3 +299,5 @@ Build one small, deterministic internal note-preview flow that proves the workin
 - No migration unless a genuine schema change is required.
 
 Update all four documents and append an implementation note here. Run relevant tests, the full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/topics/{topic_id}/note-draft-preview`. It confirms the Topic, reuses the ordered Topic-scoped approved-Claim query, and returns deterministic Markdown containing the Topic heading and unchanged approved Claim statements as bullets. Missing Topic returns 404, no approved Claims returns a stable 409, and the preview performs no persistence or state mutation. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

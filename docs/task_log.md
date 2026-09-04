@@ -186,14 +186,16 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for VS Code Codex |
+| Status | Ready for review |
 | Prompt source | `docs/next_task.md` (T-012) |
 | Scope | Produce one non-persistent internal note draft using only one Topic's approved Claims |
-| Tests | API/integration tests required |
+| Tests | `uv run pytest tests/test_knowledge_api.py -q`: 29 passed in 1.33s with one Starlette deprecation warning. `uv run pytest -q`: 38 passed in 1.62s with the same warning. |
+| Lint | Changed-file Ruff check passed. |
+| Migration checks | No database schema migration required. Upgrade to existing head `e4a6c8d1f203` exited 0 on `assam_exam_ai_t012_test`; `uv run alembic check` reported no new upgrade operations. |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | This is a deterministic preview to prove the safe end-to-end flow; it is not an LLM feature and must never publish content. |
+| Notes | Added one deterministic, non-persistent preview using only exact-Topic `APPROVED` Claims in ascending ID order. Missing Topic returns 404; no approved Claims returns the stable 409 detail. An initial check invocation used an outdated local database password and failed authentication before exercising the feature; rerunning with the repository-configured credential produced the recorded passing results. No LLM or publishing feature was added. |
 
 ## Entry template
 

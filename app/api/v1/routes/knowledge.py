@@ -10,6 +10,7 @@ from app.schemas.knowledge import (
     ClaimResponse,
     EvidenceCreate,
     EvidenceResponse,
+    NoteDraftPreviewResponse,
     SourceCreate,
     SourceResponse,
     TopicCreate,
@@ -54,6 +55,22 @@ def get_approved_claims_by_topic(
         return KnowledgeService(db).get_approved_claims_by_topic(topic_id)
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
+
+
+@router.post(
+    "/topics/{topic_id}/note-draft-preview",
+    response_model=NoteDraftPreviewResponse,
+)
+def create_note_draft_preview(
+    topic_id: int,
+    db: DatabaseSession,
+) -> NoteDraftPreviewResponse:
+    try:
+        return KnowledgeService(db).create_note_draft_preview(topic_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.post("/evidence", response_model=EvidenceResponse, status_code=201)

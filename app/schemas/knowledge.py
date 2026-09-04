@@ -56,6 +56,13 @@ class TopicResponse(TopicCreate):
     created_at: datetime
 
 
+class NoteDraftPreviewResponse(BaseModel):
+    topic_id: int
+    topic_name: str
+    claim_ids: list[int]
+    markdown: str
+
+
 class EvidenceCreate(BaseModel):
     source_id: int = Field(gt=0)
     content: str = Field(min_length=1)

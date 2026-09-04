@@ -332,6 +332,104 @@ def test_get_approved_claims_by_topic_filters_orders_and_retains_summaries(
     )
 
 
+def test_note_draft_preview_returns_404_for_missing_topic(client: TestClient) -> None:
+    response = client.post("/api/v1/topics/999999/note-draft-preview")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Topic 999999 not found"}
+
+
+def test_note_draft_preview_returns_409_without_approved_claims(
+    client: TestClient,
+) -> None:
+    topic_response = client.post("/api/v1/topics", json={"name": "Empty Preview"})
+    assert topic_response.status_code == 201
+    topic_id = topic_response.json()["id"]
+
+    response = client.post(f"/api/v1/topics/{topic_id}/note-draft-preview")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"Topic {topic_id} has no approved Claims"
+    }
+
+
+def test_note_draft_preview_is_exact_ordered_and_non_persistent(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    topic_ids = []
+    for name in ["Preview Topic", "Unrelated Topic"]:
+        response = client.post("/api/v1/topics", json={"name": name})
+        assert response.status_code == 201
+        topic_ids.append(response.json()["id"])
+
+    claim_specs = [
+        (topic_ids[0], "APPROVED", "First approved fact."),
+        (topic_ids[0], "DRAFT", "Draft fact must be excluded."),
+        (topic_ids[1], "APPROVED", "Wrong-topic fact must be excluded."),
+        (topic_ids[0], "APPROVED", "Second approved fact."),
+        (topic_ids[0], "REJECTED", "Rejected fact must be excluded."),
+    ]
+    claim_ids = []
+    for topic_id, approval_status, statement in claim_specs:
+        response = client.post(
+            "/api/v1/claims",
+            json={"statement": statement, "topic_id": topic_id},
+        )
+        assert response.status_code == 201
+        claim_id = response.json()["id"]
+        claim_ids.append(claim_id)
+        if approval_status != "DRAFT":
+            approval_response = client.post(
+                f"/api/v1/claims/{claim_id}/approval",
+                json={"approval_status": approval_status},
+            )
+            assert approval_response.status_code == 200
+
+    claim_state_before = db_connection.execute(
+        select(
+            Claim.id,
+            Claim.topic_id,
+            Claim.statement,
+            Claim.approval_status,
+            Claim.approval_decided_at,
+            Claim.reviewer_note,
+            Claim.verification_status,
+            Claim.confidence,
+            Claim.last_verified_at,
+        ).order_by(Claim.id)
+    ).all()
+
+    response = client.post(f"/api/v1/topics/{topic_ids[0]}/note-draft-preview")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "topic_id": topic_ids[0],
+        "topic_name": "Preview Topic",
+        "claim_ids": [claim_ids[0], claim_ids[3]],
+        "markdown": (
+            "# Preview Topic\n\n"
+            "- First approved fact.\n"
+            "- Second approved fact."
+        ),
+    }
+    claim_state_after = db_connection.execute(
+        select(
+            Claim.id,
+            Claim.topic_id,
+            Claim.statement,
+            Claim.approval_status,
+            Claim.approval_decided_at,
+            Claim.reviewer_note,
+            Claim.verification_status,
+            Claim.confidence,
+            Claim.last_verified_at,
+        ).order_by(Claim.id)
+    ).all()
+    assert claim_state_after == claim_state_before
+
+
 def test_get_evidence_returns_created_evidence(client: TestClient) -> None:
     source_response = client.post(
         "/api/v1/sources",

@@ -12,12 +12,12 @@ An AI response is not verified merely because it is confident. Important factual
 
 ## Current confirmed implementation
 
-This section describes only the repository inspected on 2026-09-04 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
+This section describes only the repository inspected on 2026-09-05 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
 
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, Claim approval decisions, individual retrieval, and global/topic-scoped approved-Claims read boundaries under `/api/v1` |
+| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, Claim approval decisions, individual retrieval, global/topic-scoped approved-Claims read boundaries, and a deterministic Topic note-draft preview under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
@@ -25,7 +25,7 @@ This section describes only the repository inspected on 2026-09-04 in Asia/Kolka
 | Migrations | Alembic is connected to application settings and `Base.metadata`; four migrations exist, including Topic classification, verification-evidence provenance, and Claim approval state |
 | Persistence model | `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, and claim/evidence association tables |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Thirty-five tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, Claim approval decisions and reset semantics, global/topic-scoped approved-Claim filtering, Topic assignment/conflicts, and failure atomicity |
+| Tests | Thirty-eight tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, Claim approval decisions and reset semantics, global/topic-scoped approved-Claim filtering, Topic assignment/conflicts, deterministic note preview, non-mutation, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -108,6 +108,8 @@ Every Claim begins with human approval state `DRAFT`. An `APPROVED` or `REJECTED
 Topic classification is intentionally minimal: a Topic has only a unique name and timestamps/identity, and a Claim may reference one Topic or none. PostgreSQL sets `claims.topic_id` to null if its Topic is deleted. Topic hierarchy, syllabus mapping, tags, Topic reads/lists, and search are not implemented.
 
 Topic names are protected by the PostgreSQL unique constraint as the concurrency-safe authority. A duplicate Topic creation is rolled back and exposed as HTTP 409 with a stable conflict detail rather than leaking a database exception.
+
+`POST /api/v1/topics/{topic_id}/note-draft-preview` is a deterministic, non-persistent internal preview. It reads the existing Topic-scoped approved-Claim boundary in ascending Claim ID order and renders only a Topic heading plus the Claims' unchanged statements as Markdown bullets. It returns 409 when the Topic has no approved Claims and does not mutate knowledge, create note storage, publish content, or use an LLM.
 
 ## Architectural decisions recorded by repository instructions
 

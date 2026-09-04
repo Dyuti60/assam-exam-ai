@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file is a chronological register of committed components and their current responsibilities. Planned work is kept separate from the implemented register. The repository was inspected on 2026-09-04 in Asia/Kolkata (UTC+05:30).
+This file is a chronological register of committed components and their current responsibilities. Planned work is kept separate from the implemented register. The repository was inspected on 2026-09-05 in Asia/Kolkata (UTC+05:30).
 
 ## Current runtime and database flow
 
@@ -18,6 +18,7 @@ flowchart TD
     CONTRACTS --> SERVICE["KnowledgeService"]
     SERVICE --> REPOSITORY["KnowledgeRepository"]
     REPOSITORY --> DB
+    SERVICE --> PREVIEW["Deterministic Topic note preview\nno persistence"]
     DB --> POSTGRES["PostgreSQL"]
     MODELS["SQLAlchemy models"] --> META["Base.metadata"]
     META --> ALEMBIC["Alembic env"]
@@ -62,6 +63,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/sources` | `create_source()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Source |
 | `POST /api/v1/topics` | `create_topic()` | `app/api/v1/routes/knowledge.py` | Validates and creates a uniquely named Topic |
 | `GET /api/v1/topics/{topic_id}/claims/approved` | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Returns approved Claims for one existing Topic in stable ID order |
+| `POST /api/v1/topics/{topic_id}/note-draft-preview` | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Returns deterministic Markdown from one Topic's approved Claims without persistence |
 | `POST /api/v1/evidence` | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Validates and creates Evidence for an existing Source |
 | `GET /api/v1/evidence/{evidence_id}` | `get_evidence()` | `app/api/v1/routes/knowledge.py` | Returns one Evidence record or a clear 404 |
 | `POST /api/v1/claims` | `create_claim()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Claim |
@@ -89,6 +91,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_source()` | `app/api/v1/routes/knowledge.py` | Delegates Source creation to `KnowledgeService` |
 | `create_topic()` | `app/api/v1/routes/knowledge.py` | Delegates Topic creation to `KnowledgeService` |
 | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Delegates the Topic-scoped approved read and maps a missing Topic to 404 |
+| `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Delegates deterministic preview creation and maps missing/empty approved knowledge to 404/409 |
 | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence creation and maps a missing Source to 404 |
 | `get_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence retrieval and maps missing Evidence to 404 |
 | `create_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim creation to `KnowledgeService` |
@@ -128,6 +131,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `VerificationCreate` | `app/schemas/knowledge.py` | Validates Verification input and rejects duplicate evidence IDs or positions |
 | `VerificationEvidenceResponse` | `app/schemas/knowledge.py` | Serializes evidence content with its audit role and position |
 | `VerificationResponse` | `app/schemas/knowledge.py` | Serializes Verification details, Claim details, and ordered provenance |
+| `NoteDraftPreviewResponse` | `app/schemas/knowledge.py` | Serializes Topic identity, ordered approved Claim IDs, and deterministic Markdown |
 
 ## T-003 repository and service
 
@@ -155,6 +159,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_claim()` | `app/services/knowledge.py` | Validates an optional Topic reference, then creates and commits a Claim |
 | `get_approved_claims()` | `app/services/knowledge.py` | Serializes the repository's ordered approved Claims with the existing `ClaimResponse` builder |
 | `get_approved_claims_by_topic()` | `app/services/knowledge.py` | Distinguishes a missing Topic from an empty approved result, then serializes matching Claims |
+| `create_note_draft_preview()` | `app/services/knowledge.py` | Confirms the Topic, reads ordered approved Claims, and renders their statements unchanged as non-persistent Markdown |
 | `get_claim()` | `app/services/knowledge.py` | Retrieves a Claim through the repository or raises a missing-resource error |
 | `link_claim_evidence()` | `app/services/knowledge.py` | Validates both resources, performs the conflict-safe insert, commits, freshly reloads the Claim, and returns its response |
 | `record_claim_approval()` | `app/services/knowledge.py` | Records APPROVED/REJECTED with the current UTC time and supplied note, or clears decision metadata for DRAFT, then commits |
@@ -200,6 +205,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_get_approved_claims_by_topic_returns_404_for_missing_topic()` | `tests/test_knowledge_api.py` | Confirms a missing Topic returns the established clear 404 | Passed for T-011 |
 | `test_get_approved_claims_by_topic_returns_empty_list()` | `tests/test_knowledge_api.py` | Confirms an existing Topic with no approved Claims returns an empty list | Passed for T-011 |
 | `test_get_approved_claims_by_topic_filters_orders_and_retains_summaries()` | `tests/test_knowledge_api.py` | Confirms state/Topic filtering, stable order, eager evidence data, and retained summaries | Passed for T-011 |
+| `test_note_draft_preview_returns_404_for_missing_topic()` | `tests/test_knowledge_api.py` | Confirms previewing a missing Topic returns the established clear 404 | Passed for T-012 |
+| `test_note_draft_preview_returns_409_without_approved_claims()` | `tests/test_knowledge_api.py` | Confirms an existing Topic without approved knowledge returns the stable 409 detail | Passed for T-012 |
+| `test_note_draft_preview_is_exact_ordered_and_non_persistent()` | `tests/test_knowledge_api.py` | Confirms exact Topic/state filtering, stable Claim order, exact Markdown, and unchanged Claim state | Passed for T-012 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -388,6 +396,23 @@ flowchart LR
 - `uv run pytest -q`: 35 passed in 1.48s with one Starlette deprecation warning.
 - Changed-file Ruff passed.
 - No database schema migration was required. Fresh `assam_exam_ai_t011_test` upgrade to `e4a6c8d1f203` succeeded, and `uv run alembic check` reported no new upgrade operations.
+
+### T-012 Deterministic Topic note preview
+
+```mermaid
+flowchart LR
+    REQUEST["POST /topics/{topic_id}/note-draft-preview"] --> TOPIC["Confirm Topic exists"]
+    TOPIC -->|"missing"| NOT_FOUND["404 Topic not found"]
+    TOPIC --> QUERY["Reuse Topic + APPROVED + Claim.id query"]
+    QUERY -->|"empty"| CONFLICT["409 no approved Claims"]
+    QUERY --> RENDER["Heading + unchanged Claim bullets"]
+    RENDER --> RESPONSE["NoteDraftPreviewResponse\nno database write"]
+```
+
+- `uv run pytest tests/test_knowledge_api.py -q`: 29 passed in 1.33s with one Starlette deprecation warning.
+- `uv run pytest -q`: 38 passed in 1.62s with one Starlette deprecation warning.
+- Changed-file Ruff passed.
+- No database schema migration was required. Upgrade to existing head `e4a6c8d1f203` succeeded on `assam_exam_ai_t012_test`, and `uv run alembic check` reported no new upgrade operations.
 
 ## Template for future pushed changes
 
