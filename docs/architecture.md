@@ -136,3 +136,6 @@ T-008 is approved at commit `64c143498af19c9dc120093c5544e00c92011ef8`. It estab
 
 
 T-009 is approved at commit `262bb7db9226ef31f7d9e61e9c7323f9cbd512a8`. The approved-Claims endpoint is the first safe internal input boundary for future generation. Topic classification is the next missing prerequisite for topic-based notes and MCQs.
+
+
+T-010 is approved at commit `1a8a1ed15a94c128c7fb89442aee605d3263cbf6`. Approved knowledge can now be classified by one minimal Topic; the next step is to retrieve approved Claims for one Topic as a focused future generation input.
