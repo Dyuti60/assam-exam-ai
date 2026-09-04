@@ -186,3 +186,6 @@ T-013 is approved at commit `3aacf3d2b76098092cfae072c7cfa4ca40c88e3f`. A stored
 
 
 T-014 is approved at commit `c595da4e9ce8aedd60bf0f881d9bb59c6618881d`. Internal reviewers can now retrieve an immutable stored draft snapshot with exact input-Claim provenance. The next trust boundary is an explicit human decision on the draft itself, kept separate from approval of individual Claims.
+
+
+T-015 is approved at commit `811f10af3ee63a22e253ff24e9450770e2cbbbc2`. A NoteDraft now has an explicit human-review decision separate from its Claims. `APPROVED` remains an internal eligibility state, not public release. The next small boundary is an internal read of approved drafts only.
