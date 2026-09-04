@@ -57,6 +57,7 @@ flowchart TD
 | `209ea1678136030ba340b243c3735d1a9f65ee67` | 2026-09-04 | T-011 added Topic-scoped approved-Claim retrieval |
 | `1c33a89056eda9b04db2c71c9b60d17d3e8ccd0f` | 2026-09-04 | T-012 added a deterministic non-persistent Topic note-draft preview |
 | `3aacf3d2b76098092cfae072c7cfa4ca40c88e3f` | 2026-09-04 | T-013 added persistent internal note drafts with ordered Claim provenance |
+| `c595da4e9ce8aedd60bf0f881d9bb59c6618881d` | 2026-09-04 | T-014 added immutable stored NoteDraft snapshot retrieval |
 
 The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99`, T-003 against `603bddf260e9016e2db9215aec831ece7f018b50`, and T-004 against `e2f9d170c335f5ab9037749654bba9edb77938ba`; their test results are recorded below.
 
@@ -540,3 +541,8 @@ flowchart TD
 ### T-013 review outcome
 
 - Reviewed pushed commit `3aacf3d2b76098092cfae072c7cfa4ca40c88e3f`: note drafts and provenance links commit atomically; the database rejects duplicate Claim links and duplicate positions. Drafts remain internal and have no approval or publication state.
+
+
+### T-014 review outcome
+
+- Reviewed pushed commit `c595da4e9ce8aedd60bf0f881d9bb59c6618881d`: the read path returns stored Markdown and original ordered Claim links without re-evaluating today’s Claim eligibility. Retrieval is internal review only, not approval or publication.
