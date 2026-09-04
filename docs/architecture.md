@@ -159,3 +159,6 @@ T-012 is approved at commit `1c33a89056eda9b04db2c71c9b60d17d3e8ccd0f`. It prove
 
 
 T-013 is approved at commit `3aacf3d2b76098092cfae072c7cfa4ca40c88e3f`. A stored internal NoteDraft now retains exact ordered Claim provenance and is protected from losing referenced Topics or Claims. It is still not approved or learner-ready. The next need is safe individual retrieval for internal review.
+
+
+T-014 is approved at commit `c595da4e9ce8aedd60bf0f881d9bb59c6618881d`. Internal reviewers can now retrieve an immutable stored draft snapshot with exact input-Claim provenance. The next trust boundary is an explicit human decision on the draft itself, kept separate from approval of individual Claims.
