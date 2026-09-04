@@ -38,6 +38,14 @@ def create_evidence(request: EvidenceCreate, db: DatabaseSession) -> EvidenceRes
         raise _not_found(error) from error
 
 
+@router.get("/evidence/{evidence_id}", response_model=EvidenceResponse)
+def get_evidence(evidence_id: int, db: DatabaseSession) -> EvidenceResponse:
+    try:
+        return KnowledgeService(db).get_evidence(evidence_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
 @router.post("/claims", response_model=ClaimResponse, status_code=201)
 def create_claim(request: ClaimCreate, db: DatabaseSession) -> ClaimResponse:
     return KnowledgeService(db).create_claim(request)

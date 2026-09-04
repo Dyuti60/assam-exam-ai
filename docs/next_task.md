@@ -185,3 +185,5 @@ Add exactly one endpoint: `GET /api/v1/evidence/{evidence_id}`. It must return t
 Do not add Source retrieval, lists, search, history, LLMs, ingestion, embeddings, human review, authentication, UI, payments, PDFs, or content generation. Do not add a migration unless a database schema change is genuinely required.
 
 Update architecture, workflow, task log, and append a T-007 implementation note here. Run relevant tests, full suite, changed-file Ruff, git diff --check, and migration checks if applicable. Do not commit or push.
+
+Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added `GET /api/v1/evidence/{evidence_id}` through the existing route, service, and repository layers. It returns the existing `EvidenceResponse`, including content, `source_id`, and optional location reference, with the established clear 404 for missing Evidence. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

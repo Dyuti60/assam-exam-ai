@@ -35,6 +35,12 @@ class KnowledgeService:
         evidence = Evidence(**request.model_dump())
         return self._commit(self.repository.add_evidence(evidence))
 
+    def get_evidence(self, evidence_id: int) -> Evidence:
+        evidence = self.repository.get_evidence(evidence_id)
+        if evidence is None:
+            raise ResourceNotFoundError("Evidence", evidence_id)
+        return evidence
+
     def create_claim(self, request: ClaimCreate) -> Claim:
         claim = Claim(**request.model_dump())
         return self._commit(self.repository.add_claim(claim))

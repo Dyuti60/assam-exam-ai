@@ -159,6 +159,42 @@ def test_create_evidence_returns_404_for_missing_source(client: TestClient) -> N
     assert response.json() == {"detail": "Source 999999 not found"}
 
 
+def test_get_evidence_returns_created_evidence(client: TestClient) -> None:
+    source_response = client.post(
+        "/api/v1/sources",
+        json={
+            "title": "Evidence retrieval source",
+            "source_type": "official_notification",
+            "authority_tier": 1,
+            "location": "https://example.test/evidence-retrieval",
+            "license_status": "TEST_ONLY",
+        },
+    )
+    assert source_response.status_code == 201
+    evidence_response = client.post(
+        "/api/v1/evidence",
+        json={
+            "source_id": source_response.json()["id"],
+            "content": "Evidence content to retrieve",
+            "location_reference": "page 7",
+        },
+    )
+    assert evidence_response.status_code == 201
+    created_evidence = evidence_response.json()
+
+    response = client.get(f"/api/v1/evidence/{created_evidence['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == created_evidence
+
+
+def test_get_evidence_returns_404_for_missing_evidence(client: TestClient) -> None:
+    response = client.get("/api/v1/evidence/999999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Evidence 999999 not found"}
+
+
 def test_get_claim_returns_404_for_missing_claim(client: TestClient) -> None:
     response = client.get("/api/v1/claims/999999")
 
