@@ -141,3 +141,6 @@ T-009 is approved at commit `262bb7db9226ef31f7d9e61e9c7323f9cbd512a8`. The appr
 
 
 T-010 is approved at commit `1a8a1ed15a94c128c7fb89442aee605d3263cbf6`. Approved knowledge can now be classified by one minimal Topic; the next step is to retrieve approved Claims for one Topic as a focused future generation input.
+
+
+T-011 is approved at commit `209ea1678136030ba340b243c3735d1a9f65ee67`. It provides the safe, Topic-scoped approved-Claim boundary that a future internal note or MCQ draft process may consume. It does not generate, publish, or alter knowledge.
