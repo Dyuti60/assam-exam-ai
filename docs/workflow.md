@@ -368,3 +368,8 @@ flowchart TD
 
 - Approved at `64c143498af19c9dc120093c5544e00c92011ef8`.
 - Verification and approval remain intentionally separate. `DRAFT` clears decision metadata; it is not a decision.
+
+### T-009 post-push review
+
+- Approved at `262bb7db9226ef31f7d9e61e9c7323f9cbd512a8`.
+- Only explicit human-approved Claims are returned; this is a read boundary, not content generation.
