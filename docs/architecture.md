@@ -146,3 +146,6 @@ T-010 is approved at commit `1a8a1ed15a94c128c7fb89442aee605d3263cbf6`. Approved
 
 
 T-011 is approved at commit `209ea1678136030ba340b243c3735d1a9f65ee67`. It provides the safe, Topic-scoped approved-Claim boundary that a future internal note or MCQ draft process may consume. It does not generate, publish, or alter knowledge.
+
+
+T-012 is approved at commit `1c33a89056eda9b04db2c71c9b60d17d3e8ccd0f`. It proves the first internal notes-shaped output using only approved knowledge; the preview is deterministic, non-persistent, and never published. The next boundary is persistent draft storage with exact Claim provenance, before any LLM integration.
