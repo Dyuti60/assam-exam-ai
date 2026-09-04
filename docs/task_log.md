@@ -144,9 +144,9 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Tests | `uv run pytest tests/test_knowledge_api.py -q`: 19 passed in 1.23s with one Starlette deprecation warning. `uv run pytest -q`: 28 passed in 1.62s with the same warning. |
 | Lint | Changed-file Ruff check passed. |
 | Migration checks | No database schema migration required. Fresh `assam_exam_ai_t009_test` upgrade to `c31a8f4d2b90` exited 0; `uv run alembic check` reported no new upgrade operations. |
-| Implementation commit | Pending |
-| Documentation-review commit | Pending |
-| Review result | Pending |
+| Implementation commit | `1a8a1ed15a94c128c7fb89442aee605d3263cbf6` |
+| Documentation-review commit | This post-push documentation update |
+| Review result | Approved |
 | Notes | Added only `GET /api/v1/claims/approved`. PostgreSQL filters to `APPROVED` and orders by Claim ID; responses reuse `ClaimResponse` with relevant Evidence IDs and verification/approval summaries. No content generation was added. |
 
 ### T-010 — Add a Topic to Claims
@@ -154,7 +154,7 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for review |
+| Status | Approved |
 | Prompt source | `docs/next_task.md` (T-010) |
 | Scope | Introduce minimal topic classification for future topic-based approved knowledge |
 | Tests | Initial T-010 run: 22 focused and 31 full tests passed. Duplicate-Topic correction: `uv run pytest tests/test_knowledge_api.py -q`: 23 passed in 1.54s with one Starlette deprecation warning; `uv run pytest -q`: 32 passed in 1.41s with the same warning. |
@@ -164,6 +164,20 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Documentation-review commit | Pending |
 | Review result | Pending |
 | Notes | Added one minimal unique-name Topic model/endpoint and nullable Claim assignment with clear missing-Topic handling. PostgreSQL remains the concurrency-safe unique-name authority; duplicate API creation rolls back and returns HTTP 409 with a stable detail. Topic deletion sets Claim references to null. No hierarchy, syllabus, search, or content generation was added. |
+
+### T-011 — Read approved knowledge by Topic
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-011) |
+| Scope | Read only approved Claims for one Topic as future generation input |
+| Tests | API/integration tests required |
+| Implementation commit | Pending |
+| Documentation-review commit | Pending |
+| Review result | Pending |
+| Notes | No generator or prompt/LLM integration yet. |
 
 ## Entry template
 
