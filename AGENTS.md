@@ -353,6 +353,43 @@ AI-generated practice question
 
 Never represent generated questions as previous-year questions.
 
+### Exam relevance and likelihood assessment
+
+Factual correctness and exam relevance are separate assessments. A fact may be correct but not useful for a particular exam.
+
+When this capability is implemented, every relevance label must be traceable to documented inputs, such as:
+
+* official syllabus version and Topic mapping
+* sourced previous-paper/question records
+* exam, year/date, paper/level, and question reference
+* human-reviewed Topic/pattern tags
+* current-affairs recency where relevant
+* scoring-rule version and any reviewer override
+
+Use explainable priority bands such as `HIGH`, `MEDIUM`, and `LOW` with reasons. Example: “direct syllabus coverage; represented in three tagged prior papers.”
+
+Do not state or imply that a NoteDraft, fact, or generated MCQ **will appear** in an exam. A numeric score may be shown only as a validated, calibrated priority estimate with its basis; it is not a guarantee.
+
+Always distinguish:
+
+```text
+Sourced previous-year question
+```
+
+from:
+
+```text
+AI-generated practice question
+```
+
+and from:
+
+```text
+Exam-priority assessment
+```
+
+Do not invent historical-question appearances, frequency, likelihood, score inputs, syllabus alignment, or calibration results. If the required data is absent, return `UNKNOWN` or `NEEDS_VERIFICATION`.
+
 ---
 
 # 10. 2026 Currentness
