@@ -327,3 +327,24 @@ Update all four documents and append an implementation note here. Run relevant t
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/topics/{topic_id}/note-drafts`, the `NoteDraft`/`NoteDraftClaim` persistence models, and migration `b7d9e2f4a610`. The endpoint reuses the exact T-012 Markdown renderer and Topic-scoped approved-Claim query, then atomically stores the internal draft and position-ordered Claim provenance. Missing/empty knowledge retains the established 404/409 behavior with no partial rows. Stored drafts have internal DRAFT meaning only; no approval, publication, retrieval, generation, or unrelated feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
 
 Correction note (2026-09-05 Asia/Kolkata, UTC+05:30): extended the T-013 PostgreSQL constraint coverage to prove the `note_draft_claims` composite primary key rejects a duplicate Claim within the same NoteDraft even when the attempted position is different and valid. No application code, model, migration, endpoint behavior, or task scope changed.
+
+
+---
+
+# T-014 — Retrieve a stored internal note draft
+
+Read `AGENTS.md` and all project documents first.
+
+Add exactly one endpoint: `GET /api/v1/note-drafts/{note_draft_id}`.
+
+It returns the existing `NoteDraftResponse`: draft id, Topic id/name, created time, stored Markdown, and the exact Claim IDs in their stored `position` order.
+
+- Use the existing route → service → repository layers.
+- Eagerly load the Topic and Claim links; avoid N+1 queries.
+- Missing draft returns the established clear 404 style: `{"detail": "NoteDraft <id> not found"}`.
+- The result must be the stored snapshot: do not regenerate Markdown, re-query current approved Claims, or change any database state.
+- Add API/integration tests for successful retrieval after persistence, exact stored Claim-link order, missing draft, and proof that changing a linked Claim’s approval state after draft creation does not alter the stored draft response.
+- Do not add a migration unless a genuine schema change is necessary.
+- Do not add draft editing, deletion, approval/publishing, an LLM, prompts, ingestion, embeddings, MCQs, UI, auth, payments, or PDFs.
+
+Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
