@@ -12,19 +12,20 @@ An AI response is not verified merely because it is confident. Important factual
 
 ## Current confirmed implementation
 
-This section describes only the repository inspected on 2026-09-02 in Asia/Kolkata (UTC+05:30). The T-002 test results recorded in `workflow.md` and `task_log.md` were run against a dedicated PostgreSQL test database.
+This section describes only the repository inspected on 2026-09-03 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
 
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with lifespan logging and `GET /api/v1/health` |
+| API | FastAPI app with health plus internal create Source/Evidence/Claim/Verification and retrieve Verification endpoints under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
 | Migrations | Alembic is connected to application settings and `Base.metadata`; two migrations exist, including verification-evidence provenance |
 | Persistence model | `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, and claim/evidence association tables |
-| Tests | Nine tests cover settings, logging, health, database connectivity, ordered verification evidence, invalid audit-link values, deletion protection, and duplicate positions |
+| Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
+| Tests | Thirteen tests cover the foundation, provenance constraints, end-to-end knowledge API, and atomic rejection of missing Evidence references |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -36,6 +37,11 @@ flowchart TD
     SETTINGS --> ENGINE["SQLAlchemy engine"]
     APP --> ROUTER["/api/v1 router"]
     ROUTER --> HEALTH["GET /health"]
+    ROUTER --> KNOWLEDGE["Knowledge routes"]
+    KNOWLEDGE --> SCHEMAS["Pydantic schemas"]
+    SCHEMAS --> SERVICE["KnowledgeService"]
+    SERVICE --> REPOSITORY["KnowledgeRepository"]
+    REPOSITORY --> ENGINE
     ENGINE --> PG["PostgreSQL"]
 ```
 
@@ -72,17 +78,16 @@ flowchart TD
     QA --> PDF["PDF generation and validation"]
 ```
 
-None of the research, ingestion, retrieval, AI verification, human-review, content-generation, question-generation, QA, or PDF stages is currently implemented. The intended application layering is `route → schema → service/use case → repository → database`; only the health route and foundational database layer currently exist.
+None of the research, ingestion, general search/retrieval, AI verification, human-review, content-generation, question-generation, QA, or PDF stages is currently implemented. The internal manual knowledge API now follows `route → schema → service/use case → repository → database` and can retrieve a verification by ID with its claim and ordered evidence provenance.
 
 ## Current known gaps
 
-- ORM relationships remain absent for the original Source/Evidence, Claim/Evidence, and Claim/Verification links.
+- ORM relationships remain absent for the original Source/Evidence and Claim/Evidence links.
 - Sources do not store publication or retrieval dates.
 - Authority tiers, verdicts, confidence ranges, and license states lack database constraints.
 - `Claim.verification_status` has a Python default but no server default.
 - Cascading deletes can remove provenance history.
 - The pgvector-capable image is configured, but no migration enables the extension and no vector column or Python pgvector dependency exists.
-- No schemas, repositories, services, knowledge routes, or model persistence tests exist.
 - The health route does not test database readiness.
 - Docker Compose contains fixed development database credentials.
 - There is no application Dockerfile or CI workflow, and the README is empty.
@@ -99,7 +104,7 @@ Evidence referenced by a `VerificationEvidence` audit row cannot be deleted. Pos
 - Add entities only when their features are implemented.
 - Change applied database history through new migrations rather than editing old migrations.
 
-T-002 completed the first provenance audit link. The next milestone is a minimal internal API that makes the existing core flow usable end to end: create a source, attach evidence, create a claim, record a verification with its evidence, and retrieve that verification with provenance.
+T-003 implements the first manual internal vertical slice: create a source, attach evidence, create a claim, record a verification with ordered evidence, and retrieve that verification with its provenance. It does not perform automated research or factual verification.
 
 
 ## Working MVP approach
@@ -108,4 +113,4 @@ The immediate goal is a small working internal flow, not a full product. The fir
 
 Source → Evidence → Claim → Verification → Verification with provenance
 
-It will not use an LLM, automatic ingestion, authentication, a learner UI, payments, or PDF generation. Those features come only after this traceable flow works and is tested.
+It does not use an LLM, automatic ingestion, authentication, a learner UI, payments, or PDF generation. Those remain planned features.

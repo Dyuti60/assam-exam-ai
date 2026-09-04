@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file is a chronological register of committed components and their current responsibilities. Planned work is kept separate from the implemented register. The repository was inspected on 2026-09-02; tests were not run during this documentation-only task.
+This file is a chronological register of committed and review-pending components and their current responsibilities. Planned work is kept separate from the implemented register. The repository was inspected on 2026-09-03 in Asia/Kolkata (UTC+05:30).
 
 ## Current runtime and database flow
 
@@ -13,6 +13,11 @@ flowchart TD
     CFG --> DB["engine + SessionLocal\napp/core/database.py"]
     APP --> V1["api_router\napp/api/v1/router.py"]
     V1 --> HEALTH["GET /api/v1/health\nhealth_check()"]
+    V1 --> KNOWLEDGE["Knowledge routes\ncreate + retrieve"]
+    KNOWLEDGE --> CONTRACTS["Pydantic knowledge schemas"]
+    CONTRACTS --> SERVICE["KnowledgeService"]
+    SERVICE --> REPOSITORY["KnowledgeRepository"]
+    REPOSITORY --> DB
     DB --> POSTGRES["PostgreSQL"]
     MODELS["SQLAlchemy models"] --> META["Base.metadata"]
     META --> ALEMBIC["Alembic env"]
@@ -35,6 +40,7 @@ flowchart TD
 | `3c46b45580c2ddb259ef6801fd836f7d237b828d` | 2026-08-31 | PostgreSQL, SQLAlchemy models, and Alembic migration foundation |
 | `bae213e1de35ee08d3788d7b9f42e9d0d36d503f` | 2026-09-01 | Repository operating instructions in `AGENTS.md` |
 | `e8d553a8816ba5d3968b96998caa8d6e9e507f99` | 2026-09-02 | T-002 added ordered verification-evidence provenance with deletion protection |
+| Pending | 2026-09-03 | T-003 adds the minimal end-to-end internal knowledge API; no commit created |
 
 The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99`; its test results are recorded below.
 
@@ -43,6 +49,11 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | Route | Callable | File | Responsibility |
 | --- | --- | --- | --- |
 | `GET /api/v1/health` | `health_check()` | `app/api/v1/routes/health.py` | Returns `{"status": "ok"}` without checking the database |
+| `POST /api/v1/sources` | `create_source()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Source |
+| `POST /api/v1/evidence` | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Validates and creates Evidence for an existing Source |
+| `POST /api/v1/claims` | `create_claim()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Claim |
+| `POST /api/v1/verifications` | `create_verification()` | `app/api/v1/routes/knowledge.py` | Creates a Verification with ordered evidence audit links |
+| `GET /api/v1/verifications/{verification_id}` | `get_verification()` | `app/api/v1/routes/knowledge.py` | Returns a Verification, its Claim, and ordered evidence provenance |
 
 ## Callable functions
 
@@ -56,6 +67,12 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `run_migrations_online()` | `migrations/env.py` | Connects to the configured database and runs Alembic migrations |
 | `upgrade()` | `migrations/versions/774778a8bb78_create_knowledge_foundation.py` | Creates the initial knowledge tables and foreign keys |
 | `downgrade()` | `migrations/versions/774778a8bb78_create_knowledge_foundation.py` | Drops the initial knowledge tables in dependency-safe order |
+| `_not_found()` | `app/api/v1/routes/knowledge.py` | Converts a service missing-resource error to HTTP 404 |
+| `create_source()` | `app/api/v1/routes/knowledge.py` | Delegates Source creation to `KnowledgeService` |
+| `create_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence creation and maps a missing Source to 404 |
+| `create_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim creation to `KnowledgeService` |
+| `create_verification()` | `app/api/v1/routes/knowledge.py` | Delegates Verification creation and maps missing references to 404 |
+| `get_verification()` | `app/api/v1/routes/knowledge.py` | Delegates provenance retrieval and maps a missing Verification to 404 |
 
 ## Models and persistent structures
 
@@ -68,6 +85,39 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `Verification` | `app/models/verification.py` | Stores one verdict, confidence, reasoning, and timestamp for a claim |
 | `VerificationEvidence` | `app/models/verification_evidence.py` | Records evidence used by a verification, its role, and its non-negative ordered position; referenced evidence is deletion-restricted |
 | `claim_evidence` | `app/models/claim_evidence.py` | Associates claims and evidence with a composite primary key |
+
+## T-003 schemas
+
+| Schema | File | Responsibility |
+| --- | --- | --- |
+| `EvidenceRole` | `app/schemas/knowledge.py` | Restricts evidence roles to `SUPPORTS`, `CONTRADICTS`, or `CONTEXT` |
+| `VerificationVerdict` | `app/schemas/knowledge.py` | Defines accepted verification verdict values |
+| `SourceCreate` / `SourceResponse` | `app/schemas/knowledge.py` | Validate Source input and serialize persisted Sources |
+| `EvidenceCreate` / `EvidenceResponse` | `app/schemas/knowledge.py` | Validate Evidence input and serialize persisted Evidence |
+| `ClaimCreate` / `ClaimResponse` | `app/schemas/knowledge.py` | Validate Claim input and serialize persisted Claims |
+| `VerificationEvidenceCreate` | `app/schemas/knowledge.py` | Validates an evidence ID, role, and non-negative position |
+| `VerificationCreate` | `app/schemas/knowledge.py` | Validates Verification input and rejects duplicate evidence IDs or positions |
+| `VerificationEvidenceResponse` | `app/schemas/knowledge.py` | Serializes evidence content with its audit role and position |
+| `VerificationResponse` | `app/schemas/knowledge.py` | Serializes Verification details, Claim details, and ordered provenance |
+
+## T-003 repository and service
+
+| Component | File | Responsibility |
+| --- | --- | --- |
+| `KnowledgeRepository` | `app/repositories/knowledge.py` | Encapsulates Source, Evidence, Claim, and Verification persistence queries |
+| `add_source()` / `get_source()` | `app/repositories/knowledge.py` | Persist or retrieve Sources |
+| `add_evidence()` / `get_evidence()` | `app/repositories/knowledge.py` | Persist or retrieve Evidence |
+| `add_claim()` / `get_claim()` | `app/repositories/knowledge.py` | Persist or retrieve Claims |
+| `add_verification()` | `app/repositories/knowledge.py` | Persists a Verification and its audit links |
+| `get_verification()` | `app/repositories/knowledge.py` | Eagerly retrieves Claim and ordered evidence-link data |
+| `ResourceNotFoundError` | `app/services/knowledge.py` | Carries the missing resource type and identifier |
+| `KnowledgeService` | `app/services/knowledge.py` | Owns knowledge use cases and transaction boundaries |
+| `create_source()` | `app/services/knowledge.py` | Creates and commits a Source |
+| `create_evidence()` | `app/services/knowledge.py` | Verifies the Source exists, then creates Evidence |
+| `create_claim()` | `app/services/knowledge.py` | Creates and commits a Claim |
+| `create_verification()` | `app/services/knowledge.py` | Validates Claim/Evidence references and records ordered audit links atomically |
+| `get_verification()` | `app/services/knowledge.py` | Builds the nested verification-provenance response |
+| `_commit()` | `app/services/knowledge.py` | Commits a use case and rolls back on failure |
 
 ## Migration functions
 
@@ -92,6 +142,10 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_verification_evidence_rejects_invalid_values()` | `tests/test_verification_evidence.py` | Proves PostgreSQL rejects an invalid role and a negative position | Passed twice through parametrization for T-002 |
 | `test_used_evidence_cannot_be_deleted()` | `tests/test_verification_evidence.py` | Proves PostgreSQL blocks deletion of referenced evidence and retains its audit link | Passed for T-002 |
 | `test_verification_evidence_rejects_duplicate_position()` | `tests/test_verification_evidence.py` | Proves one verification cannot assign the same position to two evidence links | Passed for T-002 |
+| `test_complete_knowledge_api_flow()` | `tests/test_knowledge_api.py` | Exercises Source → Evidence → Claim → Verification → retrieve provenance | Passed for T-003 |
+| `test_create_evidence_returns_404_for_missing_source()` | `tests/test_knowledge_api.py` | Confirms a missing Source reference returns a clear 404 | Passed for T-003 |
+| `test_create_verification_rejects_invalid_evidence_role()` | `tests/test_knowledge_api.py` | Confirms an invalid evidence role returns validation status 422 | Passed for T-003 |
+| `test_create_verification_returns_404_without_partial_record()` | `tests/test_knowledge_api.py` | Confirms missing Evidence returns 404 and creates neither a Verification nor provenance link | Passed for T-003 |
 
 ### T-002 verification results
 
@@ -100,6 +154,26 @@ The register reports current responsibility based on the inspected tree. T-002 w
 - Migration check on `assam_exam_ai_t002_test`: upgrade to head, downgrade to `774778a8bb78`, re-upgrade to head, and `alembic check` all exited 0; no new upgrade operations were detected.
 - Changed-file Ruff check: passed.
 - `uv run ruff check .`: failed with 12 pre-existing findings outside the T-002 changes.
+
+### T-003 end-to-end flow and results
+
+```mermaid
+flowchart LR
+    POST_SOURCE["POST /sources"] --> SOURCE["Source"]
+    SOURCE --> POST_EVIDENCE["POST /evidence"]
+    POST_CLAIM["POST /claims"] --> CLAIM["Claim"]
+    POST_EVIDENCE --> EVIDENCE["Evidence"]
+    CLAIM --> POST_VERIFICATION["POST /verifications"]
+    EVIDENCE --> POST_VERIFICATION
+    POST_VERIFICATION --> VERIFICATION["Verification + ordered audit links"]
+    VERIFICATION --> GET_VERIFICATION["GET /verifications/{id}"]
+    GET_VERIFICATION --> RESPONSE["Verification + Claim + ordered provenance"]
+```
+
+- `uv run pytest tests/test_knowledge_api.py -q`: 4 passed in 0.74s with one Starlette deprecation warning on the final review run.
+- `uv run pytest -q`: 13 passed in 0.87s with one Starlette deprecation warning on the final review run.
+- Changed-file Ruff check: passed.
+- A fresh `assam_exam_ai_t003_test` database upgraded through both existing migrations to head; no database-model changes were introduced by T-003.
 
 ## Template for future pushed changes
 

@@ -41,15 +41,17 @@ This is an append-only task register. Add new entries without deleting or rewrit
 
 | Field | Value |
 | --- | --- |
-| Issued | 2026-09-02 UTC |
-| Status | Ready for VS Code Codex |
-| Prompt source | docs/next_task.md (T-003) |
+| Issued | 2026-09-03 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for review |
+| Prompt source | `docs/next_task.md` (T-003) and the user implementation request |
 | Scope | Manual API flow from Source to Evidence to Claim to Verification with returned provenance |
-| Tests | API and PostgreSQL-backed integration tests required |
+| Tests | `uv run pytest tests/test_knowledge_api.py -q`: 4 passed in 0.74s with one Starlette deprecation warning. `uv run pytest -q`: 13 passed in 0.87s with the same warning. |
+| Lint | Changed-file Ruff check passed. |
+| Migration checks | No database schema migration required; existing migrations upgraded a fresh `assam_exam_ai_t003_test` database to head successfully. |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | This is a small internal vertical slice, not an AI, ingestion, review, learner, or PDF feature. |
+| Notes | Added five internal API endpoints with schemas, repository, service, clear 404s, and request validation. Review coverage proves a missing Evidence reference creates neither a Verification nor an audit link. This is not an AI, ingestion, review, learner, or PDF feature. |
 
 ## Entry template
 

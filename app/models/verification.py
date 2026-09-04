@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.claim import Claim
     from app.models.evidence import Evidence
     from app.models.verification_evidence import VerificationEvidence
 
@@ -44,6 +45,8 @@ class Verification(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+    claim: Mapped["Claim"] = relationship(back_populates="verifications")
 
     evidence_links: Mapped[list["VerificationEvidence"]] = relationship(
         back_populates="verification",
