@@ -234,14 +234,16 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for VS Code Codex |
+| Status | Ready for review |
 | Prompt source | `docs/next_task.md` (T-015) |
 | Scope | Record an explicit human decision on one stored internal NoteDraft |
-| Tests | PostgreSQL/API integration tests and migration checks required |
+| Tests | `uv run pytest tests/test_note_drafts.py -q`: 12 passed in 1.31s with one Starlette deprecation warning. `uv run pytest -q`: 50 passed in 2.10s with the same warning. |
+| Lint | Changed-file Ruff check passed. |
+| Migration checks | `d4f8a1c7e592` upgrade gave an existing draft `DRAFT` with null decision metadata; downgrade to `b7d9e2f4a610` removed the three fields; re-upgrade passed; `uv run alembic check` reported no new upgrade operations. |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Draft-level approval is distinct from Claim approval; this still does not publish content. |
+| Notes | Added a separate NoteDraft decision with APPROVED/REJECTED timestamp and note semantics plus DRAFT reset clearing. Tests confirm stored Markdown/provenance and Claim approval/verification state remain unchanged. This is human review without reviewer identity, history, or publication. |
 
 ## Entry template
 

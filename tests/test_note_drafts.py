@@ -2,14 +2,14 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import engine, get_db
 from app.main import app
-from app.models import NoteDraft, NoteDraftClaim
+from app.models import Claim, NoteDraft, NoteDraftClaim
 
 
 @pytest.fixture
@@ -101,6 +101,9 @@ def test_create_note_draft_persists_exact_ordered_provenance(
         "created_at": body["created_at"],
         "claim_ids": [claim_ids[0], claim_ids[3]],
         "markdown": "# Stored Draft Topic\n\n- First stored fact.\n- Second stored fact.",
+        "approval_status": "DRAFT",
+        "approval_decided_at": None,
+        "reviewer_note": None,
     }
     stored_draft = db_connection.execute(
         select(NoteDraft.id, NoteDraft.topic_id, NoteDraft.markdown).where(
@@ -158,6 +161,134 @@ def test_get_note_draft_returns_404_for_missing_draft(client: TestClient) -> Non
 
     assert response.status_code == 404
     assert response.json() == {"detail": "NoteDraft 999999 not found"}
+
+
+@pytest.mark.parametrize("approval_status", ["APPROVED", "REJECTED"])
+def test_record_note_draft_approval_preserves_snapshot_and_claim_state(
+    client: TestClient,
+    db_connection: Connection,
+    approval_status: str,
+) -> None:
+    topic_id = _create_topic(client, f"Draft {approval_status} Topic")
+    claim_id = _create_claim(
+        client,
+        topic_id,
+        f"Fact for {approval_status.lower()} draft.",
+        "APPROVED",
+    )
+    create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    assert create_response.status_code == 201
+    draft_before = create_response.json()
+    claim_before = db_connection.execute(
+        select(
+            Claim.approval_status,
+            Claim.approval_decided_at,
+            Claim.reviewer_note,
+            Claim.verification_status,
+            Claim.confidence,
+            Claim.last_verified_at,
+        ).where(Claim.id == claim_id)
+    ).one()
+
+    response = client.post(
+        f"/api/v1/note-drafts/{draft_before['id']}/approval",
+        json={
+            "approval_status": approval_status,
+            "reviewer_note": f"Human draft decision: {approval_status}",
+        },
+    )
+
+    assert response.status_code == 200
+    decided_draft = response.json()
+    assert decided_draft["approval_status"] == approval_status
+    assert decided_draft["approval_decided_at"] is not None
+    assert decided_draft["reviewer_note"] == (
+        f"Human draft decision: {approval_status}"
+    )
+    assert decided_draft["markdown"] == draft_before["markdown"]
+    assert decided_draft["claim_ids"] == draft_before["claim_ids"]
+    claim_after = db_connection.execute(
+        select(
+            Claim.approval_status,
+            Claim.approval_decided_at,
+            Claim.reviewer_note,
+            Claim.verification_status,
+            Claim.confidence,
+            Claim.last_verified_at,
+        ).where(Claim.id == claim_id)
+    ).one()
+    assert claim_after == claim_before
+
+
+def test_returning_note_draft_approval_to_draft_clears_decision(
+    client: TestClient,
+) -> None:
+    topic_id = _create_topic(client, "Draft Reset Topic")
+    _create_claim(client, topic_id, "Fact for reset.", "APPROVED")
+    create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    assert create_response.status_code == 201
+    draft_id = create_response.json()["id"]
+    approved_response = client.post(
+        f"/api/v1/note-drafts/{draft_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Approved"},
+    )
+    assert approved_response.status_code == 200
+    assert approved_response.json()["approval_decided_at"] is not None
+
+    response = client.post(
+        f"/api/v1/note-drafts/{draft_id}/approval",
+        json={
+            "approval_status": "DRAFT",
+            "reviewer_note": "This note must be discarded",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["approval_status"] == "DRAFT"
+    assert response.json()["approval_decided_at"] is None
+    assert response.json()["reviewer_note"] is None
+
+
+def test_record_note_draft_approval_returns_404_for_missing_draft(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/note-drafts/999999/approval",
+        json={"approval_status": "APPROVED"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "NoteDraft 999999 not found"}
+
+
+def test_record_note_draft_approval_rejects_invalid_status(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/note-drafts/1/approval",
+        json={"approval_status": "INVALID"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_database_rejects_invalid_note_draft_approval_status(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    topic_id = _create_topic(client, "Draft Approval Constraint Topic")
+    _create_claim(client, topic_id, "Constraint approval fact.", "APPROVED")
+    create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    assert create_response.status_code == 201
+
+    savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(
+            update(NoteDraft)
+            .where(NoteDraft.id == create_response.json()["id"])
+            .values(approval_status="INVALID")
+        )
+    savepoint.rollback()
 
 
 def test_create_note_draft_returns_404_without_persistence(

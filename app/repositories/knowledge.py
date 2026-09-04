@@ -95,6 +95,17 @@ class KnowledgeRepository:
         )
         return self.session.scalar(statement)
 
+    def update_note_draft_approval(
+        self,
+        note_draft: NoteDraft,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        note_draft.approval_status = approval_status
+        note_draft.approval_decided_at = decided_at
+        note_draft.reviewer_note = reviewer_note
+
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> None:
         statement = (
             insert(claim_evidence)

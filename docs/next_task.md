@@ -371,3 +371,5 @@ Add the smallest explicit human-review decision for a stored NoteDraft. This is 
 - Do not edit prior migrations.
 
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only the independent NoteDraft review fields, migration `d4f8a1c7e592`, and `POST /api/v1/note-drafts/{note_draft_id}/approval`. New drafts and migrated drafts default to DRAFT with null decision metadata; APPROVED/REJECTED record UTC time and the supplied note, while DRAFT clears both. Tests confirm the decision never changes stored Markdown, ordered Claim provenance, or Claim approval/verification state. This remains internal review, not publication; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

@@ -10,6 +10,7 @@ from app.schemas.knowledge import (
     ClaimResponse,
     EvidenceCreate,
     EvidenceResponse,
+    NoteDraftApprovalCreate,
     NoteDraftPreviewResponse,
     NoteDraftResponse,
     SourceCreate,
@@ -98,6 +99,24 @@ def get_note_draft(
 ) -> NoteDraftResponse:
     try:
         return KnowledgeService(db).get_note_draft(note_draft_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.post(
+    "/note-drafts/{note_draft_id}/approval",
+    response_model=NoteDraftResponse,
+)
+def record_note_draft_approval(
+    note_draft_id: int,
+    request: NoteDraftApprovalCreate,
+    db: DatabaseSession,
+) -> NoteDraftResponse:
+    try:
+        return KnowledgeService(db).record_note_draft_approval(
+            note_draft_id,
+            request,
+        )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
 

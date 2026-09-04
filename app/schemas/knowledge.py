@@ -66,6 +66,14 @@ class NoteDraftPreviewResponse(BaseModel):
 class NoteDraftResponse(NoteDraftPreviewResponse):
     id: int
     created_at: datetime
+    approval_status: ClaimApprovalStatus
+    approval_decided_at: datetime | None
+    reviewer_note: str | None
+
+
+class NoteDraftApprovalCreate(BaseModel):
+    approval_status: ClaimApprovalStatus
+    reviewer_note: str | None = None
 
 
 class EvidenceCreate(BaseModel):

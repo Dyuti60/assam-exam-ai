@@ -20,6 +20,7 @@ from app.schemas.knowledge import (
     ClaimCreate,
     ClaimResponse,
     EvidenceCreate,
+    NoteDraftApprovalCreate,
     NoteDraftPreviewResponse,
     NoteDraftResponse,
     SourceCreate,
@@ -141,6 +142,9 @@ class KnowledgeService:
             created_at=note_draft.created_at,
             claim_ids=[link.claim_id for link in note_draft.claim_links],
             markdown=note_draft.markdown,
+            approval_status=note_draft.approval_status,
+            approval_decided_at=note_draft.approval_decided_at,
+            reviewer_note=note_draft.reviewer_note,
         )
 
     def get_note_draft(self, note_draft_id: int) -> NoteDraftResponse:
@@ -154,7 +158,28 @@ class KnowledgeService:
             created_at=note_draft.created_at,
             claim_ids=[link.claim_id for link in note_draft.claim_links],
             markdown=note_draft.markdown,
+            approval_status=note_draft.approval_status,
+            approval_decided_at=note_draft.approval_decided_at,
+            reviewer_note=note_draft.reviewer_note,
         )
+
+    def record_note_draft_approval(
+        self,
+        note_draft_id: int,
+        request: NoteDraftApprovalCreate,
+    ) -> NoteDraftResponse:
+        note_draft = self.repository.get_note_draft(note_draft_id)
+        if note_draft is None:
+            raise ResourceNotFoundError("NoteDraft", note_draft_id)
+        is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
+        self.repository.update_note_draft_approval(
+            note_draft,
+            request.approval_status.value,
+            None if is_draft else request.reviewer_note,
+            None if is_draft else datetime.now(UTC),
+        )
+        self._commit(note_draft)
+        return self.get_note_draft(note_draft.id)
 
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> ClaimResponse:
         claim = self.repository.get_claim(claim_id)
@@ -244,7 +269,7 @@ class KnowledgeService:
 
     def _commit(
         self,
-        instance: Source | Topic | Evidence | Claim | Verification,
+        instance: Source | Topic | Evidence | Claim | Verification | NoteDraft,
     ):
         try:
             self.session.commit()
