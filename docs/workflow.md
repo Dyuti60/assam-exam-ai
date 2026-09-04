@@ -342,3 +342,8 @@ flowchart TD
 
 - Approved at `fbb1555acfecdc0942c032727684bce9d5e1e3a5`.
 - The endpoint is intentionally a single-record read; no source details, lists, search, or history were introduced.
+
+### T-008 post-push review
+
+- Approved at `64c143498af19c9dc120093c5544e00c92011ef8`.
+- Verification and approval remain intentionally separate. `DRAFT` clears decision metadata; it is not a decision.
