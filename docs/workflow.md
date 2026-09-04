@@ -41,8 +41,9 @@ flowchart TD
 | `bae213e1de35ee08d3788d7b9f42e9d0d36d503f` | 2026-09-01 | Repository operating instructions in `AGENTS.md` |
 | `e8d553a8816ba5d3968b96998caa8d6e9e507f99` | 2026-09-02 | T-002 added ordered verification-evidence provenance with deletion protection |
 | `603bddf260e9016e2db9215aec831ece7f018b50` | 2026-09-04 | T-003 added the minimal end-to-end internal knowledge API and atomic missing-Evidence rejection coverage |
+| `e2f9d170c335f5ab9037749654bba9edb77938ba` | 2026-09-04 | T-004 synchronized each new Verification's latest result into its Claim summary atomically |
 
-The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99` and T-003 against commit `603bddf260e9016e2db9215aec831ece7f018b50`; their test results are recorded below.
+The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99`, T-003 against `603bddf260e9016e2db9215aec831ece7f018b50`, and T-004 against `e2f9d170c335f5ab9037749654bba9edb77938ba`; their test results are recorded below.
 
 ## Routes
 
@@ -195,6 +196,7 @@ flowchart LR
 - `uv run pytest -q`: 13 passed in 1.35s with one Starlette deprecation warning on the final run.
 - Changed-file Ruff check: passed.
 - No database schema migration was required; a fresh `assam_exam_ai_t004_test` database upgraded to the existing migration head successfully.
+- Post-push architecture review: Approved. The Claim summary is explicitly the latest verification result, never human approval.
 
 ## Template for future pushed changes
 
