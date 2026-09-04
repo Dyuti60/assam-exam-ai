@@ -170,16 +170,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for review |
+| Status | Approved |
 | Prompt source | `docs/next_task.md` (T-011) |
 | Scope | Read only approved Claims for one Topic as future generation input |
 | Tests | `uv run pytest tests/test_knowledge_api.py -q`: 26 passed in 2.23s with one Starlette deprecation warning. `uv run pytest -q`: 35 passed in 1.48s with the same warning. |
 | Lint | Changed-file Ruff check passed. |
 | Migration checks | No database schema migration required. Fresh `assam_exam_ai_t011_test` upgrade through `e4a6c8d1f203` exited 0; `uv run alembic check` reported no new upgrade operations. |
+| Implementation commit | `209ea1678136030ba340b243c3735d1a9f65ee67` |
+| Documentation-review commit | Review update series beginning `d2facb1af10826c5d79ce0e5bc99cd713c1d35be` |
+| Review result | Approved |
+| Notes | Added only the Topic-scoped approved Claim read. It distinguishes missing Topic from an empty result, filters exact Topic plus `APPROVED`, orders by Claim ID, and eagerly loads relevant Evidence. No generation or other Topic endpoint was added. |
+
+### T-012 — Internal deterministic Topic note draft
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-012) |
+| Scope | Produce one non-persistent internal note draft using only one Topic's approved Claims |
+| Tests | API/integration tests required |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Added only the Topic-scoped approved Claim read. It distinguishes missing Topic from an empty result, filters exact Topic plus `APPROVED`, orders by Claim ID, and eagerly loads relevant Evidence. No generation or other Topic endpoint was added. |
+| Notes | This is a deterministic preview to prove the safe end-to-end flow; it is not an LLM feature and must never publish content. |
 
 ## Entry template
 
