@@ -301,3 +301,25 @@ Build one small, deterministic internal note-preview flow that proves the workin
 Update all four documents and append an implementation note here. Run relevant tests, the full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/topics/{topic_id}/note-draft-preview`. It confirms the Topic, reuses the ordered Topic-scoped approved-Claim query, and returns deterministic Markdown containing the Topic heading and unchanged approved Claim statements as bullets. Missing Topic returns 404, no approved Claims returns a stable 409, and the preview performs no persistence or state mutation. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-013 — Persist a Topic note draft with Claim provenance
+
+Read `AGENTS.md` and all project documents first.
+
+Turn the current deterministic preview into one traceable, stored internal draft. This is still not AI generation and not publication.
+
+- Add a new migration, a `NoteDraft` model/table, and a `note_draft_claims` association that records the exact ordered Claims used by a draft.
+- A NoteDraft must store only: id, topic_id, markdown, created_at. Its Claim association must preserve a non-negative `position`; use database constraints and uniqueness appropriate to the association.
+- Add exactly one endpoint: `POST /api/v1/topics/{topic_id}/note-drafts`.
+- It must confirm the Topic, load only that Topic’s explicitly `APPROVED` Claims in ascending Claim ID order, render exactly the same deterministic Markdown contract as T-012, and persist the NoteDraft plus ordered Claim links atomically.
+- Return a new response with the draft id, topic id/name, created_at, ordered claim IDs, and markdown.
+- Missing Topic: established 404. Existing Topic with no approved Claims: the same stable 409 detail as T-012.
+- A persisted draft is always an internal **DRAFT** by meaning: do not add a draft approval/publish field or endpoint yet; do not imply it is ready for learners.
+- Add PostgreSQL/API tests for migration upgrade/downgrade, successful persisted content/provenance/order, missing Topic, no approved Claims, exclusion of DRAFT/REJECTED/wrong-topic Claims, and atomicity (no NoteDraft or links on failure).
+- Do not add an LLM/provider, prompts, ingestion, embeddings, source scraping, draft retrieval/listing/editing/deleting, note approval, MCQs, UI, auth, payments, or PDFs.
+- Do not edit prior migrations.
+
+Update all four documents and append an implementation note here. Run relevant tests, the full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
