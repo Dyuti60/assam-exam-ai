@@ -253,3 +253,23 @@ Update all project docs and append an implementation note here. Run relevant tes
 Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added the minimal unique-name `Topic` model and `POST /api/v1/topics`, plus nullable Claim `topic_id` assignment with clear missing-Topic handling. Migration `e4a6c8d1f203` preserves existing Claims with null `topic_id` and uses `ON DELETE SET NULL`; no hierarchy, syllabus, search, notes, MCQs, or content generation was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
 
 Correction note (2026-09-04 Asia/Kolkata, UTC+05:30): duplicate `POST /api/v1/topics` requests now rely on the PostgreSQL unique constraint, roll back the SQLAlchemy session after `IntegrityError`, and return HTTP 409 with `{"detail": "Topic name '<name>' already exists"}`. No Topic schema, migration, Claim behavior, or unrelated feature changed.
+
+
+---
+
+# T-011 — Read approved knowledge by Topic
+
+Read `AGENTS.md` and project documents first.
+
+Add exactly one endpoint: `GET /api/v1/topics/{topic_id}/claims/approved`.
+
+It returns a stable ID-ascending list of `ClaimResponse` objects whose `topic_id` matches and whose approval state is exactly `APPROVED`. Keep relevant Evidence IDs and verification/approval summaries. This is the focused, safe input for a future Topic notes/MCQ draft generator.
+
+- Return the existing clear 404 for a missing Topic.
+- Return `[]` when the Topic exists but has no approved Claims.
+- Use eager loading for relevant Evidence and avoid N+1 queries.
+- Add API/integration tests for missing Topic, empty Topic, exclusion of DRAFT/REJECTED/wrong-topic Claims, and stable order of APPROVED Claims.
+- Do not add a notes/MCQ generator, LLMs, prompts, ingestion, embeddings, topic listing/search, topic hierarchy, UI, authentication, payments, or PDFs.
+- No migration unless a genuine schema change is necessary.
+
+Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
