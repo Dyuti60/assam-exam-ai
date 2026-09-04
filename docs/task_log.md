@@ -128,9 +128,9 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Tests | Initial run: `uv run pytest tests/test_knowledge_api.py -q`: 16 passed in 1.02s; `uv run pytest -q`: 25 passed in 1.10s. Consistency correction: focused suite passed 17 tests in 1.29s; full suite passed 26 tests in 1.23s. Each successful run emitted one Starlette deprecation warning. An intervening full-suite invocation with `DEBUG=false` produced 1 failed and 25 passed because the existing configuration test expects the development value `true`; rerunning with `DEBUG=true` passed. |
 | Lint | Changed-file Ruff check passed for both the initial implementation and consistency correction. |
 | Migration checks | Initial fresh `assam_exam_ai_t008_test` upgrade, downgrade to `92b13f7c4e61`, and re-upgrade exited 0; a pre-existing Claim received `DRAFT` with null decision timestamp/note. For the correction, fresh `assam_exam_ai_t008_correction_test` upgrade to `c31a8f4d2b90` exited 0 and `uv run alembic check` reported no new upgrade operations. |
-| Implementation commit | Pending |
-| Documentation-review commit | Pending |
-| Review result | Pending |
+| Implementation commit | `262bb7db9226ef31f7d9e61e9c7323f9cbd512a8` |
+| Documentation-review commit | This post-push documentation update |
+| Review result | Approved |
 | Notes | Added a constrained human approval state separate from verification, one decision endpoint, and Claim response fields. APPROVED/REJECTED record the current UTC decision time and supplied note; DRAFT clears both decision fields. Verification never changes approval state. No authentication, reviewer identity, decision history, AI, or content generation was added. |
 
 ### T-009 — Read approved knowledge
@@ -138,7 +138,7 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for review |
+| Status | Approved |
 | Prompt source | `docs/next_task.md` (T-009) |
 | Scope | Return only human-approved Claims as safe future content input |
 | Tests | `uv run pytest tests/test_knowledge_api.py -q`: 19 passed in 1.23s with one Starlette deprecation warning. `uv run pytest -q`: 28 passed in 1.62s with the same warning. |
@@ -148,6 +148,20 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Documentation-review commit | Pending |
 | Review result | Pending |
 | Notes | Added only `GET /api/v1/claims/approved`. PostgreSQL filters to `APPROVED` and orders by Claim ID; responses reuse `ClaimResponse` with relevant Evidence IDs and verification/approval summaries. No content generation was added. |
+
+### T-010 — Add a Topic to Claims
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-010) |
+| Scope | Introduce minimal topic classification for future topic-based approved knowledge |
+| Tests | API, migration, and PostgreSQL tests required |
+| Implementation commit | Pending |
+| Documentation-review commit | Pending |
+| Review result | Pending |
+| Notes | No hierarchy or syllabus integration yet. |
 
 ## Entry template
 
