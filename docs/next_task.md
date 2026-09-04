@@ -187,3 +187,21 @@ Do not add Source retrieval, lists, search, history, LLMs, ingestion, embeddings
 Update architecture, workflow, task log, and append a T-007 implementation note here. Run relevant tests, full suite, changed-file Ruff, git diff --check, and migration checks if applicable. Do not commit or push.
 
 Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added `GET /api/v1/evidence/{evidence_id}` through the existing route, service, and repository layers. It returns the existing `EvidenceResponse`, including content, `source_id`, and optional location reference, with the established clear 404 for missing Evidence. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-008 — Add Claim human approval state
+
+Read `AGENTS.md` and all project documents first.
+
+Add the smallest explicit human-approval boundary for Claims. Verification remains an evidence-based assessment; it must not automatically publish a Claim.
+
+- Add a new migration and model fields on Claim for a human decision: `DRAFT`, `APPROVED`, or `REJECTED`; decision timestamp; optional reviewer note. Use appropriate PostgreSQL constraints/defaults.
+- Add one endpoint to record the human decision for an existing Claim: `POST /api/v1/claims/{claim_id}/approval`.
+- Extend Claim retrieval to return the approval state, timestamp, and reviewer note.
+- A missing Claim returns the existing clear 404. Invalid approval state returns 422.
+- Add PostgreSQL/API tests covering default DRAFT, approve, reject, and invalid/missing Claim cases.
+- Do not add authentication yet: use a reviewer note only, not user identity. Do not add AI, ingestion, notes, MCQs, UI, payments, PDFs, or bulk/list/search endpoints.
+
+Update all project documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
