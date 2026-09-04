@@ -350,3 +350,24 @@ It returns the existing `NoteDraftResponse`: draft id, Topic id/name, created ti
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/note-drafts/{note_draft_id}` through the existing route, service, and repository layers. Retrieval eagerly loads the Topic and position-ordered Claim links, returns the stored `NoteDraftResponse`, and never regenerates Markdown, queries current approved Claims, or mutates state. A missing draft returns the established exact 404; changing a linked Claim's approval after creation leaves the stored response unchanged. No migration or unrelated draft operation was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-015 — Add human approval state to NoteDrafts
+
+Read `AGENTS.md` and all project documents first.
+
+Add the smallest explicit human-review decision for a stored NoteDraft. This is separate from approval of its individual Claims and still does not publish learner content.
+
+- Add a new migration and NoteDraft fields for `approval_status` (`DRAFT`, `APPROVED`, `REJECTED`), `approval_decided_at`, and optional `reviewer_note`. Add appropriate PostgreSQL constraints/defaults. Existing drafts must become `DRAFT` with null decision metadata.
+- Add exactly one endpoint: `POST /api/v1/note-drafts/{note_draft_id}/approval`.
+- Reuse or add a clear Pydantic request schema. Extend `NoteDraftResponse` to include the draft approval fields.
+- `APPROVED` and `REJECTED` set the current UTC decision time and preserve the supplied note. Setting `DRAFT` clears both decision time and note.
+- A missing draft returns the established clear 404. Invalid status returns standard 422 validation.
+- Draft approval must not change the stored Markdown, Claim links, Claim approval states, or Claim verification summary.
+- Add PostgreSQL/API tests for default state, approve, reject, DRAFT reset semantics, missing/invalid input, migration upgrade/downgrade, and preserving the stored snapshot/provenance.
+- Do not add authentication or reviewer identity yet; the reviewer note is not identity. Do not add publication/read-list endpoints for approved drafts, editing, LLMs, prompts, ingestion, embeddings, MCQs, UI, payments, or PDFs.
+- Do not edit prior migrations.
+
+Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
