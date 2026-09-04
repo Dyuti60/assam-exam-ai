@@ -117,3 +117,33 @@ Before handoff, update `docs/architecture.md`, `docs/workflow.md`, and `docs/tas
 Run relevant tests, the full suite, Ruff on changed files, `git diff --check`, and migration checks if applicable. Do not commit or push. Report changed files, exact results, and any concern.
 
 Implementation note: successful Verification creation now synchronizes the Claim's latest `verification_status`, `confidence`, and `last_verified_at` in the same transaction. Failed verification creation leaves the Claim summary unchanged. This is a latest-verification summary, not human approval. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-005 — Retrieve a Claim summary
+
+Read `AGENTS.md` and the project documents first.
+
+## Goal
+
+Make the current internal workflow easier to inspect after data has been created. Add exactly one endpoint:
+
+`GET /api/v1/claims/{claim_id}`
+
+It must return the existing `ClaimResponse`, including the Claim statement and its current `verification_status`, `confidence`, and `last_verified_at` summary.
+
+## Scope
+
+- Add the thin route, service/use-case method, and repository lookup consistent with the T-003 layering.
+- Return HTTP 404 with the existing clear missing-resource style when the Claim does not exist.
+- Add API/integration coverage for successful retrieval after a Verification was created and for a missing Claim.
+- Do not return a Verification history or add list/search endpoints in this task.
+- Do not add a migration unless a database schema change is genuinely required.
+- Do not add LLMs, ingestion, embeddings, human-review workflows, authentication, UI, payments, PDFs, or content generation.
+
+## Documentation and checks
+
+Before handoff, update `docs/architecture.md`, `docs/workflow.md`, and `docs/task_log.md` with confirmed changes, functions, tests, and exact results. Keep this `docs/next_task.md` history append-only; do not delete prior task prompts. Append a short implementation note beneath T-005.
+
+Run relevant tests, the full suite, Ruff on changed files, `git diff --check`, and migration checks if applicable. Do not commit or push. Report changed files, exact results, and any concern.
