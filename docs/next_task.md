@@ -207,3 +207,23 @@ Add the smallest explicit human-approval boundary for Claims. Verification remai
 Update all project documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
 
 Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): Claims now have a constrained human approval state (`DRAFT`, `APPROVED`, or `REJECTED`), decision timestamp, and optional reviewer note. Added `POST /api/v1/claims/{claim_id}/approval`; verification remains a separate evidence assessment and never changes approval state. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-009 — Read approved knowledge
+
+Read `AGENTS.md` and project documents first.
+
+Add exactly one endpoint: `GET /api/v1/claims/approved`.
+
+It returns a stable ID-ascending list of existing `ClaimResponse` objects only where `approval_status == APPROVED`. Each response must retain the Claim's relevant evidence IDs and verification/approval summaries. It is the first safe read boundary for future notes/MCQ generation.
+
+- Keep routes thin and use the existing route → service → repository layering.
+- Ensure this static route is registered before `GET /api/v1/claims/{claim_id}` so `approved` is not interpreted as an ID.
+- Return an empty list when there are no approved Claims.
+- Add API/integration tests proving DRAFT and REJECTED Claims are excluded, APPROVED Claims are included in ID order, and an empty result works.
+- Do not add pagination, filtering, search, topic/syllabus, LLMs, ingestion, content generation, UI, authentication, payments, or PDFs.
+- No migration unless a genuine database schema change is needed.
+
+Update all four project documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, git diff --check, and migration checks if applicable. Do not commit or push.
