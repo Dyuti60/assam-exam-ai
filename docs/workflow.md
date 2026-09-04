@@ -52,6 +52,7 @@ flowchart TD
 | `262bb7db9226ef31f7d9e61e9c7323f9cbd512a8` | 2026-09-04 | T-009 added the global approved-Claims read boundary |
 | `1a8a1ed15a94c128c7fb89442aee605d3263cbf6` | 2026-09-04 | T-010 added minimal Topic classification and conflict handling |
 | `209ea1678136030ba340b243c3735d1a9f65ee67` | 2026-09-04 | T-011 added Topic-scoped approved-Claim retrieval |
+| `1c33a89056eda9b04db2c71c9b60d17d3e8ccd0f` | 2026-09-04 | T-012 added a deterministic non-persistent Topic note-draft preview |
 
 The register reports current responsibility based on the inspected tree. T-002 was reviewed against commit `e8d553a8816ba5d3968b96998caa8d6e9e507f99`, T-003 against `603bddf260e9016e2db9215aec831ece7f018b50`, and T-004 against `e2f9d170c335f5ab9037749654bba9edb77938ba`; their test results are recorded below.
 
@@ -469,3 +470,8 @@ flowchart TD
 ### T-011 review outcome
 
 - Reviewed the pushed commit `209ea1678136030ba340b243c3735d1a9f65ee67`: it preserves the human-approval boundary and exposes only Topic-matched, explicitly approved Claims as a future internal draft input.
+
+
+### T-012 review outcome
+
+- Reviewed pushed commit `1c33a89056eda9b04db2c71c9b60d17d3e8ccd0f`: the Markdown preview uses only the ordered approved-Claim boundary and performs no write or publication. Persistent drafts will need their own provenance records before an LLM is introduced.
