@@ -221,6 +221,117 @@ def test_create_topic_returns_409_for_duplicate_name(client: TestClient) -> None
     }
 
 
+def test_get_approved_claims_by_topic_returns_404_for_missing_topic(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/v1/topics/999999/claims/approved")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Topic 999999 not found"}
+
+
+def test_get_approved_claims_by_topic_returns_empty_list(client: TestClient) -> None:
+    topic_response = client.post("/api/v1/topics", json={"name": "Empty Topic"})
+    assert topic_response.status_code == 201
+
+    response = client.get(
+        f"/api/v1/topics/{topic_response.json()['id']}/claims/approved"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_approved_claims_by_topic_filters_orders_and_retains_summaries(
+    client: TestClient,
+) -> None:
+    topic_ids = []
+    for name in ["Target Topic", "Other Topic"]:
+        response = client.post("/api/v1/topics", json={"name": name})
+        assert response.status_code == 201
+        topic_ids.append(response.json()["id"])
+
+    source_response = client.post(
+        "/api/v1/sources",
+        json={
+            "title": "Topic-filtered evidence source",
+            "source_type": "official_notification",
+            "authority_tier": 1,
+            "location": "https://example.test/topic-approved-claims",
+            "license_status": "TEST_ONLY",
+        },
+    )
+    assert source_response.status_code == 201
+    evidence_response = client.post(
+        "/api/v1/evidence",
+        json={
+            "source_id": source_response.json()["id"],
+            "content": "Evidence retained for a topic-filtered Claim",
+        },
+    )
+    assert evidence_response.status_code == 201
+    evidence_id = evidence_response.json()["id"]
+
+    claim_specs = [
+        (topic_ids[0], "APPROVED"),
+        (topic_ids[0], "DRAFT"),
+        (topic_ids[1], "APPROVED"),
+        (topic_ids[0], "APPROVED"),
+        (topic_ids[0], "REJECTED"),
+    ]
+    claim_ids = []
+    for index, (topic_id, approval_status) in enumerate(claim_specs):
+        response = client.post(
+            "/api/v1/claims",
+            json={"statement": f"Topic-filtered claim {index}", "topic_id": topic_id},
+        )
+        assert response.status_code == 201
+        claim_id = response.json()["id"]
+        claim_ids.append(claim_id)
+        if approval_status != "DRAFT":
+            approval_response = client.post(
+                f"/api/v1/claims/{claim_id}/approval",
+                json={"approval_status": approval_status},
+            )
+            assert approval_response.status_code == 200
+
+    retained_claim_id = claim_ids[3]
+    link_response = client.post(
+        f"/api/v1/claims/{retained_claim_id}/evidence/{evidence_id}"
+    )
+    assert link_response.status_code == 200
+    verification_response = client.post(
+        "/api/v1/verifications",
+        json={
+            "claim_id": retained_claim_id,
+            "verdict": "SUPPORTED",
+            "confidence": 0.93,
+            "evidence": [
+                {
+                    "evidence_id": evidence_id,
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    assert verification_response.status_code == 201
+
+    response = client.get(f"/api/v1/topics/{topic_ids[0]}/claims/approved")
+
+    assert response.status_code == 200
+    approved_claims = response.json()
+    assert [claim["id"] for claim in approved_claims] == [claim_ids[0], claim_ids[3]]
+    assert all(claim["topic_id"] == topic_ids[0] for claim in approved_claims)
+    assert all(claim["approval_status"] == "APPROVED" for claim in approved_claims)
+    assert approved_claims[1]["relevant_evidence_ids"] == [evidence_id]
+    assert approved_claims[1]["verification_status"] == "SUPPORTED"
+    assert approved_claims[1]["confidence"] == 0.93
+    assert approved_claims[1]["last_verified_at"] == (
+        verification_response.json()["created_at"]
+    )
+
+
 def test_get_evidence_returns_created_evidence(client: TestClient) -> None:
     source_response = client.post(
         "/api/v1/sources",

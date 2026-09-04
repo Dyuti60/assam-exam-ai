@@ -88,6 +88,14 @@ class KnowledgeService:
             for claim in self.repository.get_approved_claims()
         ]
 
+    def get_approved_claims_by_topic(self, topic_id: int) -> list[ClaimResponse]:
+        if self.repository.get_topic(topic_id) is None:
+            raise ResourceNotFoundError("Topic", topic_id)
+        return [
+            self._claim_response(claim)
+            for claim in self.repository.get_approved_claims_by_topic(topic_id)
+        ]
+
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> ClaimResponse:
         claim = self.repository.get_claim(claim_id)
         if claim is None:

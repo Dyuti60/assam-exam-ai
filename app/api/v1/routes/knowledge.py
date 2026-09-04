@@ -45,6 +45,17 @@ def create_topic(request: TopicCreate, db: DatabaseSession) -> TopicResponse:
         raise _conflict(error) from error
 
 
+@router.get("/topics/{topic_id}/claims/approved", response_model=list[ClaimResponse])
+def get_approved_claims_by_topic(
+    topic_id: int,
+    db: DatabaseSession,
+) -> list[ClaimResponse]:
+    try:
+        return KnowledgeService(db).get_approved_claims_by_topic(topic_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
 @router.post("/evidence", response_model=EvidenceResponse, status_code=201)
 def create_evidence(request: EvidenceCreate, db: DatabaseSession) -> EvidenceResponse:
     try:

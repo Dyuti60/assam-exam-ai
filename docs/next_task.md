@@ -273,3 +273,5 @@ It returns a stable ID-ascending list of `ClaimResponse` objects whose `topic_id
 - No migration unless a genuine schema change is necessary.
 
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
+
+Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/topics/{topic_id}/claims/approved` through the existing route, service, repository, and `ClaimResponse` flow. It returns exact-Topic, explicitly approved Claims in ascending ID order with eagerly loaded relevant Evidence IDs and existing summaries; missing Topic returns 404 and an existing empty Topic returns `[]`. No migration or generation feature was added; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

@@ -66,6 +66,18 @@ class KnowledgeRepository:
         )
         return list(self.session.scalars(statement))
 
+    def get_approved_claims_by_topic(self, topic_id: int) -> list[Claim]:
+        statement = (
+            select(Claim)
+            .options(selectinload(Claim.relevant_evidence))
+            .where(
+                Claim.topic_id == topic_id,
+                Claim.approval_status == "APPROVED",
+            )
+            .order_by(Claim.id)
+        )
+        return list(self.session.scalars(statement))
+
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> None:
         statement = (
             insert(claim_evidence)
