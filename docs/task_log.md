@@ -250,14 +250,16 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for VS Code Codex |
+| Status | Ready for review |
 | Prompt source | `docs/next_task.md` (T-016) |
 | Scope | Return only human-APPROVED stored NoteDraft snapshots for internal downstream use |
-| Tests | API/integration tests required |
+| Tests | `uv run pytest tests/test_note_drafts.py -q`: 14 passed in 1.35s with one Starlette deprecation warning. `uv run pytest -q`: 52 passed in 2.31s with the same warning. |
+| Lint | Changed-file Ruff check passed. |
+| Migration checks | No database schema migration required. Fresh dedicated `assam_exam_ai_t016_test` upgraded through existing head `d4f8a1c7e592`; `uv run alembic check` reported no new upgrade operations. |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Approved is still internal eligibility, not learner publication or PDF release. |
+| Notes | Added the static approved-NoteDraft read before the dynamic ID route. It filters on the draft's own approval only, orders by ID, eagerly loads Topic and stored Claim links, and returns stored snapshots without re-evaluating Claim approval. Approved means internally reviewed, not published or learner-visible. |
 
 ## Entry template
 

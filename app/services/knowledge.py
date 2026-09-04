@@ -151,17 +151,13 @@ class KnowledgeService:
         note_draft = self.repository.get_note_draft(note_draft_id)
         if note_draft is None:
             raise ResourceNotFoundError("NoteDraft", note_draft_id)
-        return NoteDraftResponse(
-            id=note_draft.id,
-            topic_id=note_draft.topic_id,
-            topic_name=note_draft.topic.name,
-            created_at=note_draft.created_at,
-            claim_ids=[link.claim_id for link in note_draft.claim_links],
-            markdown=note_draft.markdown,
-            approval_status=note_draft.approval_status,
-            approval_decided_at=note_draft.approval_decided_at,
-            reviewer_note=note_draft.reviewer_note,
-        )
+        return self._note_draft_response(note_draft)
+
+    def get_approved_note_drafts(self) -> list[NoteDraftResponse]:
+        return [
+            self._note_draft_response(note_draft)
+            for note_draft in self.repository.get_approved_note_drafts()
+        ]
 
     def record_note_draft_approval(
         self,
@@ -305,6 +301,20 @@ class KnowledgeService:
                     )
                 ]
             }
+        )
+
+    @staticmethod
+    def _note_draft_response(note_draft: NoteDraft) -> NoteDraftResponse:
+        return NoteDraftResponse(
+            id=note_draft.id,
+            topic_id=note_draft.topic_id,
+            topic_name=note_draft.topic.name,
+            created_at=note_draft.created_at,
+            claim_ids=[link.claim_id for link in note_draft.claim_links],
+            markdown=note_draft.markdown,
+            approval_status=note_draft.approval_status,
+            approval_decided_at=note_draft.approval_decided_at,
+            reviewer_note=note_draft.reviewer_note,
         )
 
     def _commit_verification(

@@ -163,6 +163,58 @@ def test_get_note_draft_returns_404_for_missing_draft(client: TestClient) -> Non
     assert response.json() == {"detail": "NoteDraft 999999 not found"}
 
 
+def test_get_approved_note_drafts_returns_empty_list(client: TestClient) -> None:
+    response = client.get("/api/v1/note-drafts/approved")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_approved_note_drafts_filters_orders_and_preserves_snapshots(
+    client: TestClient,
+) -> None:
+    topic_id = _create_topic(client, "Approved Drafts Topic")
+    claim_ids = [
+        _create_claim(client, topic_id, statement, "APPROVED")
+        for statement in ["First approved snapshot.", "Second approved snapshot."]
+    ]
+    draft_ids = []
+    for status in ["APPROVED", "DRAFT", "REJECTED", "APPROVED"]:
+        create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+        assert create_response.status_code == 201
+        draft_id = create_response.json()["id"]
+        draft_ids.append(draft_id)
+        if status != "DRAFT":
+            approval_response = client.post(
+                f"/api/v1/note-drafts/{draft_id}/approval",
+                json={"approval_status": status},
+            )
+            assert approval_response.status_code == 200
+
+    rejection_response = client.post(
+        f"/api/v1/claims/{claim_ids[0]}/approval",
+        json={"approval_status": "REJECTED"},
+    )
+    assert rejection_response.status_code == 200
+
+    response = client.get("/api/v1/note-drafts/approved")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [draft["id"] for draft in body] == [draft_ids[0], draft_ids[3]]
+    assert all(draft["approval_status"] == "APPROVED" for draft in body)
+    assert all(draft["claim_ids"] == claim_ids for draft in body)
+    assert all(
+        draft["markdown"]
+        == (
+            "# Approved Drafts Topic\n\n"
+            "- First approved snapshot.\n"
+            "- Second approved snapshot."
+        )
+        for draft in body
+    )
+
+
 @pytest.mark.parametrize("approval_status", ["APPROVED", "REJECTED"])
 def test_record_note_draft_approval_preserves_snapshot_and_claim_state(
     client: TestClient,

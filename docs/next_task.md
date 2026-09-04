@@ -394,3 +394,5 @@ It returns a stable ID-ascending list of `NoteDraftResponse` objects only where 
 - Do not add publication/release state, PDFs, public or learner endpoints, drafts edits/deletes, LLMs, prompts, ingestion, embeddings, MCQs, UI, auth, payments, or relevance scoring.
 
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only the static `GET /api/v1/note-drafts/approved` route before the dynamic NoteDraft ID route. It returns NoteDrafts whose own approval state is exactly APPROVED in ascending ID order, with eagerly loaded Topic and stored ordered Claim provenance. Responses use stored Markdown and Claim IDs without regeneration or current Claim-approval evaluation; no migration or publication feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

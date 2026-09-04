@@ -17,7 +17,7 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, separate Claim and NoteDraft approval decisions, individual retrieval, global/topic-scoped approved-Claims read boundaries, a deterministic Topic note-draft preview, and stored internal note-draft creation/retrieval under `/api/v1` |
+| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, separate Claim and NoteDraft approval decisions, individual retrieval, approved-Claim and approved-NoteDraft read boundaries, a deterministic Topic note-draft preview, and stored internal note-draft creation/retrieval under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
@@ -25,7 +25,7 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Migrations | Alembic is connected to application settings and `Base.metadata`; six migrations exist, including Topic classification, verification-evidence provenance, Claim approval state, stored note drafts, and NoteDraft approval state |
 | Persistence model | `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, `NoteDraft` with its own human-review state, and ordered verification/evidence, claim/evidence, and note-draft/claim association structures |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Fifty tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, separate Claim and NoteDraft approval decisions/reset semantics, global/topic-scoped approved-Claim filtering, Topic assignment/conflicts, deterministic preview, stored note-draft provenance/constraints and snapshot retrieval, and failure atomicity |
+| Tests | Fifty-two tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, separate Claim and NoteDraft approval decisions/reset semantics, approved-Claim and approved-NoteDraft filtering, Topic assignment/conflicts, deterministic preview, stored note-draft provenance/constraints and snapshot retrieval, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -141,6 +141,8 @@ Topic names are protected by the PostgreSQL unique constraint as the concurrency
 `GET /api/v1/note-drafts/{note_draft_id}` returns the stored Markdown and Claim IDs from the persisted position-ordered links. It eagerly loads the Topic and all links, does not query current approval eligibility or regenerate Markdown, and therefore remains an immutable snapshot when a linked Claim's approval state later changes.
 
 Every NoteDraft begins in review state `DRAFT`. `APPROVED` or `REJECTED` records the current UTC decision time and optional reviewer note; resetting to `DRAFT` clears both. This decision is independent of its Claims and changes neither stored Markdown nor provenance. NoteDraft approval is not publication, and reviewer identity/history are not implemented.
+
+`GET /api/v1/note-drafts/approved` is the internal downstream boundary for reviewed drafts. It filters only on each NoteDraft's own `APPROVED` state, returns drafts in ascending ID order, and eagerly loads their Topic and stored ordered Claim links. It returns stored snapshots without regenerating Markdown or reconsidering current Claim approval.
 
 ## Architectural decisions recorded by repository instructions
 

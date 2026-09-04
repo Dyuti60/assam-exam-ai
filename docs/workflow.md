@@ -72,6 +72,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `GET /api/v1/topics/{topic_id}/claims/approved` | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Returns approved Claims for one existing Topic in stable ID order |
 | `POST /api/v1/topics/{topic_id}/note-draft-preview` | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Returns deterministic Markdown from one Topic's approved Claims without persistence |
 | `POST /api/v1/topics/{topic_id}/note-drafts` | `create_note_draft()` | `app/api/v1/routes/knowledge.py` | Atomically stores deterministic Markdown and ordered Claim provenance as an internal draft |
+| `GET /api/v1/note-drafts/approved` | `get_approved_note_drafts()` | `app/api/v1/routes/knowledge.py` | Returns only approved stored NoteDraft snapshots in ascending ID order |
 | `GET /api/v1/note-drafts/{note_draft_id}` | `get_note_draft()` | `app/api/v1/routes/knowledge.py` | Returns one stored internal draft snapshot with position-ordered Claim IDs |
 | `POST /api/v1/note-drafts/{note_draft_id}/approval` | `record_note_draft_approval()` | `app/api/v1/routes/knowledge.py` | Records or resets a NoteDraft human-review decision without publishing it |
 | `POST /api/v1/evidence` | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Validates and creates Evidence for an existing Source |
@@ -103,6 +104,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Delegates the Topic-scoped approved read and maps a missing Topic to 404 |
 | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Delegates deterministic preview creation and maps missing/empty approved knowledge to 404/409 |
 | `create_note_draft()` | `app/api/v1/routes/knowledge.py` | Delegates persisted draft creation and maps missing/empty approved knowledge to 404/409 |
+| `get_approved_note_drafts()` | `app/api/v1/routes/knowledge.py` | Delegates the static approved-draft read boundary before the dynamic draft-ID route |
 | `get_note_draft()` | `app/api/v1/routes/knowledge.py` | Delegates stored snapshot retrieval and maps a missing NoteDraft to 404 |
 | `record_note_draft_approval()` | `app/api/v1/routes/knowledge.py` | Delegates the draft decision and maps a missing NoteDraft to 404 |
 | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence creation and maps a missing Source to 404 |
@@ -163,6 +165,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `get_approved_claims_by_topic()` | `app/repositories/knowledge.py` | Filters by exact Topic ID and `APPROVED`, orders by Claim ID, and eagerly loads relevant Evidence |
 | `add_note_draft()` | `app/repositories/knowledge.py` | Adds and flushes a NoteDraft with its ordered Claim links |
 | `get_note_draft()` | `app/repositories/knowledge.py` | Retrieves one NoteDraft with its Topic and all ordered Claim links eagerly loaded |
+| `get_approved_note_drafts()` | `app/repositories/knowledge.py` | Filters exactly on NoteDraft APPROVED state, orders by ID, and eagerly loads Topic and Claim links |
 | `update_note_draft_approval()` | `app/repositories/knowledge.py` | Updates only the draft's review state, decision timestamp, and reviewer note |
 | `link_claim_evidence()` | `app/repositories/knowledge.py` | Uses PostgreSQL `INSERT ... ON CONFLICT DO NOTHING` against the composite key for concurrency-safe idempotency |
 | `update_claim_approval()` | `app/repositories/knowledge.py` | Updates only the Claim's approval state and its nullable decision timestamp and reviewer note |
@@ -182,6 +185,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_note_draft_preview()` | `app/services/knowledge.py` | Confirms the Topic, reads ordered approved Claims, and renders their statements unchanged as non-persistent Markdown |
 | `create_note_draft()` | `app/services/knowledge.py` | Confirms approved knowledge, builds the draft and ordered provenance links, and commits them atomically |
 | `get_note_draft()` | `app/services/knowledge.py` | Serializes only stored draft fields and position-ordered link IDs without regeneration or mutation |
+| `get_approved_note_drafts()` | `app/services/knowledge.py` | Serializes the repository's ordered approved drafts as stored snapshots |
+| `_note_draft_response()` | `app/services/knowledge.py` | Builds the shared stored NoteDraft response without regenerating or re-evaluating Claims |
 | `record_note_draft_approval()` | `app/services/knowledge.py` | Records APPROVED/REJECTED with UTC time and note, or clears decision metadata for DRAFT |
 | `get_claim()` | `app/services/knowledge.py` | Retrieves a Claim through the repository or raises a missing-resource error |
 | `link_claim_evidence()` | `app/services/knowledge.py` | Validates both resources, performs the conflict-safe insert, commits, freshly reloads the Claim, and returns its response |
@@ -248,6 +253,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_record_note_draft_approval_returns_404_for_missing_draft()` | `tests/test_note_drafts.py` | Confirms a missing NoteDraft decision returns the established 404 | Passed for T-015 |
 | `test_record_note_draft_approval_rejects_invalid_status()` | `tests/test_note_drafts.py` | Confirms invalid draft approval input returns standard 422 validation | Passed for T-015 |
 | `test_database_rejects_invalid_note_draft_approval_status()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects draft approval values outside the constrained set | Passed for T-015 |
+| `test_get_approved_note_drafts_returns_empty_list()` | `tests/test_note_drafts.py` | Confirms the approved-draft boundary returns an empty list when none qualify | Passed for T-016 |
+| `test_get_approved_note_drafts_filters_orders_and_preserves_snapshots()` | `tests/test_note_drafts.py` | Confirms DRAFT/REJECTED exclusion, ascending approved-draft order, and stored snapshot stability after Claim approval changes | Passed for T-016 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -506,6 +513,21 @@ flowchart LR
 - `uv run pytest -q`: 50 passed in 2.10s with one Starlette deprecation warning.
 - Changed-file Ruff passed and `git diff --check` passed.
 - Migration `d4f8a1c7e592` upgraded an existing draft to `DRAFT` with null decision metadata, downgrade removed all three approval fields, re-upgrade succeeded, and `uv run alembic check` reported no new upgrade operations.
+
+### T-016 Approved NoteDraft read boundary
+
+```mermaid
+flowchart LR
+    REQUEST["GET /note-drafts/approved"] --> QUERY["NoteDraft approval_status = APPROVED\norder by NoteDraft.id"]
+    QUERY --> LOAD["joinedload Topic + selectinload ordered Claim links"]
+    LOAD --> RESPONSE["Stored NoteDraftResponse list"]
+    QUERY -->|"none"| EMPTY["200 []"]
+```
+
+- `uv run pytest tests/test_note_drafts.py -q`: 14 passed in 1.35s with one Starlette deprecation warning.
+- `uv run pytest -q`: 52 passed in 2.31s with the same warning.
+- Changed-file Ruff passed and `git diff --check` passed.
+- No database schema migration was required. A fresh dedicated `assam_exam_ai_t016_test` database upgraded through existing head `d4f8a1c7e592`; `uv run alembic check` reported no new upgrade operations.
 
 ## Template for future pushed changes
 

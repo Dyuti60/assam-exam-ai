@@ -95,6 +95,18 @@ class KnowledgeRepository:
         )
         return self.session.scalar(statement)
 
+    def get_approved_note_drafts(self) -> list[NoteDraft]:
+        statement = (
+            select(NoteDraft)
+            .options(
+                joinedload(NoteDraft.topic),
+                selectinload(NoteDraft.claim_links),
+            )
+            .where(NoteDraft.approval_status == "APPROVED")
+            .order_by(NoteDraft.id)
+        )
+        return list(self.session.scalars(statement))
+
     def update_note_draft_approval(
         self,
         note_draft: NoteDraft,
