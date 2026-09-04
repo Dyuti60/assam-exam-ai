@@ -56,6 +56,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | --- | --- | --- | --- |
 | `GET /api/v1/health` | `health_check()` | `app/api/v1/routes/health.py` | Returns `{"status": "ok"}` without checking the database |
 | `POST /api/v1/sources` | `create_source()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Source |
+| `POST /api/v1/topics` | `create_topic()` | `app/api/v1/routes/knowledge.py` | Validates and creates a uniquely named Topic |
 | `POST /api/v1/evidence` | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Validates and creates Evidence for an existing Source |
 | `GET /api/v1/evidence/{evidence_id}` | `get_evidence()` | `app/api/v1/routes/knowledge.py` | Returns one Evidence record or a clear 404 |
 | `POST /api/v1/claims` | `create_claim()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Claim |
@@ -79,7 +80,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `upgrade()` | `migrations/versions/774778a8bb78_create_knowledge_foundation.py` | Creates the initial knowledge tables and foreign keys |
 | `downgrade()` | `migrations/versions/774778a8bb78_create_knowledge_foundation.py` | Drops the initial knowledge tables in dependency-safe order |
 | `_not_found()` | `app/api/v1/routes/knowledge.py` | Converts a service missing-resource error to HTTP 404 |
+| `_conflict()` | `app/api/v1/routes/knowledge.py` | Converts a service conflict error to HTTP 409 |
 | `create_source()` | `app/api/v1/routes/knowledge.py` | Delegates Source creation to `KnowledgeService` |
+| `create_topic()` | `app/api/v1/routes/knowledge.py` | Delegates Topic creation to `KnowledgeService` |
 | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence creation and maps a missing Source to 404 |
 | `get_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence retrieval and maps missing Evidence to 404 |
 | `create_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim creation to `KnowledgeService` |
@@ -96,8 +99,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | --- | --- | --- |
 | `Base` | `app/models/base.py` | Declarative metadata root for SQLAlchemy models |
 | `Source` | `app/models/source.py` | Stores basic source identity, authority, location, license status, hash, and creation time |
+| `Topic` | `app/models/topic.py` | Stores a unique Topic name and creation time, with typed traversal to classified Claims |
 | `Evidence` | `app/models/evidence.py` | Stores text and an optional location reference belonging to a source |
-| `Claim` | `app/models/claim.py` | Stores an atomic statement, verification summary, separate constrained human approval fields, and typed traversal to relevant Evidence |
+| `Claim` | `app/models/claim.py` | Stores an atomic statement, optional Topic, verification summary, separate constrained human approval fields, and typed traversal to Topic and relevant Evidence |
 | `Verification` | `app/models/verification.py` | Stores one verdict, confidence, reasoning, and timestamp for a claim |
 | `VerificationEvidence` | `app/models/verification_evidence.py` | Records evidence used by a verification, its role, and its non-negative ordered position; referenced evidence is deletion-restricted |
 | `claim_evidence` | `app/models/claim_evidence.py` | Associates claims and evidence with a composite primary key |
@@ -110,8 +114,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `VerificationVerdict` | `app/schemas/knowledge.py` | Defines accepted verification verdict values |
 | `ClaimApprovalStatus` | `app/schemas/knowledge.py` | Restricts human decisions to `DRAFT`, `APPROVED`, or `REJECTED` |
 | `SourceCreate` / `SourceResponse` | `app/schemas/knowledge.py` | Validate Source input and serialize persisted Sources |
+| `TopicCreate` / `TopicResponse` | `app/schemas/knowledge.py` | Validate a Topic name and serialize its identity and creation time |
 | `EvidenceCreate` / `EvidenceResponse` | `app/schemas/knowledge.py` | Validate Evidence input and serialize persisted Evidence |
-| `ClaimCreate` / `ClaimResponse` | `app/schemas/knowledge.py` | Validate Claim input and serialize Claims with relevant Evidence IDs plus separate approval state |
+| `ClaimCreate` / `ClaimResponse` | `app/schemas/knowledge.py` | Validate Claim input including optional positive `topic_id` and serialize it with evidence and summary fields |
 | `ClaimApprovalCreate` | `app/schemas/knowledge.py` | Validates an approval state and optional reviewer note |
 | `VerificationEvidenceCreate` | `app/schemas/knowledge.py` | Validates an evidence ID, role, and non-negative position |
 | `VerificationCreate` | `app/schemas/knowledge.py` | Validates Verification input and rejects duplicate evidence IDs or positions |
@@ -122,8 +127,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 
 | Component | File | Responsibility |
 | --- | --- | --- |
-| `KnowledgeRepository` | `app/repositories/knowledge.py` | Encapsulates Source, Evidence, Claim, and Verification persistence queries |
+| `KnowledgeRepository` | `app/repositories/knowledge.py` | Encapsulates Topic, Source, Evidence, Claim, and Verification persistence queries |
 | `add_source()` / `get_source()` | `app/repositories/knowledge.py` | Persist or retrieve Sources |
+| `add_topic()` / `get_topic()` | `app/repositories/knowledge.py` | Persist or retrieve Topics |
 | `add_evidence()` / `get_evidence()` | `app/repositories/knowledge.py` | Persist or retrieve Evidence |
 | `add_claim()` / `get_claim()` | `app/repositories/knowledge.py` | Persist Claims or retrieve them with relevant Evidence eagerly loaded |
 | `get_approved_claims()` | `app/repositories/knowledge.py` | Selects only `APPROVED` Claims in ascending ID order with relevant Evidence eagerly loaded |
@@ -133,11 +139,13 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `update_claim_verification_summary()` | `app/repositories/knowledge.py` | Copies a new Verification's verdict, confidence, and creation time into the Claim's latest summary |
 | `get_verification()` | `app/repositories/knowledge.py` | Eagerly retrieves Claim and ordered evidence-link data |
 | `ResourceNotFoundError` | `app/services/knowledge.py` | Carries the missing resource type and identifier |
+| `ResourceConflictError` | `app/services/knowledge.py` | Carries a stable resource-conflict detail for HTTP translation |
 | `KnowledgeService` | `app/services/knowledge.py` | Owns knowledge use cases and transaction boundaries |
 | `create_source()` | `app/services/knowledge.py` | Creates and commits a Source |
+| `create_topic()` | `app/services/knowledge.py` | Creates a Topic; rolls back database uniqueness conflicts and raises a domain conflict error |
 | `create_evidence()` | `app/services/knowledge.py` | Verifies the Source exists, then creates Evidence |
 | `get_evidence()` | `app/services/knowledge.py` | Retrieves Evidence through the repository or raises a missing-resource error |
-| `create_claim()` | `app/services/knowledge.py` | Creates and commits a Claim |
+| `create_claim()` | `app/services/knowledge.py` | Validates an optional Topic reference, then creates and commits a Claim |
 | `get_approved_claims()` | `app/services/knowledge.py` | Serializes the repository's ordered approved Claims with the existing `ClaimResponse` builder |
 | `get_claim()` | `app/services/knowledge.py` | Retrieves a Claim through the repository or raises a missing-resource error |
 | `link_claim_evidence()` | `app/services/knowledge.py` | Validates both resources, performs the conflict-safe insert, commits, freshly reloads the Claim, and returns its response |
@@ -160,6 +168,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `downgrade()` | `migrations/versions/92b13f7c4e61_add_verification_evidence.py` | Removes `verification_evidence` |
 | `upgrade()` | `migrations/versions/c31a8f4d2b90_add_claim_human_approval.py` | Adds constrained Claim approval state, decision timestamp, and reviewer note |
 | `downgrade()` | `migrations/versions/c31a8f4d2b90_add_claim_human_approval.py` | Removes the Claim approval constraint and fields |
+| `upgrade()` | `migrations/versions/e4a6c8d1f203_add_topics_to_claims.py` | Creates uniquely named Topics and adds nullable `claims.topic_id` with `ON DELETE SET NULL` |
+| `downgrade()` | `migrations/versions/e4a6c8d1f203_add_topics_to_claims.py` | Removes the Claim Topic foreign key/column and Topics table |
 
 ## Tests
 
@@ -175,6 +185,10 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_verification_evidence_rejects_duplicate_position()` | `tests/test_verification_evidence.py` | Proves one verification cannot assign the same position to two evidence links | Passed for T-002 |
 | `test_complete_knowledge_api_flow()` | `tests/test_knowledge_api.py` | Exercises the full flow and confirms direct Claim retrieval exposes the synchronized summary | Passed for T-005 |
 | `test_create_evidence_returns_404_for_missing_source()` | `tests/test_knowledge_api.py` | Confirms a missing Source reference returns a clear 404 | Passed for T-003 |
+| `test_create_topic_and_assign_it_to_claim()` | `tests/test_knowledge_api.py` | Confirms Topic creation and optional Claim assignment are returned through the API | Passed for T-010 |
+| `test_create_claim_returns_404_for_missing_topic()` | `tests/test_knowledge_api.py` | Confirms a missing optional Topic reference returns the clear 404 | Passed for T-010 |
+| `test_database_rejects_duplicate_topic_name()` | `tests/test_knowledge_api.py` | Confirms PostgreSQL enforces unique Topic names | Passed for T-010 |
+| `test_create_topic_returns_409_for_duplicate_name()` | `tests/test_knowledge_api.py` | Confirms duplicate Topic creation returns the exact stable HTTP 409 detail | Passed for the T-010 correction |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -327,6 +341,26 @@ flowchart LR
 - Focused verification: `uv run pytest tests/test_knowledge_api.py -q` passed 19 tests in 1.23s with one Starlette deprecation warning.
 - Full verification: `uv run pytest -q` passed 28 tests in 1.62s with one Starlette deprecation warning.
 - Changed-file Ruff passed. No database schema migration is required; the endpoint reads the existing Claim approval fields, and `uv run alembic check` reported no new upgrade operations on the freshly upgraded `assam_exam_ai_t009_test` database.
+
+### T-010 Minimal Topic classification
+
+```mermaid
+flowchart LR
+    TOPIC_REQUEST["POST /topics"] --> TOPIC["Unique Topic"]
+    CLAIM_REQUEST["POST /claims with optional topic_id"] --> VALIDATE["Resolve Topic when provided"]
+    VALIDATE -->|"exists or null"| CLAIM["Claim.topic_id"]
+    VALIDATE -->|"missing"| NOT_FOUND["404 Topic not found"]
+    TOPIC --> CLAIM
+```
+
+- `uv run pytest tests/test_knowledge_api.py -q`: 22 passed in 1.33s with one Starlette deprecation warning.
+- `uv run pytest -q`: 31 passed in 1.29s with one Starlette deprecation warning.
+- Changed-file Ruff passed.
+- On fresh `assam_exam_ai_t010_test`, upgrade to `c31a8f4d2b90`, insertion of a pre-topic Claim, and upgrade to `e4a6c8d1f203` succeeded; the existing Claim retained null `topic_id`.
+- Downgrade to `c31a8f4d2b90` removed both `topics` and `claims.topic_id`; re-upgrade to head succeeded.
+- `uv run alembic check` reported no new upgrade operations.
+- Duplicate-Topic correction: PostgreSQL remains the concurrency-safe uniqueness authority; the service rolls back its session after `IntegrityError`, raises `ResourceConflictError`, and the route returns HTTP 409 with `{"detail": "Topic name '<name>' already exists"}`.
+- Correction verification: `uv run pytest tests/test_knowledge_api.py -q` passed 23 tests in 1.54s; `uv run pytest -q` passed 32 tests in 1.41s. Each run emitted one Starlette deprecation warning. Changed-file Ruff passed, and `uv run alembic check` reported no new upgrade operations.
 
 ## Template for future pushed changes
 

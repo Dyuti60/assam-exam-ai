@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import engine, get_db
 from app.main import app
-from app.models import Claim, Verification, VerificationEvidence, claim_evidence
+from app.models import Claim, Topic, Verification, VerificationEvidence, claim_evidence
 from app.repositories import KnowledgeRepository
 
 
@@ -161,6 +161,64 @@ def test_create_evidence_returns_404_for_missing_source(client: TestClient) -> N
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Source 999999 not found"}
+
+
+def test_create_topic_and_assign_it_to_claim(client: TestClient) -> None:
+    topic_response = client.post("/api/v1/topics", json={"name": "Assam History"})
+
+    assert topic_response.status_code == 201
+    topic = topic_response.json()
+    assert topic["name"] == "Assam History"
+    assert topic["created_at"] is not None
+
+    claim_response = client.post(
+        "/api/v1/claims",
+        json={
+            "statement": "A claim classified under Assam History",
+            "topic_id": topic["id"],
+        },
+    )
+
+    assert claim_response.status_code == 201
+    assert claim_response.json()["topic_id"] == topic["id"]
+
+
+def test_create_claim_returns_404_for_missing_topic(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/claims",
+        json={"statement": "A claim with a missing topic", "topic_id": 999999},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Topic 999999 not found"}
+
+
+def test_database_rejects_duplicate_topic_name(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    response = client.post("/api/v1/topics", json={"name": "Assam Geography"})
+    assert response.status_code == 201
+
+    savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(Topic.__table__.insert().values(name="Assam Geography"))
+    savepoint.rollback()
+
+
+def test_create_topic_returns_409_for_duplicate_name(client: TestClient) -> None:
+    first_response = client.post("/api/v1/topics", json={"name": "Assam Polity"})
+    assert first_response.status_code == 201
+
+    duplicate_response = client.post(
+        "/api/v1/topics",
+        json={"name": "Assam Polity"},
+    )
+
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json() == {
+        "detail": "Topic name 'Assam Polity' already exists"
+    }
 
 
 def test_get_evidence_returns_created_evidence(client: TestClient) -> None:

@@ -17,15 +17,15 @@ This section describes only the repository inspected on 2026-09-04 in Asia/Kolka
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health, internal create Source/Evidence/Claim/Verification, Claim-to-Evidence linking, Claim approval decisions, individual retrieval, and an approved-Claims read boundary under `/api/v1` |
+| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, Claim approval decisions, individual retrieval, and an approved-Claims read boundary under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; three migrations exist, including verification-evidence provenance and Claim approval state |
-| Persistence model | `Source`, `Evidence`, `Claim` with separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, and claim/evidence association tables |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; four migrations exist, including Topic classification, verification-evidence provenance, and Claim approval state |
+| Persistence model | `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, and claim/evidence association tables |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Twenty-eight tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, Claim approval decisions and reset semantics, approved-Claim filtering, and failure atomicity |
+| Tests | Thirty-two tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, Claim approval decisions and reset semantics, approved-Claim filtering, Topic assignment/conflicts, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -51,6 +51,7 @@ The diagram shows the database foreign keys and association structures currently
 
 ```mermaid
 erDiagram
+    TOPIC ||--o{ CLAIM : "optional topic_id"
     SOURCE ||--o{ EVIDENCE : "source_id"
     CLAIM ||--o{ VERIFICATION : "claim_id"
     CLAIM ||--o{ CLAIM_EVIDENCE : "claim_id"
@@ -78,7 +79,7 @@ flowchart TD
     QA --> PDF["PDF generation and validation"]
 ```
 
-None of the research, ingestion, general search/retrieval, AI verification, full human-review workflow, content-generation, question-generation, QA, or PDF stages is currently implemented. The internal manual knowledge API now follows `route → schema → service/use case → repository → database`; it can retrieve individual Evidence, link relevant Evidence to a Claim, retrieve the Claim with stable evidence IDs and separate verification/approval state, record a human approval decision, list only approved Claims in stable ID order, and retrieve a Verification with its Claim and ordered audit evidence provenance.
+None of the research, ingestion, general search/retrieval, AI verification, full human-review workflow, content-generation, question-generation, QA, or PDF stages is currently implemented. The internal manual knowledge API now follows `route → schema → service/use case → repository → database`; it can create minimal Topics, optionally classify Claims by Topic, retrieve individual Evidence, link relevant Evidence to a Claim, retrieve the Claim with stable evidence IDs and separate verification/approval state, record a human approval decision, list only approved Claims in stable ID order, and retrieve a Verification with its Claim and ordered audit evidence provenance.
 
 Claim-to-Evidence linking is idempotent under concurrent requests: PostgreSQL enforces the existing `(claim_id, evidence_id)` composite primary key, and the repository inserts with `ON CONFLICT DO NOTHING`. The service then freshly reloads the relationship before returning numerically sorted evidence IDs.
 
@@ -101,6 +102,10 @@ Creating a Verification also updates its Claim's `verification_status`, `confide
 Every Claim begins with human approval state `DRAFT`. An `APPROVED` or `REJECTED` decision records the current UTC decision timestamp and supplied optional reviewer note. Setting the state to `DRAFT` clears both fields because there is no current human decision. Verification creation never changes approval state and does not publish a Claim. Reviewer identity, authentication, and decision history are not implemented.
 
 `GET /api/v1/claims/approved` is the current safe read boundary for future content consumers. It returns only explicitly `APPROVED` Claims in ascending ID order with their existing verification summary, approval metadata, and relevant Evidence IDs; it does not generate content.
+
+Topic classification is intentionally minimal: a Topic has only a unique name and timestamps/identity, and a Claim may reference one Topic or none. PostgreSQL sets `claims.topic_id` to null if its Topic is deleted. Topic hierarchy, syllabus mapping, tags, Topic reads/lists, and search are not implemented.
+
+Topic names are protected by the PostgreSQL unique constraint as the concurrency-safe authority. A duplicate Topic creation is rolled back and exposed as HTTP 409 with a stable conflict detail rather than leaking a database exception.
 
 ## Architectural decisions recorded by repository instructions
 

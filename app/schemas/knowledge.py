@@ -45,6 +45,17 @@ class SourceResponse(SourceCreate):
     created_at: datetime
 
 
+class TopicCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class TopicResponse(TopicCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
 class EvidenceCreate(BaseModel):
     source_id: int = Field(gt=0)
     content: str = Field(min_length=1)
@@ -62,6 +73,7 @@ class ClaimCreate(BaseModel):
     subject: str | None = None
     predicate: str | None = None
     object_value: str | None = None
+    topic_id: int | None = Field(default=None, gt=0)
 
 
 class ClaimResponse(ClaimCreate):

@@ -1,7 +1,16 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -9,6 +18,7 @@ from app.models.claim_evidence import claim_evidence
 
 if TYPE_CHECKING:
     from app.models.evidence import Evidence
+    from app.models.topic import Topic
     from app.models.verification import Verification
 
 
@@ -36,6 +46,10 @@ class Claim(Base):
     predicate: Mapped[str | None] = mapped_column(Text)
 
     object_value: Mapped[str | None] = mapped_column(Text)
+
+    topic_id: Mapped[int | None] = mapped_column(
+        ForeignKey("topics.id", ondelete="SET NULL"),
+    )
 
     verification_status: Mapped[str] = mapped_column(
         String(50),
@@ -69,6 +83,8 @@ class Claim(Base):
     )
 
     reviewer_note: Mapped[str | None] = mapped_column(Text)
+
+    topic: Mapped["Topic | None"] = relationship(back_populates="claims")
 
     verifications: Mapped[list["Verification"]] = relationship(
         back_populates="claim",

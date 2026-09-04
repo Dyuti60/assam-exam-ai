@@ -249,3 +249,7 @@ Add minimal topic classification needed before topic-based notes/MCQs.
 - Do not add LLMs, ingestion, notes/MCQs, content generation, UI, authentication, lists/search, topic hierarchy, syllabus management, payments, or PDFs.
 
 Update all project docs and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/check, and git diff --check. Do not commit or push.
+
+Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added the minimal unique-name `Topic` model and `POST /api/v1/topics`, plus nullable Claim `topic_id` assignment with clear missing-Topic handling. Migration `e4a6c8d1f203` preserves existing Claims with null `topic_id` and uses `ON DELETE SET NULL`; no hierarchy, syllabus, search, notes, MCQs, or content generation was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+Correction note (2026-09-04 Asia/Kolkata, UTC+05:30): duplicate `POST /api/v1/topics` requests now rely on the PostgreSQL unique constraint, roll back the SQLAlchemy session after `IntegrityError`, and return HTTP 409 with `{"detail": "Topic name '<name>' already exists"}`. No Topic schema, migration, Claim behavior, or unrelated feature changed.

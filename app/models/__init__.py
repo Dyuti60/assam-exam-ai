@@ -3,6 +3,7 @@ from app.models.claim import Claim
 from app.models.claim_evidence import claim_evidence
 from app.models.evidence import Evidence
 from app.models.source import Source
+from app.models.topic import Topic
 from app.models.verification import Verification
 from app.models.verification_evidence import VerificationEvidence
 
@@ -11,6 +12,7 @@ __all__ = [
     "Claim",
     "Evidence",
     "Source",
+    "Topic",
     "Verification",
     "VerificationEvidence",
     "claim_evidence",

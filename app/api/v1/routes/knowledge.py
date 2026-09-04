@@ -12,10 +12,12 @@ from app.schemas.knowledge import (
     EvidenceResponse,
     SourceCreate,
     SourceResponse,
+    TopicCreate,
+    TopicResponse,
     VerificationCreate,
     VerificationResponse,
 )
-from app.services import KnowledgeService, ResourceNotFoundError
+from app.services import KnowledgeService, ResourceConflictError, ResourceNotFoundError
 
 router = APIRouter()
 
@@ -26,9 +28,21 @@ def _not_found(error: ResourceNotFoundError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
 
 
+def _conflict(error: ResourceConflictError) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+
+
 @router.post("/sources", response_model=SourceResponse, status_code=201)
 def create_source(request: SourceCreate, db: DatabaseSession) -> SourceResponse:
     return KnowledgeService(db).create_source(request)
+
+
+@router.post("/topics", response_model=TopicResponse, status_code=201)
+def create_topic(request: TopicCreate, db: DatabaseSession) -> TopicResponse:
+    try:
+        return KnowledgeService(db).create_topic(request)
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.post("/evidence", response_model=EvidenceResponse, status_code=201)
@@ -49,7 +63,10 @@ def get_evidence(evidence_id: int, db: DatabaseSession) -> EvidenceResponse:
 
 @router.post("/claims", response_model=ClaimResponse, status_code=201)
 def create_claim(request: ClaimCreate, db: DatabaseSession) -> ClaimResponse:
-    return KnowledgeService(db).create_claim(request)
+    try:
+        return KnowledgeService(db).create_claim(request)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
 
 
 @router.get("/claims/approved", response_model=list[ClaimResponse])

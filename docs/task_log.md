@@ -154,14 +154,16 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for VS Code Codex |
+| Status | Ready for review |
 | Prompt source | `docs/next_task.md` (T-010) |
 | Scope | Introduce minimal topic classification for future topic-based approved knowledge |
-| Tests | API, migration, and PostgreSQL tests required |
+| Tests | Initial T-010 run: 22 focused and 31 full tests passed. Duplicate-Topic correction: `uv run pytest tests/test_knowledge_api.py -q`: 23 passed in 1.54s with one Starlette deprecation warning; `uv run pytest -q`: 32 passed in 1.41s with the same warning. |
+| Lint | Changed-file Ruff check passed for the initial implementation and duplicate-Topic correction. |
+| Migration checks | Fresh `assam_exam_ai_t010_test` upgrade through `e4a6c8d1f203`, downgrade to `c31a8f4d2b90`, and re-upgrade exited 0. A pre-existing Claim retained null `topic_id`; downgrade removed `topics` and `claims.topic_id`. `uv run alembic check` reported no new upgrade operations. |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | No hierarchy or syllabus integration yet. |
+| Notes | Added one minimal unique-name Topic model/endpoint and nullable Claim assignment with clear missing-Topic handling. PostgreSQL remains the concurrency-safe unique-name authority; duplicate API creation rolls back and returns HTTP 409 with a stable detail. Topic deletion sets Claim references to null. No hierarchy, syllabus, search, or content generation was added. |
 
 ## Entry template
 

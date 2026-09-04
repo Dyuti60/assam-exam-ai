@@ -8,6 +8,7 @@ from app.models import (
     Claim,
     Evidence,
     Source,
+    Topic,
     Verification,
     VerificationEvidence,
     claim_evidence,
@@ -25,6 +26,14 @@ class KnowledgeRepository:
 
     def get_source(self, source_id: int) -> Source | None:
         return self.session.get(Source, source_id)
+
+    def add_topic(self, topic: Topic) -> Topic:
+        self.session.add(topic)
+        self.session.flush()
+        return topic
+
+    def get_topic(self, topic_id: int) -> Topic | None:
+        return self.session.get(Topic, topic_id)
 
     def add_evidence(self, evidence: Evidence) -> Evidence:
         self.session.add(evidence)

@@ -1,3 +1,7 @@
-from app.services.knowledge import KnowledgeService, ResourceNotFoundError
+from app.services.knowledge import (
+    KnowledgeService,
+    ResourceConflictError,
+    ResourceNotFoundError,
+)
 
-__all__ = ["KnowledgeService", "ResourceNotFoundError"]
+__all__ = ["KnowledgeService", "ResourceConflictError", "ResourceNotFoundError"]

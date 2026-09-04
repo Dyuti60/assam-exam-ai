@@ -1,8 +1,16 @@
 from datetime import UTC, datetime
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Claim, Evidence, Source, Verification, VerificationEvidence
+from app.models import (
+    Claim,
+    Evidence,
+    Source,
+    Topic,
+    Verification,
+    VerificationEvidence,
+)
 from app.repositories import KnowledgeRepository
 from app.schemas.knowledge import (
     ClaimApprovalCreate,
@@ -11,6 +19,7 @@ from app.schemas.knowledge import (
     ClaimResponse,
     EvidenceCreate,
     SourceCreate,
+    TopicCreate,
     VerificationCreate,
     VerificationEvidenceResponse,
     VerificationResponse,
@@ -24,6 +33,10 @@ class ResourceNotFoundError(Exception):
         super().__init__(f"{resource} {resource_id} not found")
 
 
+class ResourceConflictError(Exception):
+    pass
+
+
 class KnowledgeService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -32,6 +45,16 @@ class KnowledgeService:
     def create_source(self, request: SourceCreate) -> Source:
         source = Source(**request.model_dump())
         return self._commit(self.repository.add_source(source))
+
+    def create_topic(self, request: TopicCreate) -> Topic:
+        topic = Topic(**request.model_dump())
+        try:
+            return self._commit(self.repository.add_topic(topic))
+        except IntegrityError as error:
+            self.session.rollback()
+            raise ResourceConflictError(
+                f"Topic name '{request.name}' already exists"
+            ) from error
 
     def create_evidence(self, request: EvidenceCreate) -> Evidence:
         if self.repository.get_source(request.source_id) is None:
@@ -46,6 +69,10 @@ class KnowledgeService:
         return evidence
 
     def create_claim(self, request: ClaimCreate) -> Claim:
+        if request.topic_id is not None and self.repository.get_topic(
+            request.topic_id
+        ) is None:
+            raise ResourceNotFoundError("Topic", request.topic_id)
         claim = Claim(**request.model_dump())
         return self._commit(self.repository.add_claim(claim))
 
@@ -147,7 +174,7 @@ class KnowledgeService:
             evidence=evidence,
         )
 
-    def _commit(self, instance: Source | Evidence | Claim | Verification):
+    def _commit(self, instance: Source | Topic | Evidence | Claim | Verification):
         try:
             self.session.commit()
         except Exception:
