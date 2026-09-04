@@ -218,14 +218,16 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for VS Code Codex |
+| Status | Ready for review |
 | Prompt source | `docs/next_task.md` (T-014) |
 | Scope | Retrieve one stored internal NoteDraft with its exact ordered Claim provenance |
-| Tests | API/integration tests required |
+| Tests | `uv run pytest tests/test_note_drafts.py -q`: 6 passed in 1.01s with one Starlette deprecation warning. `uv run pytest -q`: 44 passed in 1.92s with the same warning. |
+| Lint | Changed-file Ruff check passed. |
+| Migration checks | No database schema migration required. Fresh upgrade through existing head `b7d9e2f4a610` passed; `uv run alembic check` reported no new upgrade operations. |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Retrieval supports internal review only and must not approve, edit, publish, or regenerate a draft. |
+| Notes | Added eager, read-only retrieval of stored Markdown and position-ordered Claim IDs. The response remains unchanged after a linked Claim's approval state changes because retrieval does not regenerate or re-evaluate current approval. No edit, delete, approval, publication, or generation behavior was added. |
 
 ## Entry template
 

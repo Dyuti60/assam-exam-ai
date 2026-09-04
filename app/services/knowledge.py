@@ -143,6 +143,19 @@ class KnowledgeService:
             markdown=note_draft.markdown,
         )
 
+    def get_note_draft(self, note_draft_id: int) -> NoteDraftResponse:
+        note_draft = self.repository.get_note_draft(note_draft_id)
+        if note_draft is None:
+            raise ResourceNotFoundError("NoteDraft", note_draft_id)
+        return NoteDraftResponse(
+            id=note_draft.id,
+            topic_id=note_draft.topic_id,
+            topic_name=note_draft.topic.name,
+            created_at=note_draft.created_at,
+            claim_ids=[link.claim_id for link in note_draft.claim_links],
+            markdown=note_draft.markdown,
+        )
+
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> ClaimResponse:
         claim = self.repository.get_claim(claim_id)
         if claim is None:

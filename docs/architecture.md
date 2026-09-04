@@ -17,7 +17,7 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, Claim approval decisions, individual retrieval, global/topic-scoped approved-Claims read boundaries, a deterministic Topic note-draft preview, and persisted internal note-draft creation under `/api/v1` |
+| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, Claim approval decisions, individual retrieval, global/topic-scoped approved-Claims read boundaries, a deterministic Topic note-draft preview, and stored internal note-draft creation/retrieval under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
@@ -25,7 +25,7 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Migrations | Alembic is connected to application settings and `Base.metadata`; five migrations exist, including Topic classification, verification-evidence provenance, Claim approval state, and stored note drafts |
 | Persistence model | `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered verification/evidence, claim/evidence, and note-draft/claim association structures |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Forty-two tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, Claim approval decisions and reset semantics, global/topic-scoped approved-Claim filtering, Topic assignment/conflicts, deterministic preview, stored note-draft provenance/constraints, and failure atomicity |
+| Tests | Forty-four tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, Claim approval decisions and reset semantics, global/topic-scoped approved-Claim filtering, Topic assignment/conflicts, deterministic preview, stored note-draft provenance/constraints and snapshot retrieval, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -115,6 +115,8 @@ Topic names are protected by the PostgreSQL unique constraint as the concurrency
 `POST /api/v1/topics/{topic_id}/note-draft-preview` is a deterministic, non-persistent internal preview. It reads the existing Topic-scoped approved-Claim boundary in ascending Claim ID order and renders only a Topic heading plus the Claims' unchanged statements as Markdown bullets. It returns 409 when the Topic has no approved Claims and does not mutate knowledge, create note storage, publish content, or use an LLM.
 
 `POST /api/v1/topics/{topic_id}/note-drafts` persists that same deterministic Markdown contract as an internal draft together with the exact ordered approved Claims used. The draft and its links commit atomically. PostgreSQL requires non-negative, unique per-draft positions and one link per draft/Claim pair; deleting a referenced Topic or Claim is restricted, while deleting a draft may remove only its association rows. A stored draft has DRAFT meaning only: it has no approval or publication state and is not learner-ready content.
+
+`GET /api/v1/note-drafts/{note_draft_id}` returns the stored Markdown and Claim IDs from the persisted position-ordered links. It eagerly loads the Topic and all links, does not query current approval eligibility or regenerate Markdown, and therefore remains an immutable snapshot when a linked Claim's approval state later changes.
 
 ## Architectural decisions recorded by repository instructions
 

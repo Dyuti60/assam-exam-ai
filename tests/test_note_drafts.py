@@ -117,6 +117,49 @@ def test_create_note_draft_persists_exact_ordered_provenance(
     assert stored_links == [(claim_ids[0], 0), (claim_ids[3], 1)]
 
 
+def test_get_note_draft_returns_stored_snapshot_after_claim_state_changes(
+    client: TestClient,
+) -> None:
+    topic_id = _create_topic(client, "Retrieved Draft Topic")
+    claim_ids = [
+        _create_claim(client, topic_id, statement, "APPROVED")
+        for statement in ["First snapshot fact.", "Second snapshot fact."]
+    ]
+    create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    assert create_response.status_code == 201
+    stored_response = create_response.json()
+
+    response = client.get(f"/api/v1/note-drafts/{stored_response['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == stored_response
+    assert response.json()["claim_ids"] == claim_ids
+    assert response.json()["markdown"] == (
+        "# Retrieved Draft Topic\n\n"
+        "- First snapshot fact.\n"
+        "- Second snapshot fact."
+    )
+
+    rejection_response = client.post(
+        f"/api/v1/claims/{claim_ids[0]}/approval",
+        json={"approval_status": "REJECTED"},
+    )
+    assert rejection_response.status_code == 200
+
+    unchanged_response = client.get(
+        f"/api/v1/note-drafts/{stored_response['id']}"
+    )
+    assert unchanged_response.status_code == 200
+    assert unchanged_response.json() == stored_response
+
+
+def test_get_note_draft_returns_404_for_missing_draft(client: TestClient) -> None:
+    response = client.get("/api/v1/note-drafts/999999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "NoteDraft 999999 not found"}
+
+
 def test_create_note_draft_returns_404_without_persistence(
     client: TestClient,
     db_connection: Connection,

@@ -91,6 +91,17 @@ def create_note_draft(
         raise _conflict(error) from error
 
 
+@router.get("/note-drafts/{note_draft_id}", response_model=NoteDraftResponse)
+def get_note_draft(
+    note_draft_id: int,
+    db: DatabaseSession,
+) -> NoteDraftResponse:
+    try:
+        return KnowledgeService(db).get_note_draft(note_draft_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
 @router.post("/evidence", response_model=EvidenceResponse, status_code=201)
 def create_evidence(request: EvidenceCreate, db: DatabaseSession) -> EvidenceResponse:
     try:

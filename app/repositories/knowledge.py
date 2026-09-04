@@ -84,6 +84,17 @@ class KnowledgeRepository:
         self.session.flush()
         return note_draft
 
+    def get_note_draft(self, note_draft_id: int) -> NoteDraft | None:
+        statement = (
+            select(NoteDraft)
+            .options(
+                joinedload(NoteDraft.topic),
+                selectinload(NoteDraft.claim_links),
+            )
+            .where(NoteDraft.id == note_draft_id)
+        )
+        return self.session.scalar(statement)
+
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> None:
         statement = (
             insert(claim_evidence)

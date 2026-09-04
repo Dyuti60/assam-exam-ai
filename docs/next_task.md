@@ -348,3 +348,5 @@ It returns the existing `NoteDraftResponse`: draft id, Topic id/name, created ti
 - Do not add draft editing, deletion, approval/publishing, an LLM, prompts, ingestion, embeddings, MCQs, UI, auth, payments, or PDFs.
 
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/note-drafts/{note_draft_id}` through the existing route, service, and repository layers. Retrieval eagerly loads the Topic and position-ordered Claim links, returns the stored `NoteDraftResponse`, and never regenerates Markdown, queries current approved Claims, or mutates state. A missing draft returns the established exact 404; changing a linked Claim's approval after creation leaves the stored response unchanged. No migration or unrelated draft operation was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
