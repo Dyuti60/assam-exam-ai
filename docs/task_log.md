@@ -96,9 +96,9 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Tests | Initial T-006 run: 7 focused and 16 full tests passed. Concurrency-correction run: `uv run pytest tests/test_knowledge_api.py -q`: 8 passed in 1.04s with one Starlette deprecation warning; `uv run pytest -q`: 17 passed in 1.10s with the same warning. |
 | Lint | Changed-file Ruff check passed. |
 | Migration checks | No database schema migration required. Initial T-006 checks upgraded `assam_exam_ai_t006_test` to head with no Alembic changes; the correction's `uv run alembic check` against `assam_exam_ai_t006_correction_test` exited 0 with no new upgrade operations detected. |
-| Implementation commit | Pending |
-| Documentation-review commit | Pending |
-| Review result | Pending |
+| Implementation commit | `0a335483285835db8d9d3a76180c02ba4dad91e2` |
+| Documentation-review commit | This post-push documentation update |
+| Review result | Approved |
 | Notes | Added one Claim-to-Evidence link endpoint and stable ID-only retrieval, separate from Verification audit evidence. Idempotency under concurrent requests is guaranteed by the database composite key plus PostgreSQL `ON CONFLICT DO NOTHING`; the response uses a fresh eager reload. |
 
 ### T-007 — Retrieve an Evidence record
