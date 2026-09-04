@@ -373,3 +373,24 @@ Add the smallest explicit human-review decision for a stored NoteDraft. This is 
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only the independent NoteDraft review fields, migration `d4f8a1c7e592`, and `POST /api/v1/note-drafts/{note_draft_id}/approval`. New drafts and migrated drafts default to DRAFT with null decision metadata; APPROVED/REJECTED record UTC time and the supplied note, while DRAFT clears both. Tests confirm the decision never changes stored Markdown, ordered Claim provenance, or Claim approval/verification state. This remains internal review, not publication; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-016 — Read approved internal note drafts
+
+Read `AGENTS.md` and all project documents first.
+
+Add exactly one endpoint: `GET /api/v1/note-drafts/approved`.
+
+It returns a stable ID-ascending list of `NoteDraftResponse` objects only where the NoteDraft's own `approval_status == APPROVED`. This is the safe internal downstream boundary for eventually rendering or packaging reviewed notes.
+
+- Register this static route before `GET /api/v1/note-drafts/{note_draft_id}`.
+- Eagerly load Topic and ordered Claim links; avoid N+1 queries.
+- Return stored Markdown and stored ordered Claim IDs. Do not regenerate content or re-evaluate current Claim approvals.
+- Return `[]` when no approved drafts exist.
+- Add API/integration tests proving DRAFT and REJECTED drafts are excluded, APPROVED drafts are included in ID order, stored snapshots remain unchanged after linked Claim approval changes, and an empty result works.
+- Do not add a migration unless a genuine schema change is necessary.
+- Do not add publication/release state, PDFs, public or learner endpoints, drafts edits/deletes, LLMs, prompts, ingestion, embeddings, MCQs, UI, auth, payments, or relevance scoring.
+
+Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
