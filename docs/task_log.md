@@ -218,16 +218,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for review |
+| Status | Approved |
 | Prompt source | `docs/next_task.md` (T-014) |
 | Scope | Retrieve one stored internal NoteDraft with its exact ordered Claim provenance |
 | Tests | `uv run pytest tests/test_note_drafts.py -q`: 6 passed in 1.01s with one Starlette deprecation warning. `uv run pytest -q`: 44 passed in 1.92s with the same warning. |
 | Lint | Changed-file Ruff check passed. |
 | Migration checks | No database schema migration required. Fresh upgrade through existing head `b7d9e2f4a610` passed; `uv run alembic check` reported no new upgrade operations. |
+| Implementation commit | `c595da4e9ce8aedd60bf0f881d9bb59c6618881d` |
+| Documentation-review commit | Review update series beginning `6e37789e74fb65a7f02c77e355690da2fdf5ee58` |
+| Review result | Approved |
+| Notes | Added eager, read-only retrieval of stored Markdown and position-ordered Claim IDs. The response remains unchanged after a linked Claim's approval state changes because retrieval does not regenerate or re-evaluate current approval. No edit, delete, approval, publication, or generation behavior was added. |
+
+### T-015 — Add human approval state to NoteDrafts
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-015) |
+| Scope | Record an explicit human decision on one stored internal NoteDraft |
+| Tests | PostgreSQL/API integration tests and migration checks required |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Added eager, read-only retrieval of stored Markdown and position-ordered Claim IDs. The response remains unchanged after a linked Claim's approval state changes because retrieval does not regenerate or re-evaluate current approval. No edit, delete, approval, publication, or generation behavior was added. |
+| Notes | Draft-level approval is distinct from Claim approval; this still does not publish content. |
 
 ## Entry template
 
