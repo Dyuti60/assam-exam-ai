@@ -407,3 +407,8 @@ flowchart TD
 
 - Approved at `262bb7db9226ef31f7d9e61e9c7323f9cbd512a8`.
 - Only explicit human-approved Claims are returned; this is a read boundary, not content generation.
+
+### T-010 post-push review
+
+- Approved at `1a8a1ed15a94c128c7fb89442aee605d3263cbf6`.
+- Topic classification remains deliberately flat and optional; deletion preserves Claims by nulling the Topic reference.
