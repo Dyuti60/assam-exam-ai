@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.models import (
     Claim,
     Evidence,
+    NoteDraft,
     Source,
     Topic,
     Verification,
@@ -77,6 +78,11 @@ class KnowledgeRepository:
             .order_by(Claim.id)
         )
         return list(self.session.scalars(statement))
+
+    def add_note_draft(self, note_draft: NoteDraft) -> NoteDraft:
+        self.session.add(note_draft)
+        self.session.flush()
+        return note_draft
 
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> None:
         statement = (

@@ -17,15 +17,15 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, Claim approval decisions, individual retrieval, global/topic-scoped approved-Claims read boundaries, and a deterministic Topic note-draft preview under `/api/v1` |
+| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, Claim approval decisions, individual retrieval, global/topic-scoped approved-Claims read boundaries, a deterministic Topic note-draft preview, and persisted internal note-draft creation under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; four migrations exist, including Topic classification, verification-evidence provenance, and Claim approval state |
-| Persistence model | `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, and claim/evidence association tables |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; five migrations exist, including Topic classification, verification-evidence provenance, Claim approval state, and stored note drafts |
+| Persistence model | `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered verification/evidence, claim/evidence, and note-draft/claim association structures |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Thirty-eight tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, Claim approval decisions and reset semantics, global/topic-scoped approved-Claim filtering, Topic assignment/conflicts, deterministic note preview, non-mutation, and failure atomicity |
+| Tests | Forty-two tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, Claim approval decisions and reset semantics, global/topic-scoped approved-Claim filtering, Topic assignment/conflicts, deterministic preview, stored note-draft provenance/constraints, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -58,6 +58,9 @@ erDiagram
     EVIDENCE ||--o{ CLAIM_EVIDENCE : "evidence_id"
     VERIFICATION ||--o{ VERIFICATION_EVIDENCE : "uses in position order"
     EVIDENCE ||--o{ VERIFICATION_EVIDENCE : "used as role"
+    TOPIC ||--o{ NOTE_DRAFT : "source topic"
+    NOTE_DRAFT ||--|{ NOTE_DRAFT_CLAIM : "records in position order"
+    CLAIM ||--o{ NOTE_DRAFT_CLAIM : "used by draft"
 ```
 
 ## Planned architecture — not implemented
@@ -110,6 +113,8 @@ Topic classification is intentionally minimal: a Topic has only a unique name an
 Topic names are protected by the PostgreSQL unique constraint as the concurrency-safe authority. A duplicate Topic creation is rolled back and exposed as HTTP 409 with a stable conflict detail rather than leaking a database exception.
 
 `POST /api/v1/topics/{topic_id}/note-draft-preview` is a deterministic, non-persistent internal preview. It reads the existing Topic-scoped approved-Claim boundary in ascending Claim ID order and renders only a Topic heading plus the Claims' unchanged statements as Markdown bullets. It returns 409 when the Topic has no approved Claims and does not mutate knowledge, create note storage, publish content, or use an LLM.
+
+`POST /api/v1/topics/{topic_id}/note-drafts` persists that same deterministic Markdown contract as an internal draft together with the exact ordered approved Claims used. The draft and its links commit atomically. PostgreSQL requires non-negative, unique per-draft positions and one link per draft/Claim pair; deleting a referenced Topic or Claim is restricted, while deleting a draft may remove only its association rows. A stored draft has DRAFT meaning only: it has no approval or publication state and is not learner-ready content.
 
 ## Architectural decisions recorded by repository instructions
 

@@ -202,14 +202,16 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for VS Code Codex |
+| Status | Ready for review |
 | Prompt source | `docs/next_task.md` (T-013) |
 | Scope | Store a deterministic Topic note draft and the exact ordered approved Claims used to create it |
-| Tests | PostgreSQL/API integration tests and migration checks required |
+| Tests | Initial T-013 run: 4 focused tests passed in 0.85s and 42 full-suite tests passed in 1.63s. Duplicate-Claim constraint correction: `uv run pytest tests/test_note_drafts.py -q`: 4 passed in 0.87s with one Starlette deprecation warning; `uv run pytest -q`: 42 passed in 2.11s with the same warning. |
+| Lint | Changed-file Ruff check passed. |
+| Migration checks | Fresh upgrade through `b7d9e2f4a610` passed; downgrade to `e4a6c8d1f203` removed `note_drafts` and `note_draft_claims`; re-upgrade passed; `uv run alembic check` reported no new upgrade operations. |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Drafts are not approved or published; this creates the provenance-safe persistence boundary before LLM generation. |
+| Notes | Added atomic storage of deterministic internal Markdown and exact ordered approved-Claim provenance. PostgreSQL enforces non-negative unique positions and unique draft/Claim pairs; the correction explicitly tests that the composite primary key rejects reuse of the same Claim at a different valid position. Referenced Topics and Claims are protected from deletion. Drafts have no approval/publish field and are not learner-ready. One initial downgrade invocation was rejected before migration execution because ambient `DEBUG=release` was not a valid boolean; the complete migration cycle was rerun successfully with `DEBUG=true`. |
 
 ## Entry template
 

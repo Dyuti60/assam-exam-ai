@@ -19,6 +19,7 @@ flowchart TD
     SERVICE --> REPOSITORY["KnowledgeRepository"]
     REPOSITORY --> DB
     SERVICE --> PREVIEW["Deterministic Topic note preview\nno persistence"]
+    SERVICE --> DRAFT["Persist deterministic internal draft"]
     DB --> POSTGRES["PostgreSQL"]
     MODELS["SQLAlchemy models"] --> META["Base.metadata"]
     META --> ALEMBIC["Alembic env"]
@@ -28,6 +29,8 @@ flowchart TD
     LINKS --> EVIDENCE["Evidence"]
     CLAIM["Claim"] --> RELEVANT["claim_evidence links"]
     RELEVANT --> EVIDENCE
+    DRAFT --> DRAFT_LINKS["ordered note_draft_claims"]
+    DRAFT_LINKS --> CLAIM
     LINKS --> POSTGRES
     TESTS["pytest tests"] --> APP
     TESTS --> DB
@@ -65,6 +68,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/topics` | `create_topic()` | `app/api/v1/routes/knowledge.py` | Validates and creates a uniquely named Topic |
 | `GET /api/v1/topics/{topic_id}/claims/approved` | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Returns approved Claims for one existing Topic in stable ID order |
 | `POST /api/v1/topics/{topic_id}/note-draft-preview` | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Returns deterministic Markdown from one Topic's approved Claims without persistence |
+| `POST /api/v1/topics/{topic_id}/note-drafts` | `create_note_draft()` | `app/api/v1/routes/knowledge.py` | Atomically stores deterministic Markdown and ordered Claim provenance as an internal draft |
 | `POST /api/v1/evidence` | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Validates and creates Evidence for an existing Source |
 | `GET /api/v1/evidence/{evidence_id}` | `get_evidence()` | `app/api/v1/routes/knowledge.py` | Returns one Evidence record or a clear 404 |
 | `POST /api/v1/claims` | `create_claim()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Claim |
@@ -93,6 +97,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_topic()` | `app/api/v1/routes/knowledge.py` | Delegates Topic creation to `KnowledgeService` |
 | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Delegates the Topic-scoped approved read and maps a missing Topic to 404 |
 | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Delegates deterministic preview creation and maps missing/empty approved knowledge to 404/409 |
+| `create_note_draft()` | `app/api/v1/routes/knowledge.py` | Delegates persisted draft creation and maps missing/empty approved knowledge to 404/409 |
 | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence creation and maps a missing Source to 404 |
 | `get_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence retrieval and maps missing Evidence to 404 |
 | `create_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim creation to `KnowledgeService` |
@@ -115,6 +120,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `Verification` | `app/models/verification.py` | Stores one verdict, confidence, reasoning, and timestamp for a claim |
 | `VerificationEvidence` | `app/models/verification_evidence.py` | Records evidence used by a verification, its role, and its non-negative ordered position; referenced evidence is deletion-restricted |
 | `claim_evidence` | `app/models/claim_evidence.py` | Associates claims and evidence with a composite primary key |
+| `NoteDraft` | `app/models/note_draft.py` | Stores one Topic's deterministic internal Markdown draft and creation time |
+| `NoteDraftClaim` | `app/models/note_draft_claim.py` | Records the exact Claims used by a draft in constrained position order |
 
 ## T-003 schemas
 
@@ -133,6 +140,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `VerificationEvidenceResponse` | `app/schemas/knowledge.py` | Serializes evidence content with its audit role and position |
 | `VerificationResponse` | `app/schemas/knowledge.py` | Serializes Verification details, Claim details, and ordered provenance |
 | `NoteDraftPreviewResponse` | `app/schemas/knowledge.py` | Serializes Topic identity, ordered approved Claim IDs, and deterministic Markdown |
+| `NoteDraftResponse` | `app/schemas/knowledge.py` | Adds persisted draft identity and creation time to the deterministic draft contract |
 
 ## T-003 repository and service
 
@@ -145,6 +153,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `add_claim()` / `get_claim()` | `app/repositories/knowledge.py` | Persist Claims or retrieve them with relevant Evidence eagerly loaded |
 | `get_approved_claims()` | `app/repositories/knowledge.py` | Selects only `APPROVED` Claims in ascending ID order with relevant Evidence eagerly loaded |
 | `get_approved_claims_by_topic()` | `app/repositories/knowledge.py` | Filters by exact Topic ID and `APPROVED`, orders by Claim ID, and eagerly loads relevant Evidence |
+| `add_note_draft()` | `app/repositories/knowledge.py` | Adds and flushes a NoteDraft with its ordered Claim links |
 | `link_claim_evidence()` | `app/repositories/knowledge.py` | Uses PostgreSQL `INSERT ... ON CONFLICT DO NOTHING` against the composite key for concurrency-safe idempotency |
 | `update_claim_approval()` | `app/repositories/knowledge.py` | Updates only the Claim's approval state and its nullable decision timestamp and reviewer note |
 | `add_verification()` | `app/repositories/knowledge.py` | Persists a Verification and its audit links |
@@ -161,6 +170,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `get_approved_claims()` | `app/services/knowledge.py` | Serializes the repository's ordered approved Claims with the existing `ClaimResponse` builder |
 | `get_approved_claims_by_topic()` | `app/services/knowledge.py` | Distinguishes a missing Topic from an empty approved result, then serializes matching Claims |
 | `create_note_draft_preview()` | `app/services/knowledge.py` | Confirms the Topic, reads ordered approved Claims, and renders their statements unchanged as non-persistent Markdown |
+| `create_note_draft()` | `app/services/knowledge.py` | Confirms approved knowledge, builds the draft and ordered provenance links, and commits them atomically |
 | `get_claim()` | `app/services/knowledge.py` | Retrieves a Claim through the repository or raises a missing-resource error |
 | `link_claim_evidence()` | `app/services/knowledge.py` | Validates both resources, performs the conflict-safe insert, commits, freshly reloads the Claim, and returns its response |
 | `record_claim_approval()` | `app/services/knowledge.py` | Records APPROVED/REJECTED with the current UTC time and supplied note, or clears decision metadata for DRAFT, then commits |
@@ -168,6 +178,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_verification()` | `app/services/knowledge.py` | Validates references, records ordered audit links, and synchronizes the Claim summary atomically |
 | `get_verification()` | `app/services/knowledge.py` | Builds the nested verification-provenance response |
 | `_commit()` | `app/services/knowledge.py` | Commits a use case and rolls back on failure |
+| `_commit_note_draft()` | `app/services/knowledge.py` | Flushes and commits the draft plus Claim links together, rolling back both on failure |
+| `_render_note_markdown()` | `app/services/knowledge.py` | Provides the shared deterministic heading-and-bullets contract for preview and persistence |
 | `_commit_verification()` | `app/services/knowledge.py` | Flushes the Verification, updates its Claim summary, and commits or rolls back both together |
 
 ## Migration functions
@@ -184,6 +196,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `downgrade()` | `migrations/versions/c31a8f4d2b90_add_claim_human_approval.py` | Removes the Claim approval constraint and fields |
 | `upgrade()` | `migrations/versions/e4a6c8d1f203_add_topics_to_claims.py` | Creates uniquely named Topics and adds nullable `claims.topic_id` with `ON DELETE SET NULL` |
 | `downgrade()` | `migrations/versions/e4a6c8d1f203_add_topics_to_claims.py` | Removes the Claim Topic foreign key/column and Topics table |
+| `upgrade()` | `migrations/versions/b7d9e2f4a610_add_note_drafts.py` | Creates internal note drafts and constrained ordered Claim provenance |
+| `downgrade()` | `migrations/versions/b7d9e2f4a610_add_note_drafts.py` | Removes note-draft Claim links and note drafts in dependency order |
 
 ## Tests
 
@@ -209,6 +223,10 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_note_draft_preview_returns_404_for_missing_topic()` | `tests/test_knowledge_api.py` | Confirms previewing a missing Topic returns the established clear 404 | Passed for T-012 |
 | `test_note_draft_preview_returns_409_without_approved_claims()` | `tests/test_knowledge_api.py` | Confirms an existing Topic without approved knowledge returns the stable 409 detail | Passed for T-012 |
 | `test_note_draft_preview_is_exact_ordered_and_non_persistent()` | `tests/test_knowledge_api.py` | Confirms exact Topic/state filtering, stable Claim order, exact Markdown, and unchanged Claim state | Passed for T-012 |
+| `test_create_note_draft_persists_exact_ordered_provenance()` | `tests/test_note_drafts.py` | Confirms approved/exact-Topic filtering, exact Markdown, persistence, and ordered Claim links | Passed for T-013 |
+| `test_create_note_draft_returns_404_without_persistence()` | `tests/test_note_drafts.py` | Confirms missing Topic returns 404 without draft or link rows | Passed for T-013 |
+| `test_create_note_draft_returns_409_without_approved_claims_atomically()` | `tests/test_note_drafts.py` | Confirms the stable 409 and no partial persistence for empty approved knowledge | Passed for T-013 |
+| `test_note_draft_claim_constraints_are_enforced()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects negative positions, duplicate per-draft positions, and duplicate Claims within one draft | Passed for T-013 correction |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -414,6 +432,26 @@ flowchart LR
 - `uv run pytest -q`: 38 passed in 1.62s with one Starlette deprecation warning.
 - Changed-file Ruff passed.
 - No database schema migration was required. Upgrade to existing head `e4a6c8d1f203` succeeded on `assam_exam_ai_t012_test`, and `uv run alembic check` reported no new upgrade operations.
+
+### T-013 Stored internal Topic note draft
+
+```mermaid
+flowchart LR
+    REQUEST["POST /topics/{topic_id}/note-drafts"] --> TOPIC["Confirm Topic exists"]
+    TOPIC --> QUERY["Exact Topic + APPROVED + Claim.id order"]
+    QUERY --> RENDER["Shared deterministic Markdown"]
+    RENDER --> DRAFT["NoteDraft"]
+    QUERY --> LINKS["note_draft_claims with positions"]
+    DRAFT --> COMMIT["One transaction"]
+    LINKS --> COMMIT
+    COMMIT --> RESPONSE["NoteDraftResponse\ninternal DRAFT meaning"]
+```
+
+- `uv run pytest tests/test_note_drafts.py -q`: 4 passed in 0.85s with one Starlette deprecation warning.
+- `uv run pytest -q`: 42 passed in 1.63s with one Starlette deprecation warning.
+- Changed-file Ruff passed.
+- Fresh upgrade through `b7d9e2f4a610` succeeded. Downgrade to `e4a6c8d1f203` removed both new tables, re-upgrade succeeded, and `uv run alembic check` reported no new upgrade operations.
+- Duplicate-Claim constraint correction: `uv run pytest tests/test_note_drafts.py -q` passed 4 tests in 0.87s; `uv run pytest -q` passed 42 tests in 2.11s. Each emitted one Starlette deprecation warning. Changed-file Ruff passed, `uv run alembic check` reported no new upgrade operations, and `git diff --check` passed.
 
 ## Template for future pushed changes
 

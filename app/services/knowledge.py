@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.models import (
     Claim,
     Evidence,
+    NoteDraft,
+    NoteDraftClaim,
     Source,
     Topic,
     Verification,
@@ -19,6 +21,7 @@ from app.schemas.knowledge import (
     ClaimResponse,
     EvidenceCreate,
     NoteDraftPreviewResponse,
+    NoteDraftResponse,
     SourceCreate,
     TopicCreate,
     VerificationCreate,
@@ -110,8 +113,34 @@ class KnowledgeService:
             topic_id=topic.id,
             topic_name=topic.name,
             claim_ids=[claim.id for claim in claims],
-            markdown=f"# {topic.name}\n\n"
-            + "\n".join(f"- {claim.statement}" for claim in claims),
+            markdown=self._render_note_markdown(topic.name, claims),
+        )
+
+    def create_note_draft(self, topic_id: int) -> NoteDraftResponse:
+        topic = self.repository.get_topic(topic_id)
+        if topic is None:
+            raise ResourceNotFoundError("Topic", topic_id)
+        claims = self.repository.get_approved_claims_by_topic(topic_id)
+        if not claims:
+            raise ResourceConflictError(
+                f"Topic {topic_id} has no approved Claims"
+            )
+        note_draft = NoteDraft(
+            topic_id=topic.id,
+            markdown=self._render_note_markdown(topic.name, claims),
+            claim_links=[
+                NoteDraftClaim(claim=claim, position=position)
+                for position, claim in enumerate(claims)
+            ],
+        )
+        self._commit_note_draft(note_draft)
+        return NoteDraftResponse(
+            id=note_draft.id,
+            topic_id=topic.id,
+            topic_name=topic.name,
+            created_at=note_draft.created_at,
+            claim_ids=[link.claim_id for link in note_draft.claim_links],
+            markdown=note_draft.markdown,
         )
 
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> ClaimResponse:
@@ -200,13 +229,30 @@ class KnowledgeService:
             evidence=evidence,
         )
 
-    def _commit(self, instance: Source | Topic | Evidence | Claim | Verification):
+    def _commit(
+        self,
+        instance: Source | Topic | Evidence | Claim | Verification,
+    ):
         try:
             self.session.commit()
         except Exception:
             self.session.rollback()
             raise
         return instance
+
+    def _commit_note_draft(self, note_draft: NoteDraft) -> None:
+        try:
+            self.repository.add_note_draft(note_draft)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+    @staticmethod
+    def _render_note_markdown(topic_name: str, claims: list[Claim]) -> str:
+        return f"# {topic_name}\n\n" + "\n".join(
+            f"- {claim.statement}" for claim in claims
+        )
 
     @staticmethod
     def _claim_response(claim: Claim) -> ClaimResponse:

@@ -323,3 +323,7 @@ Turn the current deterministic preview into one traceable, stored internal draft
 - Do not edit prior migrations.
 
 Update all four documents and append an implementation note here. Run relevant tests, the full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/topics/{topic_id}/note-drafts`, the `NoteDraft`/`NoteDraftClaim` persistence models, and migration `b7d9e2f4a610`. The endpoint reuses the exact T-012 Markdown renderer and Topic-scoped approved-Claim query, then atomically stores the internal draft and position-ordered Claim provenance. Missing/empty knowledge retains the established 404/409 behavior with no partial rows. Stored drafts have internal DRAFT meaning only; no approval, publication, retrieval, generation, or unrelated feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+Correction note (2026-09-05 Asia/Kolkata, UTC+05:30): extended the T-013 PostgreSQL constraint coverage to prove the `note_draft_claims` composite primary key rejects a duplicate Claim within the same NoteDraft even when the attempted position is different and valid. No application code, model, migration, endpoint behavior, or task scope changed.

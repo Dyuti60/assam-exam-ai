@@ -63,6 +63,11 @@ class NoteDraftPreviewResponse(BaseModel):
     markdown: str
 
 
+class NoteDraftResponse(NoteDraftPreviewResponse):
+    id: int
+    created_at: datetime
+
+
 class EvidenceCreate(BaseModel):
     source_id: int = Field(gt=0)
     content: str = Field(min_length=1)
