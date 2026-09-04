@@ -86,6 +86,28 @@ None of the research, ingestion, general search/retrieval, AI verification, full
 
 Claim-to-Evidence linking is idempotent under concurrent requests: PostgreSQL enforces the existing `(claim_id, evidence_id)` composite primary key, and the repository inserts with `ON CONFLICT DO NOTHING`. The service then freshly reloads the relationship before returning numerically sorted evidence IDs.
 
+### Planned exam relevance and likelihood model
+
+Exam relevance is a separate decision from factual correctness. A factual Claim or approved NoteDraft can be correct yet have low relevance to a particular exam.
+
+The future model will use versioned, traceable inputs:
+
+- an official syllabus version and its Topic mappings;
+- legally usable previous-question records, each retaining exam, date/year, paper/level, source reference, and whether it is an exact prior question or an inferred Topic tag;
+- human-reviewed mappings between Topics, Claims, NoteDrafts, and prior-question themes;
+- current-affairs recency where relevant; and
+- an explicit scoring-rule version and reviewer overrides.
+
+It will output an explainable **exam-priority band** (`HIGH`, `MEDIUM`, or `LOW`) plus reasons such as “direct syllabus coverage” or “appeared in three tagged prior papers.” A future numeric score may be shown only as a calibrated priority estimate with its basis and validation record; it must never claim that a specific fact, NoteDraft, or AI-generated MCQ will appear in the actual exam.
+
+The user-facing system must distinguish:
+
+- **previous-year question** — a sourced historical record; from
+- **AI-generated practice question** — a new question modeled on an exam pattern; and
+- **exam-priority assessment** — an explainable recommendation, not a prediction or guarantee.
+
+This is not implemented yet. The current Topic, approved-Claim boundary, and immutable NoteDraft-to-Claim provenance are deliberate prerequisites for it.
+
 ## Current known gaps
 
 - ORM relationships remain absent for the Source/Evidence link.
