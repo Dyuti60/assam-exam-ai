@@ -12,7 +12,7 @@ An AI response is not verified merely because it is confident. Important factual
 
 ## Current confirmed implementation
 
-This section describes only the repository inspected on 2026-09-03 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
+This section describes only the repository inspected on 2026-09-04 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
 
 | Area | Confirmed state |
 | --- | --- |
@@ -85,6 +85,7 @@ None of the research, ingestion, general search/retrieval, AI verification, huma
 - ORM relationships remain absent for the original Source/Evidence and Claim/Evidence links.
 - Sources do not store publication or retrieval dates.
 - Authority tiers, verdicts, confidence ranges, and license states lack database constraints.
+- Creating a Verification does not yet update the Claim's current verification summary (`verification_status`, `confidence`, and `last_verified_at`).
 - `Claim.verification_status` has a Python default but no server default.
 - Cascading deletes can remove provenance history.
 - The pgvector-capable image is configured, but no migration enables the extension and no vector column or Python pgvector dependency exists.
@@ -104,7 +105,7 @@ Evidence referenced by a `VerificationEvidence` audit row cannot be deleted. Pos
 - Add entities only when their features are implemented.
 - Change applied database history through new migrations rather than editing old migrations.
 
-T-003 implements the first manual internal vertical slice: create a source, attach evidence, create a claim, record a verification with ordered evidence, and retrieve that verification with its provenance. It does not perform automated research or factual verification.
+T-003 is approved at commit `603bddf260e9016e2db9215aec831ece7f018b50`. It implements the first manual internal vertical slice: create a source, attach evidence, create a claim, record a verification with ordered evidence, and retrieve that verification with its provenance. It does not perform automated research or factual verification.
 
 
 ## Working MVP approach
