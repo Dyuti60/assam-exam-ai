@@ -149,3 +149,22 @@ Before handoff, update `docs/architecture.md`, `docs/workflow.md`, and `docs/tas
 Run relevant tests, the full suite, Ruff on changed files, `git diff --check`, and migration checks if applicable. Do not commit or push. Report changed files, exact results, and any concern.
 
 Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added `GET /api/v1/claims/{claim_id}` through the existing route, service, and repository layers. The response uses `ClaimResponse` to expose the current latest-verification summary, and a missing Claim returns the established clear 404. Exact verification results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-006 — Link a Claim to relevant Evidence
+
+Read `AGENTS.md` and the project documents first.
+
+Activate the existing `claim_evidence` association so the manual knowledge flow records Evidence relevant to a Claim. This is separate from `VerificationEvidence`, which records the exact evidence used by one verification attempt.
+
+- Add exactly one endpoint: `POST /api/v1/claims/{claim_id}/evidence/{evidence_id}`.
+- The operation must be idempotent: duplicate linking must not create another association row and must succeed.
+- Extend `GET /api/v1/claims/{claim_id}` to return linked relevant evidence IDs in stable order; do not return full Evidence text.
+- Return the existing clear 404 style for a missing Claim or Evidence.
+- Add typed ORM traversal only if needed. Add a migration only for a genuine schema change.
+- Add API/integration tests for success, idempotency, retrieval, and one missing-resource case.
+- Do not add LLMs, ingestion, embeddings, human review, authentication, UI, payments, PDFs, content generation, search, or list endpoints.
+
+Before handoff, update `docs/architecture.md`, `docs/workflow.md`, and `docs/task_log.md`; append a T-006 implementation note here without deleting history. Run relevant tests, the full suite, Ruff on changed files, `git diff --check`, and migration checks if applicable. Do not commit or push.
