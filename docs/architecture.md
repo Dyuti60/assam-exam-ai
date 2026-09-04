@@ -118,3 +118,6 @@ The immediate goal is a small working internal flow, not a full product. The fir
 Source → Evidence → Claim → Verification → Verification with provenance
 
 It does not use an LLM, automatic ingestion, authentication, a learner UI, payments, or PDF generation. Those remain planned features.
+
+
+T-007 is approved at commit `fbb1555acfecdc0942c032727684bce9d5e1e3a5`; individual Evidence can now be inspected through the internal API. The next required trust boundary is explicit human approval, kept separate from verification.
