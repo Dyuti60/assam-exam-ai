@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import engine, get_db
 from app.main import app
-from app.models import Claim, Verification, VerificationEvidence
+from app.models import Claim, Verification, VerificationEvidence, claim_evidence
+from app.repositories import KnowledgeRepository
 
 
 @pytest.fixture
@@ -163,6 +164,125 @@ def test_get_claim_returns_404_for_missing_claim(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Claim 999999 not found"}
+
+
+def test_link_claim_evidence_is_idempotent_and_retrievable(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    source_response = client.post(
+        "/api/v1/sources",
+        json={
+            "title": "Relevant evidence source",
+            "source_type": "official_notification",
+            "authority_tier": 1,
+            "location": "https://example.test/relevant-evidence",
+            "license_status": "TEST_ONLY",
+        },
+    )
+    assert source_response.status_code == 201
+    source_id = source_response.json()["id"]
+
+    evidence_ids = []
+    for content in ["Earlier evidence", "Later evidence"]:
+        evidence_response = client.post(
+            "/api/v1/evidence",
+            json={"source_id": source_id, "content": content},
+        )
+        assert evidence_response.status_code == 201
+        evidence_ids.append(evidence_response.json()["id"])
+
+    claim_response = client.post(
+        "/api/v1/claims",
+        json={"statement": "A claim with relevant evidence"},
+    )
+    assert claim_response.status_code == 201
+    claim_id = claim_response.json()["id"]
+
+    for evidence_id in [evidence_ids[1], evidence_ids[0], evidence_ids[1]]:
+        link_response = client.post(
+            f"/api/v1/claims/{claim_id}/evidence/{evidence_id}"
+        )
+        assert link_response.status_code == 200
+
+    association_count = db_connection.scalar(
+        select(func.count())
+        .select_from(claim_evidence)
+        .where(claim_evidence.c.claim_id == claim_id)
+    )
+    assert association_count == 2
+
+    response = client.get(f"/api/v1/claims/{claim_id}")
+    assert response.status_code == 200
+    assert response.json()["relevant_evidence_ids"] == evidence_ids
+
+
+def test_link_claim_evidence_returns_404_for_missing_evidence(
+    client: TestClient,
+) -> None:
+    claim_response = client.post(
+        "/api/v1/claims",
+        json={"statement": "A claim with missing relevant evidence"},
+    )
+    assert claim_response.status_code == 201
+    claim_id = claim_response.json()["id"]
+
+    response = client.post(f"/api/v1/claims/{claim_id}/evidence/999999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Evidence 999999 not found"}
+
+
+def test_repository_duplicate_claim_evidence_insert_is_conflict_safe(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    source_response = client.post(
+        "/api/v1/sources",
+        json={
+            "title": "Conflict-safe link source",
+            "source_type": "official_notification",
+            "authority_tier": 1,
+            "location": "https://example.test/conflict-safe-link",
+            "license_status": "TEST_ONLY",
+        },
+    )
+    assert source_response.status_code == 201
+    evidence_response = client.post(
+        "/api/v1/evidence",
+        json={
+            "source_id": source_response.json()["id"],
+            "content": "Conflict-safe relevant evidence",
+        },
+    )
+    assert evidence_response.status_code == 201
+    claim_response = client.post(
+        "/api/v1/claims",
+        json={"statement": "A claim for conflict-safe linking"},
+    )
+    assert claim_response.status_code == 201
+
+    claim_id = claim_response.json()["id"]
+    evidence_id = evidence_response.json()["id"]
+    with Session(
+        bind=db_connection,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    ) as session:
+        repository = KnowledgeRepository(session)
+        repository.link_claim_evidence(claim_id, evidence_id)
+        repository.link_claim_evidence(claim_id, evidence_id)
+        session.commit()
+
+    association_count = db_connection.scalar(
+        select(func.count())
+        .select_from(claim_evidence)
+        .where(
+            claim_evidence.c.claim_id == claim_id,
+            claim_evidence.c.evidence_id == evidence_id,
+        )
+    )
+    assert association_count == 1
 
 
 def test_create_verification_rejects_invalid_evidence_role(

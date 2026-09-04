@@ -17,7 +17,7 @@ This section describes only the repository inspected on 2026-09-04 in Asia/Kolka
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health plus internal create Source/Evidence/Claim/Verification and retrieve Claim/Verification endpoints under `/api/v1` |
+| API | FastAPI app with health, internal create Source/Evidence/Claim/Verification, Claim-to-Evidence linking, and retrieve Claim/Verification endpoints under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
@@ -25,7 +25,7 @@ This section describes only the repository inspected on 2026-09-04 in Asia/Kolka
 | Migrations | Alembic is connected to application settings and `Base.metadata`; two migrations exist, including verification-evidence provenance |
 | Persistence model | `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, and claim/evidence association tables |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Fourteen tests cover the foundation, provenance constraints, end-to-end knowledge API, Claim summary retrieval and synchronization, and failure atomicity |
+| Tests | Sixteen tests cover the foundation, provenance constraints, end-to-end knowledge API, Claim evidence linking and summary retrieval, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -47,7 +47,7 @@ flowchart TD
 
 ### Current data model
 
-The diagram shows the database foreign keys and association structures currently defined. Typed ORM traversal is implemented for `Verification → VerificationEvidence → Evidence`; the older model links still expose only foreign-key columns or a plain association table.
+The diagram shows the database foreign keys and association structures currently defined. Typed ORM traversal is implemented for `Claim → relevant Evidence` and `Verification → VerificationEvidence → Evidence`; the Source/Evidence link still exposes only foreign-key columns.
 
 ```mermaid
 erDiagram
@@ -78,11 +78,13 @@ flowchart TD
     QA --> PDF["PDF generation and validation"]
 ```
 
-None of the research, ingestion, general search/retrieval, AI verification, human-review, content-generation, question-generation, QA, or PDF stages is currently implemented. The internal manual knowledge API now follows `route → schema → service/use case → repository → database`; it can retrieve a Claim's latest verification summary by ID and retrieve a Verification by ID with its Claim and ordered evidence provenance.
+None of the research, ingestion, general search/retrieval, AI verification, human-review, content-generation, question-generation, QA, or PDF stages is currently implemented. The internal manual knowledge API now follows `route → schema → service/use case → repository → database`; it can link relevant Evidence to a Claim, retrieve the Claim with stable evidence IDs and its latest verification summary, and retrieve a Verification with its Claim and ordered audit evidence provenance.
+
+Claim-to-Evidence linking is idempotent under concurrent requests: PostgreSQL enforces the existing `(claim_id, evidence_id)` composite primary key, and the repository inserts with `ON CONFLICT DO NOTHING`. The service then freshly reloads the relationship before returning numerically sorted evidence IDs.
 
 ## Current known gaps
 
-- ORM relationships remain absent for the original Source/Evidence and Claim/Evidence links.
+- ORM relationships remain absent for the Source/Evidence link.
 - Sources do not store publication or retrieval dates.
 - Authority tiers, verdicts, confidence ranges, and license states lack database constraints.
 - `Claim.verification_status` has a Python default but no server default.

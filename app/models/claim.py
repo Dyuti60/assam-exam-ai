@@ -5,8 +5,10 @@ from sqlalchemy import DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.models.claim_evidence import claim_evidence
 
 if TYPE_CHECKING:
+    from app.models.evidence import Evidence
     from app.models.verification import Verification
 
 
@@ -51,5 +53,11 @@ class Claim(Base):
 
     verifications: Mapped[list["Verification"]] = relationship(
         back_populates="claim",
+        passive_deletes=True,
+    )
+
+    relevant_evidence: Mapped[list["Evidence"]] = relationship(
+        secondary=claim_evidence,
+        order_by="Evidence.id",
         passive_deletes=True,
     )

@@ -4,6 +4,7 @@ from app.models import Claim, Evidence, Source, Verification, VerificationEviden
 from app.repositories import KnowledgeRepository
 from app.schemas.knowledge import (
     ClaimCreate,
+    ClaimResponse,
     EvidenceCreate,
     SourceCreate,
     VerificationCreate,
@@ -38,11 +39,25 @@ class KnowledgeService:
         claim = Claim(**request.model_dump())
         return self._commit(self.repository.add_claim(claim))
 
-    def get_claim(self, claim_id: int) -> Claim:
+    def get_claim(self, claim_id: int) -> ClaimResponse:
         claim = self.repository.get_claim(claim_id)
         if claim is None:
             raise ResourceNotFoundError("Claim", claim_id)
-        return claim
+        return self._claim_response(claim)
+
+    def link_claim_evidence(self, claim_id: int, evidence_id: int) -> ClaimResponse:
+        claim = self.repository.get_claim(claim_id)
+        if claim is None:
+            raise ResourceNotFoundError("Claim", claim_id)
+        evidence = self.repository.get_evidence(evidence_id)
+        if evidence is None:
+            raise ResourceNotFoundError("Evidence", evidence_id)
+        self.repository.link_claim_evidence(claim.id, evidence.id)
+        self._commit(claim)
+        refreshed_claim = self.repository.get_claim(claim.id)
+        if refreshed_claim is None:
+            raise ResourceNotFoundError("Claim", claim.id)
+        return self._claim_response(refreshed_claim)
 
     def create_verification(self, request: VerificationCreate) -> VerificationResponse:
         claim = self.repository.get_claim(request.claim_id)
@@ -105,6 +120,21 @@ class KnowledgeService:
             self.session.rollback()
             raise
         return instance
+
+    @staticmethod
+    def _claim_response(claim: Claim) -> ClaimResponse:
+        response = ClaimResponse.model_validate(claim)
+        return response.model_copy(
+            update={
+                "relevant_evidence_ids": [
+                    evidence.id
+                    for evidence in sorted(
+                        claim.relevant_evidence,
+                        key=lambda item: item.id,
+                    )
+                ]
+            }
+        )
 
     def _commit_verification(
         self,

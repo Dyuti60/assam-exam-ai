@@ -66,6 +66,7 @@ class ClaimResponse(ClaimCreate):
     confidence: float | None
     created_at: datetime
     last_verified_at: datetime | None
+    relevant_evidence_ids: list[int] = Field(default_factory=list)
 
 
 class VerificationEvidenceCreate(BaseModel):

@@ -13,7 +13,7 @@ flowchart TD
     CFG --> DB["engine + SessionLocal\napp/core/database.py"]
     APP --> V1["api_router\napp/api/v1/router.py"]
     V1 --> HEALTH["GET /api/v1/health\nhealth_check()"]
-    V1 --> KNOWLEDGE["Knowledge routes\ncreate + retrieve Claim/Verification"]
+    V1 --> KNOWLEDGE["Knowledge routes\ncreate + link + retrieve"]
     KNOWLEDGE --> CONTRACTS["Pydantic knowledge schemas"]
     CONTRACTS --> SERVICE["KnowledgeService"]
     SERVICE --> REPOSITORY["KnowledgeRepository"]
@@ -25,6 +25,8 @@ flowchart TD
     MIGRATION --> POSTGRES
     VERIFICATION["Verification"] --> LINKS["ordered VerificationEvidence links"]
     LINKS --> EVIDENCE["Evidence"]
+    CLAIM["Claim"] --> RELEVANT["claim_evidence links"]
+    RELEVANT --> EVIDENCE
     LINKS --> POSTGRES
     TESTS["pytest tests"] --> APP
     TESTS --> DB
@@ -55,6 +57,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/evidence` | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Validates and creates Evidence for an existing Source |
 | `POST /api/v1/claims` | `create_claim()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Claim |
 | `GET /api/v1/claims/{claim_id}` | `get_claim()` | `app/api/v1/routes/knowledge.py` | Returns a Claim and its current latest-verification summary |
+| `POST /api/v1/claims/{claim_id}/evidence/{evidence_id}` | `link_claim_evidence()` | `app/api/v1/routes/knowledge.py` | Idempotently links relevant Evidence to a Claim |
 | `POST /api/v1/verifications` | `create_verification()` | `app/api/v1/routes/knowledge.py` | Creates a Verification with ordered evidence audit links |
 | `GET /api/v1/verifications/{verification_id}` | `get_verification()` | `app/api/v1/routes/knowledge.py` | Returns a Verification, its Claim, and ordered evidence provenance |
 
@@ -75,6 +78,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence creation and maps a missing Source to 404 |
 | `create_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim creation to `KnowledgeService` |
 | `get_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim retrieval and maps a missing Claim to 404 |
+| `link_claim_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates relevant-evidence linking and maps missing resources to 404 |
 | `create_verification()` | `app/api/v1/routes/knowledge.py` | Delegates Verification creation and maps missing references to 404 |
 | `get_verification()` | `app/api/v1/routes/knowledge.py` | Delegates provenance retrieval and maps a missing Verification to 404 |
 
@@ -85,7 +89,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `Base` | `app/models/base.py` | Declarative metadata root for SQLAlchemy models |
 | `Source` | `app/models/source.py` | Stores basic source identity, authority, location, license status, hash, and creation time |
 | `Evidence` | `app/models/evidence.py` | Stores text and an optional location reference belonging to a source |
-| `Claim` | `app/models/claim.py` | Stores an atomic statement, optional triple fields, current status/confidence, and timestamps |
+| `Claim` | `app/models/claim.py` | Stores an atomic statement, summary fields, timestamps, and typed ID-ordered traversal to relevant Evidence |
 | `Verification` | `app/models/verification.py` | Stores one verdict, confidence, reasoning, and timestamp for a claim |
 | `VerificationEvidence` | `app/models/verification_evidence.py` | Records evidence used by a verification, its role, and its non-negative ordered position; referenced evidence is deletion-restricted |
 | `claim_evidence` | `app/models/claim_evidence.py` | Associates claims and evidence with a composite primary key |
@@ -98,7 +102,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `VerificationVerdict` | `app/schemas/knowledge.py` | Defines accepted verification verdict values |
 | `SourceCreate` / `SourceResponse` | `app/schemas/knowledge.py` | Validate Source input and serialize persisted Sources |
 | `EvidenceCreate` / `EvidenceResponse` | `app/schemas/knowledge.py` | Validate Evidence input and serialize persisted Evidence |
-| `ClaimCreate` / `ClaimResponse` | `app/schemas/knowledge.py` | Validate Claim input and serialize persisted Claims |
+| `ClaimCreate` / `ClaimResponse` | `app/schemas/knowledge.py` | Validate Claim input and serialize Claims with stable relevant Evidence IDs |
 | `VerificationEvidenceCreate` | `app/schemas/knowledge.py` | Validates an evidence ID, role, and non-negative position |
 | `VerificationCreate` | `app/schemas/knowledge.py` | Validates Verification input and rejects duplicate evidence IDs or positions |
 | `VerificationEvidenceResponse` | `app/schemas/knowledge.py` | Serializes evidence content with its audit role and position |
@@ -111,7 +115,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `KnowledgeRepository` | `app/repositories/knowledge.py` | Encapsulates Source, Evidence, Claim, and Verification persistence queries |
 | `add_source()` / `get_source()` | `app/repositories/knowledge.py` | Persist or retrieve Sources |
 | `add_evidence()` / `get_evidence()` | `app/repositories/knowledge.py` | Persist or retrieve Evidence |
-| `add_claim()` / `get_claim()` | `app/repositories/knowledge.py` | Persist or retrieve Claims |
+| `add_claim()` / `get_claim()` | `app/repositories/knowledge.py` | Persist Claims or retrieve them with relevant Evidence eagerly loaded |
+| `link_claim_evidence()` | `app/repositories/knowledge.py` | Uses PostgreSQL `INSERT ... ON CONFLICT DO NOTHING` against the composite key for concurrency-safe idempotency |
 | `add_verification()` | `app/repositories/knowledge.py` | Persists a Verification and its audit links |
 | `update_claim_verification_summary()` | `app/repositories/knowledge.py` | Copies a new Verification's verdict, confidence, and creation time into the Claim's latest summary |
 | `get_verification()` | `app/repositories/knowledge.py` | Eagerly retrieves Claim and ordered evidence-link data |
@@ -121,6 +126,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_evidence()` | `app/services/knowledge.py` | Verifies the Source exists, then creates Evidence |
 | `create_claim()` | `app/services/knowledge.py` | Creates and commits a Claim |
 | `get_claim()` | `app/services/knowledge.py` | Retrieves a Claim through the repository or raises a missing-resource error |
+| `link_claim_evidence()` | `app/services/knowledge.py` | Validates both resources, performs the conflict-safe insert, commits, freshly reloads the Claim, and returns its response |
+| `_claim_response()` | `app/services/knowledge.py` | Serializes a Claim with sorted relevant Evidence IDs only |
 | `create_verification()` | `app/services/knowledge.py` | Validates references, records ordered audit links, and synchronizes the Claim summary atomically |
 | `get_verification()` | `app/services/knowledge.py` | Builds the nested verification-provenance response |
 | `_commit()` | `app/services/knowledge.py` | Commits a use case and rolls back on failure |
@@ -152,6 +159,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_complete_knowledge_api_flow()` | `tests/test_knowledge_api.py` | Exercises the full flow and confirms direct Claim retrieval exposes the synchronized summary | Passed for T-005 |
 | `test_create_evidence_returns_404_for_missing_source()` | `tests/test_knowledge_api.py` | Confirms a missing Source reference returns a clear 404 | Passed for T-003 |
 | `test_get_claim_returns_404_for_missing_claim()` | `tests/test_knowledge_api.py` | Confirms retrieving a missing Claim returns a clear 404 | Passed for T-005 |
+| `test_link_claim_evidence_is_idempotent_and_retrievable()` | `tests/test_knowledge_api.py` | Confirms linking, duplicate idempotency, one association row per pair, and stable ID-only retrieval | Passed for T-006 |
+| `test_link_claim_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms linking a missing Evidence resource returns the clear 404 format | Passed for T-006 |
+| `test_repository_duplicate_claim_evidence_insert_is_conflict_safe()` | `tests/test_knowledge_api.py` | Executes the database insertion path twice and confirms both calls succeed with one association row | Passed for T-006 correction |
 | `test_create_verification_rejects_invalid_evidence_role()` | `tests/test_knowledge_api.py` | Confirms an invalid evidence role returns validation status 422 | Passed for T-003 |
 | `test_create_verification_returns_404_without_partial_record()` | `tests/test_knowledge_api.py` | Confirms missing Evidence creates no Verification/link and leaves the Claim summary unchanged | Passed for T-004 |
 
@@ -219,6 +229,25 @@ flowchart LR
 - Changed-file Ruff check: passed.
 - No database schema migration was required; a fresh `assam_exam_ai_t005_test` database upgraded through both existing migrations to head successfully.
 - Post-push architecture review: Approved. This endpoint returns only the current Claim summary; it does not add history, search, or human approval.
+
+### T-006 relevant Evidence linking
+
+```mermaid
+flowchart LR
+    REQUEST["POST /claims/{claim_id}/evidence/{evidence_id}"] --> VALIDATE["Resolve Claim and Evidence"]
+    VALIDATE --> LINK["Add claim_evidence row if absent"]
+    LINK --> RESPONSE["ClaimResponse with sorted evidence IDs"]
+    GET["GET /claims/{claim_id}"] --> RESPONSE
+    VALIDATE -->|"missing resource"| NOT_FOUND["404"]
+```
+
+- Relevant Claim evidence is distinct from the evidence recorded for an individual Verification attempt.
+- `uv run pytest tests/test_knowledge_api.py -q`: 8 passed in 1.04s with one Starlette deprecation warning on the concurrency-correction run.
+- `uv run pytest -q`: 17 passed in 1.10s with one Starlette deprecation warning on the concurrency-correction run.
+- Changed-file Ruff check: passed.
+- No database schema migration was required; a fresh `assam_exam_ai_t006_test` database upgraded through both existing migrations to head, and `uv run alembic check` reported no new upgrade operations.
+- Concurrency correction: the composite primary key plus PostgreSQL `ON CONFLICT DO NOTHING` guarantees duplicate inserts do not fail or create a second row; `populate_existing` refreshes the eagerly loaded relationship for the response.
+- Correction migration check: `uv run alembic check` against `assam_exam_ai_t006_correction_test` exited 0 with no new upgrade operations detected.
 
 ## Template for future pushed changes
 

@@ -51,6 +51,21 @@ def get_claim(claim_id: int, db: DatabaseSession) -> ClaimResponse:
         raise _not_found(error) from error
 
 
+@router.post(
+    "/claims/{claim_id}/evidence/{evidence_id}",
+    response_model=ClaimResponse,
+)
+def link_claim_evidence(
+    claim_id: int,
+    evidence_id: int,
+    db: DatabaseSession,
+) -> ClaimResponse:
+    try:
+        return KnowledgeService(db).link_claim_evidence(claim_id, evidence_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
 @router.post("/verifications", response_model=VerificationResponse, status_code=201)
 def create_verification(
     request: VerificationCreate,

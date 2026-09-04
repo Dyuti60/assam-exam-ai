@@ -1,7 +1,15 @@
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.models import Claim, Evidence, Source, Verification, VerificationEvidence
+from app.models import (
+    Claim,
+    Evidence,
+    Source,
+    Verification,
+    VerificationEvidence,
+    claim_evidence,
+)
 
 
 class KnowledgeRepository:
@@ -30,7 +38,26 @@ class KnowledgeRepository:
         return claim
 
     def get_claim(self, claim_id: int) -> Claim | None:
-        return self.session.get(Claim, claim_id)
+        statement = (
+            select(Claim)
+            .options(selectinload(Claim.relevant_evidence))
+            .execution_options(populate_existing=True)
+            .where(Claim.id == claim_id)
+        )
+        return self.session.scalar(statement)
+
+    def link_claim_evidence(self, claim_id: int, evidence_id: int) -> None:
+        statement = (
+            insert(claim_evidence)
+            .values(claim_id=claim_id, evidence_id=evidence_id)
+            .on_conflict_do_nothing(
+                index_elements=[
+                    claim_evidence.c.claim_id,
+                    claim_evidence.c.evidence_id,
+                ]
+            )
+        )
+        self.session.execute(statement)
 
     def add_verification(self, verification: Verification) -> Verification:
         self.session.add(verification)
