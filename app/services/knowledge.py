@@ -39,7 +39,8 @@ class KnowledgeService:
         return self._commit(self.repository.add_claim(claim))
 
     def create_verification(self, request: VerificationCreate) -> VerificationResponse:
-        if self.repository.get_claim(request.claim_id) is None:
+        claim = self.repository.get_claim(request.claim_id)
+        if claim is None:
             raise ResourceNotFoundError("Claim", request.claim_id)
 
         evidence_by_id: dict[int, Evidence] = {}
@@ -63,7 +64,7 @@ class KnowledgeService:
             )
             for item in request.evidence
         ]
-        self._commit(self.repository.add_verification(verification))
+        self._commit_verification(verification, claim)
         return self.get_verification(verification.id)
 
     def get_verification(self, verification_id: int) -> VerificationResponse:
@@ -98,3 +99,16 @@ class KnowledgeService:
             self.session.rollback()
             raise
         return instance
+
+    def _commit_verification(
+        self,
+        verification: Verification,
+        claim: Claim,
+    ) -> None:
+        try:
+            self.repository.add_verification(verification)
+            self.repository.update_claim_verification_summary(claim, verification)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise

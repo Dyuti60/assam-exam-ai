@@ -25,7 +25,7 @@ This section describes only the repository inspected on 2026-09-04 in Asia/Kolka
 | Migrations | Alembic is connected to application settings and `Base.metadata`; two migrations exist, including verification-evidence provenance |
 | Persistence model | `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, and claim/evidence association tables |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Thirteen tests cover the foundation, provenance constraints, end-to-end knowledge API, and atomic rejection of missing Evidence references |
+| Tests | Thirteen tests cover the foundation, provenance constraints, end-to-end knowledge API, Claim summary synchronization, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -85,7 +85,6 @@ None of the research, ingestion, general search/retrieval, AI verification, huma
 - ORM relationships remain absent for the original Source/Evidence and Claim/Evidence links.
 - Sources do not store publication or retrieval dates.
 - Authority tiers, verdicts, confidence ranges, and license states lack database constraints.
-- Creating a Verification does not yet update the Claim's current verification summary (`verification_status`, `confidence`, and `last_verified_at`).
 - `Claim.verification_status` has a Python default but no server default.
 - Cascading deletes can remove provenance history.
 - The pgvector-capable image is configured, but no migration enables the extension and no vector column or Python pgvector dependency exists.
@@ -94,6 +93,8 @@ None of the research, ingestion, general search/retrieval, AI verification, huma
 - There is no application Dockerfile or CI workflow, and the README is empty.
 
 Evidence referenced by a `VerificationEvidence` audit row cannot be deleted. PostgreSQL restricts that deletion; deleting the Verification remains allowed and removes only its association rows.
+
+Creating a Verification also updates its Claim's `verification_status`, `confidence`, and `last_verified_at` summary in the same transaction. The immutable Verification remains the audit record; these Claim fields represent only the latest verification result and are not human approval.
 
 ## Architectural decisions recorded by repository instructions
 

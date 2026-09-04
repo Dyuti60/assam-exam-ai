@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import engine, get_db
 from app.main import app
-from app.models import Verification, VerificationEvidence
+from app.models import Claim, Verification, VerificationEvidence
 
 
 @pytest.fixture
@@ -109,7 +109,13 @@ def test_complete_knowledge_api_flow(client: TestClient) -> None:
         },
     )
     assert verification_response.status_code == 201
-    verification_id = verification_response.json()["id"]
+    created_verification = verification_response.json()
+    verification_id = created_verification["id"]
+    assert created_verification["claim"]["verification_status"] == "SUPPORTED"
+    assert created_verification["claim"]["confidence"] == 0.95
+    assert created_verification["claim"]["last_verified_at"] == (
+        created_verification["created_at"]
+    )
 
     response = client.get(f"/api/v1/verifications/{verification_id}")
     assert response.status_code == 200
@@ -118,6 +124,9 @@ def test_complete_knowledge_api_flow(client: TestClient) -> None:
     assert result["claim"]["statement"] == (
         "A test claim supported by official evidence"
     )
+    assert result["claim"]["verification_status"] == "SUPPORTED"
+    assert result["claim"]["confidence"] == 0.95
+    assert result["claim"]["last_verified_at"] == result["created_at"]
     assert [item["evidence_id"] for item in result["evidence"]] == evidence_ids
     assert [item["evidence_role"] for item in result["evidence"]] == [
         "SUPPORTS",
@@ -178,10 +187,11 @@ def test_create_verification_returns_404_without_partial_record(
         select(func.count()).select_from(VerificationEvidence)
     )
 
+    claim_id = claim_response.json()["id"]
     response = client.post(
         "/api/v1/verifications",
         json={
-            "claim_id": claim_response.json()["id"],
+            "claim_id": claim_id,
             "verdict": "UNVERIFIED",
             "confidence": 0.0,
             "evidence": [
@@ -202,3 +212,13 @@ def test_create_verification_returns_404_without_partial_record(
     assert db_connection.scalar(
         select(func.count()).select_from(VerificationEvidence)
     ) == link_count_before
+    claim_summary = db_connection.execute(
+        select(
+            Claim.verification_status,
+            Claim.confidence,
+            Claim.last_verified_at,
+        ).where(Claim.id == claim_id)
+    ).one()
+    assert claim_summary.verification_status == "UNVERIFIED"
+    assert claim_summary.confidence is None
+    assert claim_summary.last_verified_at is None

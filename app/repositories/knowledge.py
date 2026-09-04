@@ -37,6 +37,15 @@ class KnowledgeRepository:
         self.session.flush()
         return verification
 
+    def update_claim_verification_summary(
+        self,
+        claim: Claim,
+        verification: Verification,
+    ) -> None:
+        claim.verification_status = verification.verdict
+        claim.confidence = verification.confidence
+        claim.last_verified_at = verification.created_at
+
     def get_verification(self, verification_id: int) -> Verification | None:
         statement = (
             select(Verification)

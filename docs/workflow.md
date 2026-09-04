@@ -109,15 +109,17 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `add_evidence()` / `get_evidence()` | `app/repositories/knowledge.py` | Persist or retrieve Evidence |
 | `add_claim()` / `get_claim()` | `app/repositories/knowledge.py` | Persist or retrieve Claims |
 | `add_verification()` | `app/repositories/knowledge.py` | Persists a Verification and its audit links |
+| `update_claim_verification_summary()` | `app/repositories/knowledge.py` | Copies a new Verification's verdict, confidence, and creation time into the Claim's latest summary |
 | `get_verification()` | `app/repositories/knowledge.py` | Eagerly retrieves Claim and ordered evidence-link data |
 | `ResourceNotFoundError` | `app/services/knowledge.py` | Carries the missing resource type and identifier |
 | `KnowledgeService` | `app/services/knowledge.py` | Owns knowledge use cases and transaction boundaries |
 | `create_source()` | `app/services/knowledge.py` | Creates and commits a Source |
 | `create_evidence()` | `app/services/knowledge.py` | Verifies the Source exists, then creates Evidence |
 | `create_claim()` | `app/services/knowledge.py` | Creates and commits a Claim |
-| `create_verification()` | `app/services/knowledge.py` | Validates Claim/Evidence references and records ordered audit links atomically |
+| `create_verification()` | `app/services/knowledge.py` | Validates references, records ordered audit links, and synchronizes the Claim summary atomically |
 | `get_verification()` | `app/services/knowledge.py` | Builds the nested verification-provenance response |
 | `_commit()` | `app/services/knowledge.py` | Commits a use case and rolls back on failure |
+| `_commit_verification()` | `app/services/knowledge.py` | Flushes the Verification, updates its Claim summary, and commits or rolls back both together |
 
 ## Migration functions
 
@@ -142,10 +144,10 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_verification_evidence_rejects_invalid_values()` | `tests/test_verification_evidence.py` | Proves PostgreSQL rejects an invalid role and a negative position | Passed twice through parametrization for T-002 |
 | `test_used_evidence_cannot_be_deleted()` | `tests/test_verification_evidence.py` | Proves PostgreSQL blocks deletion of referenced evidence and retains its audit link | Passed for T-002 |
 | `test_verification_evidence_rejects_duplicate_position()` | `tests/test_verification_evidence.py` | Proves one verification cannot assign the same position to two evidence links | Passed for T-002 |
-| `test_complete_knowledge_api_flow()` | `tests/test_knowledge_api.py` | Exercises Source → Evidence → Claim → Verification → retrieve provenance | Passed for T-003 |
+| `test_complete_knowledge_api_flow()` | `tests/test_knowledge_api.py` | Exercises the full flow and confirms create/get responses expose the synchronized Claim summary | Passed for T-004 |
 | `test_create_evidence_returns_404_for_missing_source()` | `tests/test_knowledge_api.py` | Confirms a missing Source reference returns a clear 404 | Passed for T-003 |
 | `test_create_verification_rejects_invalid_evidence_role()` | `tests/test_knowledge_api.py` | Confirms an invalid evidence role returns validation status 422 | Passed for T-003 |
-| `test_create_verification_returns_404_without_partial_record()` | `tests/test_knowledge_api.py` | Confirms missing Evidence returns 404 and creates neither a Verification nor provenance link | Passed for T-003 |
+| `test_create_verification_returns_404_without_partial_record()` | `tests/test_knowledge_api.py` | Confirms missing Evidence creates no Verification/link and leaves the Claim summary unchanged | Passed for T-004 |
 
 ### T-002 verification results
 
@@ -175,6 +177,24 @@ flowchart LR
 - Changed-file Ruff check: passed.
 - A fresh `assam_exam_ai_t003_test` database upgraded through both existing migrations to head; no database schema migration was required by T-003.
 - Post-push architecture review: Approved. The API uses eager loading for the retrieval path, and the missing-Evidence test confirms no partial Verification or provenance row is written.
+
+### T-004 Claim summary synchronization
+
+```mermaid
+flowchart LR
+    REQUEST["Validated Verification request"] --> REFERENCES["Resolve Claim and Evidence"]
+    REFERENCES --> ATTEMPT["Flush Verification + evidence links"]
+    ATTEMPT --> SUMMARY["Update Claim latest summary"]
+    SUMMARY --> COMMIT["Single transaction commit"]
+    REFERENCES -->|"missing reference"| ABORT["404; Claim summary unchanged"]
+```
+
+- `update_claim_verification_summary()` copies the Verification verdict, confidence, and database creation time to the linked Claim.
+- `_commit_verification()` commits the Verification, provenance links, and Claim summary together and rolls back on failure.
+- `uv run pytest tests/test_knowledge_api.py -q`: 4 passed in 1.17s with one Starlette deprecation warning on the final run.
+- `uv run pytest -q`: 13 passed in 1.35s with one Starlette deprecation warning on the final run.
+- Changed-file Ruff check: passed.
+- No database schema migration was required; a fresh `assam_exam_ai_t004_test` database upgraded to the existing migration head successfully.
 
 ## Template for future pushed changes
 
