@@ -83,3 +83,35 @@ Run the relevant tests, uv run ruff check on changed files, and git diff --check
 Implementation note (2026-09-03 Asia/Kolkata, UTC+05:30): implemented the five-endpoint internal flow with Pydantic schemas, a knowledge service and repository, ordered provenance responses, and API integration coverage. Final results are recorded in `docs/task_log.md` and `docs/workflow.md`.
 
 Review note (2026-09-04 Asia/Kolkata, UTC+05:30): added API coverage proving a missing Evidence reference returns 404 without creating a partial Verification or provenance link.
+
+
+---
+
+# T-004 — Synchronize Claim verification summary
+
+Read `AGENTS.md` and the project documents first.
+
+## Goal
+
+Make the existing manual API flow internally consistent. When a Verification is successfully created, update the linked Claim's current verification summary in the same transaction:
+
+- `verification_status` = the new Verification verdict;
+- `confidence` = the new Verification confidence;
+- `last_verified_at` = the new Verification's creation time.
+
+The Verification remains the immutable attempt/audit record. The Claim fields are only the latest summary for this small MVP; this is **not** human approval.
+
+## Scope
+
+- Implement the summary update in the existing service/repository flow; keep routes thin.
+- Ensure no Claim summary changes if Verification creation fails, including a missing Evidence reference.
+- The existing create/get Verification response must show the updated Claim values.
+- Add or adjust API/integration tests for a successful summary update and failure atomicity.
+- Do not add a migration unless a database schema change is genuinely required.
+- Do not add LLMs, ingestion, embeddings, human-review workflows, authentication, UI, payments, PDFs, or content generation.
+
+## Documentation and checks
+
+Before handoff, update `docs/architecture.md`, `docs/workflow.md`, and `docs/task_log.md` with confirmed changes, functions, tests, and exact results. Keep this `docs/next_task.md` history append-only; do not delete prior task prompts.
+
+Run relevant tests, the full suite, Ruff on changed files, `git diff --check`, and migration checks if applicable. Do not commit or push. Report changed files, exact results, and any concern.
