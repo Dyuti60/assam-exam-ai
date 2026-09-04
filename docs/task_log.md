@@ -74,16 +74,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for review |
+| Status | Approved |
 | Prompt source | `docs/next_task.md` (T-005) |
 | Scope | Add one internal read endpoint for a Claim and its current latest-verification summary |
 | Tests | `uv run pytest tests/test_knowledge_api.py -q`: 5 passed in 1.51s with one Starlette deprecation warning. `uv run pytest -q`: 14 passed in 1.01s with the same warning. |
 | Lint | Changed-file Ruff check passed. |
 | Migration checks | No database schema migration required; existing migrations upgraded a fresh `assam_exam_ai_t005_test` database to head successfully. |
+| Implementation commit | `af76073a5ece57187f14540b519ec9606c2947a3` |
+| Documentation-review commit | This post-push documentation update |
+| Review result | Approved |
+| Notes | Added only `GET /api/v1/claims/{claim_id}` through the existing route/service/repository layers, with success and missing-Claim API coverage. It returns the latest-verification summary, not Verification history or human approval. |
+
+### T-006 — Link a Claim to relevant Evidence
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-006) |
+| Scope | Record Evidence relevant to a Claim separately from Verification audit evidence |
+| Tests | API/integration tests required |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Added only `GET /api/v1/claims/{claim_id}` through the existing route/service/repository layers, with success and missing-Claim API coverage. It returns the latest-verification summary, not Verification history or human approval. |
+| Notes | Small provenance-flow improvement only. |
 
 ## Entry template
 
