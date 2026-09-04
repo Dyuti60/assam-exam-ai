@@ -275,3 +275,27 @@ It returns a stable ID-ascending list of `ClaimResponse` objects whose `topic_id
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
 
 Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/topics/{topic_id}/claims/approved` through the existing route, service, repository, and `ClaimResponse` flow. It returns exact-Topic, explicitly approved Claims in ascending ID order with eagerly loaded relevant Evidence IDs and existing summaries; missing Topic returns 404 and an existing empty Topic returns `[]`. No migration or generation feature was added; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-012 — Preview a safe Topic note draft
+
+Read `AGENTS.md` and all project documents first.
+
+Build one small, deterministic internal note-preview flow that proves the working path from approved knowledge to a note-shaped draft:
+
+`Topic → explicitly APPROVED Claims → internal Markdown draft`
+
+- Add exactly one endpoint: `POST /api/v1/topics/{topic_id}/note-draft-preview`.
+- It must first confirm the Topic exists and use only that Topic’s explicitly `APPROVED` Claims, in ascending Claim ID order.
+- Return a new Pydantic response containing `topic_id`, `topic_name`, ordered `claim_ids`, and `markdown`.
+- The Markdown must be deterministic: a Topic heading followed by the approved Claim statements as ordered bullet points. Do not invent, paraphrase, enrich, or add facts.
+- It must not persist a note, change Claim/approval/verification data, or publish content.
+- Missing Topic: use the established clear 404. Existing Topic with no approved Claims: return HTTP 409 with one stable, clear detail.
+- Reuse existing approved-Claim retrieval where sensible; keep route → service → repository boundaries clear.
+- Add API/integration tests for missing Topic, empty approved knowledge, only APPROVED/matching-Topic Claims, stable order, exact Markdown, and no persisted-state mutation.
+- No LLM/provider credentials, prompts, ingestion, embeddings, source scraping, note storage/history, human approval of notes, MCQs, UI, auth, payments, or PDFs.
+- No migration unless a genuine schema change is required.
+
+Update all four documents and append an implementation note here. Run relevant tests, the full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
