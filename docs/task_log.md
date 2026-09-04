@@ -42,16 +42,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Field | Value |
 | --- | --- |
 | Issued | 2026-09-03 Asia/Kolkata (UTC+05:30) |
-| Status | Ready for review |
+| Status | Approved |
 | Prompt source | `docs/next_task.md` (T-003) and the user implementation request |
 | Scope | Manual API flow from Source to Evidence to Claim to Verification with returned provenance |
 | Tests | `uv run pytest tests/test_knowledge_api.py -q`: 4 passed in 0.74s with one Starlette deprecation warning. `uv run pytest -q`: 13 passed in 0.87s with the same warning. |
 | Lint | Changed-file Ruff check passed. |
 | Migration checks | No database schema migration required; existing migrations upgraded a fresh `assam_exam_ai_t003_test` database to head successfully. |
+| Implementation commit | `603bddf260e9016e2db9215aec831ece7f018b50` |
+| Documentation-review commit | This post-push documentation update |
+| Review result | Approved |
+| Notes | Added five internal API endpoints with schemas, repository, service, clear 404s, and request validation. Review coverage proves a missing Evidence reference creates neither a Verification nor an audit link. This is not an AI, ingestion, review, learner, or PDF feature. |
+
+### T-004 — Synchronize Claim verification summary
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-04 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-004) |
+| Scope | Keep the Claim's current verification summary in sync when a new Verification is recorded |
+| Tests | API/integration tests required |
 | Implementation commit | Pending |
 | Documentation-review commit | Pending |
 | Review result | Pending |
-| Notes | Added five internal API endpoints with schemas, repository, service, clear 404s, and request validation. Review coverage proves a missing Evidence reference creates neither a Verification nor an audit link. This is not an AI, ingestion, review, learner, or PDF feature. |
+| Notes | Small working-flow improvement; it must not introduce human approval, AI, ingestion, UI, or new product areas. |
 
 ## Entry template
 
