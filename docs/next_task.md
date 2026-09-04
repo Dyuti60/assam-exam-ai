@@ -172,3 +172,16 @@ Before handoff, update `docs/architecture.md`, `docs/workflow.md`, and `docs/tas
 Implementation note (2026-09-04 Asia/Kolkata, UTC+05:30): added the idempotent `POST /api/v1/claims/{claim_id}/evidence/{evidence_id}` endpoint and extended Claim retrieval with stable, ID-only `relevant_evidence_ids`. Relevant Claim evidence remains separate from Verification audit evidence. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
 
 Correction note (2026-09-04 Asia/Kolkata, UTC+05:30): Claim–Evidence insertion now uses the existing composite primary key with PostgreSQL `ON CONFLICT DO NOTHING`, guaranteeing concurrent duplicate requests do not create another row or raise a uniqueness error. The Claim is freshly reloaded before its numerically sorted evidence IDs are returned.
+
+
+---
+
+# T-007 — Retrieve an Evidence record
+
+Read `AGENTS.md` and project documents first.
+
+Add exactly one endpoint: `GET /api/v1/evidence/{evidence_id}`. It must return the existing `EvidenceResponse` with the Evidence content, `source_id`, and optional location reference. Use the existing route → service → repository layering and clear 404 style. Add API/integration tests for successful retrieval and missing Evidence.
+
+Do not add Source retrieval, lists, search, history, LLMs, ingestion, embeddings, human review, authentication, UI, payments, PDFs, or content generation. Do not add a migration unless a database schema change is genuinely required.
+
+Update architecture, workflow, task log, and append a T-007 implementation note here. Run relevant tests, full suite, changed-file Ruff, git diff --check, and migration checks if applicable. Do not commit or push.
