@@ -317,3 +317,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Migration checks | Fresh upgrade through `f6b3c9a2d741`, downgrade to `d4f8a1c7e592`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
 | Diff check | `git diff --check` passed. |
 | Notes | Added only Exam identity and sourced, labeled SyllabusVersion records with non-empty ordered Topic provenance. Database restrictions protect referenced Exams, Sources, Topics, and mapped versions. This establishes relevance inputs only; no relevance, likelihood, probability, past-paper, or content behavior was added. |
+
+
+## T-017 approval record
+
+| Field | Value |
+| --- | --- |
+| Recorded | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Original task entry | T-017 above |
+| Final status | Approved |
+| Implementation commit | `e1aea55991671679d1666f4e472a6ad7425310df` |
+| Documentation-review commit | Review update series beginning `f3436fb61aee2183f28333c76a227bc769bbe55a` |
+| Review result | Approved |
+| Notes | Exam identity and sourced syllabus versions with ordered Topic coverage are now implemented. They establish traceable exam-scope input only and do not calculate relevance, likelihood, or probability. |
+
+## T-018 — Record sourced previous-paper question occurrences
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` T-018 at `1f4a2f95547e62b9dbef0c538c208d6496a36e2b` |
+| Scope | Record sourced previous papers and Topic-linked historical question occurrences |
+| Tests | PostgreSQL/API integration tests and migration checks required |
+| Implementation commit | Pending |
+| Documentation-review commit | Pending |
+| Review result | Pending |
+| Notes | This adds historical occurrence evidence only. It must not generate questions or claim relevance scores, percentages, or exam probability. |
