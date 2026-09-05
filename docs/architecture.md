@@ -17,15 +17,15 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health, internal create Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, separate Claim and NoteDraft approval decisions, individual retrieval, approved-Claim and approved-NoteDraft read boundaries, a deterministic Topic note-draft preview, and stored internal note-draft creation/retrieval under `/api/v1` |
+| API | FastAPI app with health, internal create Exam/SyllabusVersion/Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, separate Claim and NoteDraft approval decisions, individual retrieval, approved-Claim and approved-NoteDraft read boundaries, a deterministic Topic note-draft preview, and stored internal note-draft creation/retrieval under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; six migrations exist, including Topic classification, verification-evidence provenance, Claim approval state, stored note drafts, and NoteDraft approval state |
-| Persistence model | `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, `NoteDraft` with its own human-review state, and ordered verification/evidence, claim/evidence, and note-draft/claim association structures |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; seven migrations exist, including Topic classification, verification-evidence provenance, Claim approval state, stored note drafts, NoteDraft approval state, and sourced syllabus versions |
+| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, `NoteDraft` with its own human-review state, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Fifty-two tests cover the foundation, provenance constraints, end-to-end knowledge API, retrieval/linking, separate Claim and NoteDraft approval decisions/reset semantics, approved-Claim and approved-NoteDraft filtering, Topic assignment/conflicts, deterministic preview, stored note-draft provenance/constraints and snapshot retrieval, and failure atomicity |
+| Tests | Sixty-seven tests cover the foundation, sourced syllabus persistence and constraints, provenance constraints, end-to-end knowledge API, retrieval/linking, separate Claim and NoteDraft approval decisions/reset semantics, approved-Claim and approved-NoteDraft filtering, Topic assignment/conflicts, deterministic preview, stored note-draft provenance/constraints and snapshot retrieval, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -130,7 +130,7 @@ Every Claim begins with human approval state `DRAFT`. An `APPROVED` or `REJECTED
 
 `GET /api/v1/topics/{topic_id}/claims/approved` narrows that safe boundary to one existing Topic. It returns only Claims matching both the Topic ID and `APPROVED` state in ascending Claim ID order, eagerly loading relevant Evidence; a missing Topic is distinct from an existing Topic with no approved Claims.
 
-Topic classification is intentionally minimal: a Topic has only a unique name and timestamps/identity, and a Claim may reference one Topic or none. PostgreSQL sets `claims.topic_id` to null if its Topic is deleted. Topic hierarchy, syllabus mapping, tags, Topic reads/lists, and search are not implemented.
+Topic classification is intentionally minimal: a Topic has only a unique name and timestamps/identity, and a Claim may reference one Topic or none. PostgreSQL sets `claims.topic_id` to null if its Topic is deleted. Ordered Topic coverage can now be recorded for a sourced SyllabusVersion, but Topic hierarchy, tags, Topic reads/lists, and search are not implemented.
 
 Topic names are protected by the PostgreSQL unique constraint as the concurrency-safe authority. A duplicate Topic creation is rolled back and exposed as HTTP 409 with a stable conflict detail rather than leaking a database exception.
 
@@ -143,6 +143,8 @@ Topic names are protected by the PostgreSQL unique constraint as the concurrency
 Every NoteDraft begins in review state `DRAFT`. `APPROVED` or `REJECTED` records the current UTC decision time and optional reviewer note; resetting to `DRAFT` clears both. This decision is independent of its Claims and changes neither stored Markdown nor provenance. NoteDraft approval is not publication, and reviewer identity/history are not implemented.
 
 `GET /api/v1/note-drafts/approved` is the internal downstream boundary for reviewed drafts. It filters only on each NoteDraft's own `APPROVED` state, returns drafts in ascending ID order, and eagerly loads their Topic and stored ordered Claim links. It returns stored snapshots without regenerating Markdown or reconsidering current Claim approval.
+
+An Exam has unique code and name identifiers. Each SyllabusVersion belongs to one Exam, cites one existing Source, has a label unique within that Exam, and stores a non-empty ordered set of existing Topics. PostgreSQL restricts deletion of referenced Exams, Sources, Topics, and mapped SyllabusVersions so this syllabus provenance cannot be silently broken. This records coverage only; relevance, likelihood, scoring, and exam probability are not implemented.
 
 ## Architectural decisions recorded by repository instructions
 

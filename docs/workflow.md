@@ -69,6 +69,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | --- | --- | --- | --- |
 | `GET /api/v1/health` | `health_check()` | `app/api/v1/routes/health.py` | Returns `{"status": "ok"}` without checking the database |
 | `POST /api/v1/sources` | `create_source()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Source |
+| `POST /api/v1/exams` | `create_exam()` | `app/api/v1/routes/knowledge.py` | Creates an Exam with stable unique code/name conflict handling |
+| `POST /api/v1/syllabus-versions` | `create_syllabus_version()` | `app/api/v1/routes/knowledge.py` | Atomically stores a sourced syllabus version and ordered Topic mappings |
 | `POST /api/v1/topics` | `create_topic()` | `app/api/v1/routes/knowledge.py` | Validates and creates a uniquely named Topic |
 | `GET /api/v1/topics/{topic_id}/claims/approved` | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Returns approved Claims for one existing Topic in stable ID order |
 | `POST /api/v1/topics/{topic_id}/note-draft-preview` | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Returns deterministic Markdown from one Topic's approved Claims without persistence |
@@ -101,6 +103,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `_not_found()` | `app/api/v1/routes/knowledge.py` | Converts a service missing-resource error to HTTP 404 |
 | `_conflict()` | `app/api/v1/routes/knowledge.py` | Converts a service conflict error to HTTP 409 |
 | `create_source()` | `app/api/v1/routes/knowledge.py` | Delegates Source creation to `KnowledgeService` |
+| `create_exam()` | `app/api/v1/routes/knowledge.py` | Delegates Exam creation and maps unique conflicts to 409 |
+| `create_syllabus_version()` | `app/api/v1/routes/knowledge.py` | Delegates syllabus creation and maps missing references/conflicts to 404/409 |
 | `create_topic()` | `app/api/v1/routes/knowledge.py` | Delegates Topic creation to `KnowledgeService` |
 | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Delegates the Topic-scoped approved read and maps a missing Topic to 404 |
 | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Delegates deterministic preview creation and maps missing/empty approved knowledge to 404/409 |
@@ -124,6 +128,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | --- | --- | --- |
 | `Base` | `app/models/base.py` | Declarative metadata root for SQLAlchemy models |
 | `Source` | `app/models/source.py` | Stores basic source identity, authority, location, license status, hash, and creation time |
+| `Exam` | `app/models/exam.py` | Stores a unique short exam code, unique name, and creation time |
+| `SyllabusVersion` | `app/models/syllabus_version.py` | Stores one Exam's labeled syllabus version with its documenting Source |
+| `SyllabusVersionTopic` | `app/models/syllabus_version_topic.py` | Stores one protected Topic mapping per version in constrained position order |
 | `Topic` | `app/models/topic.py` | Stores a unique Topic name and creation time, with typed traversal to classified Claims |
 | `Evidence` | `app/models/evidence.py` | Stores text and an optional location reference belonging to a source |
 | `Claim` | `app/models/claim.py` | Stores an atomic statement, optional Topic, verification summary, separate constrained human approval fields, and typed traversal to Topic and relevant Evidence |
@@ -141,6 +148,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `VerificationVerdict` | `app/schemas/knowledge.py` | Defines accepted verification verdict values |
 | `ClaimApprovalStatus` | `app/schemas/knowledge.py` | Restricts human decisions to `DRAFT`, `APPROVED`, or `REJECTED` |
 | `SourceCreate` / `SourceResponse` | `app/schemas/knowledge.py` | Validate Source input and serialize persisted Sources |
+| `ExamCreate` / `ExamResponse` | `app/schemas/knowledge.py` | Validate and serialize minimal Exam records |
+| `SyllabusVersionCreate` | `app/schemas/knowledge.py` | Validates positive references and a non-empty duplicate-free ordered Topic ID list |
+| `SyllabusVersionResponse` | `app/schemas/knowledge.py` | Serializes persisted syllabus identity, Source, label, time, and stored Topic order |
 | `TopicCreate` / `TopicResponse` | `app/schemas/knowledge.py` | Validate a Topic name and serialize its identity and creation time |
 | `EvidenceCreate` / `EvidenceResponse` | `app/schemas/knowledge.py` | Validate Evidence input and serialize persisted Evidence |
 | `ClaimCreate` / `ClaimResponse` | `app/schemas/knowledge.py` | Validate Claim input including optional positive `topic_id` and serialize it with evidence and summary fields |
@@ -159,6 +169,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | --- | --- | --- |
 | `KnowledgeRepository` | `app/repositories/knowledge.py` | Encapsulates Topic, Source, Evidence, Claim, and Verification persistence queries |
 | `add_source()` / `get_source()` | `app/repositories/knowledge.py` | Persist or retrieve Sources |
+| `add_exam()` / `get_exam()` | `app/repositories/knowledge.py` | Persist or retrieve Exams |
+| `add_syllabus_version()` | `app/repositories/knowledge.py` | Flushes a SyllabusVersion and its ordered Topic mappings in the caller's transaction |
 | `add_topic()` / `get_topic()` | `app/repositories/knowledge.py` | Persist or retrieve Topics |
 | `add_evidence()` / `get_evidence()` | `app/repositories/knowledge.py` | Persist or retrieve Evidence |
 | `add_claim()` / `get_claim()` | `app/repositories/knowledge.py` | Persist Claims or retrieve them with relevant Evidence eagerly loaded |
@@ -177,6 +189,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `ResourceConflictError` | `app/services/knowledge.py` | Carries a stable resource-conflict detail for HTTP translation |
 | `KnowledgeService` | `app/services/knowledge.py` | Owns knowledge use cases and transaction boundaries |
 | `create_source()` | `app/services/knowledge.py` | Creates and commits a Source |
+| `create_exam()` | `app/services/knowledge.py` | Creates an Exam and translates named database uniqueness conflicts to stable domain conflicts |
+| `create_syllabus_version()` | `app/services/knowledge.py` | Validates all references, constructs ordered mappings, and commits the sourced version atomically |
 | `create_topic()` | `app/services/knowledge.py` | Creates a Topic; rolls back database uniqueness conflicts and raises a domain conflict error |
 | `create_evidence()` | `app/services/knowledge.py` | Verifies the Source exists, then creates Evidence |
 | `get_evidence()` | `app/services/knowledge.py` | Retrieves Evidence through the repository or raises a missing-resource error |
@@ -218,6 +232,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `downgrade()` | `migrations/versions/b7d9e2f4a610_add_note_drafts.py` | Removes note-draft Claim links and note drafts in dependency order |
 | `upgrade()` | `migrations/versions/d4f8a1c7e592_add_note_draft_approval.py` | Adds constrained NoteDraft approval state and nullable decision metadata, defaulting existing drafts to DRAFT |
 | `downgrade()` | `migrations/versions/d4f8a1c7e592_add_note_draft_approval.py` | Removes the NoteDraft approval constraint and three decision fields |
+| `upgrade()` | `migrations/versions/f6b3c9a2d741_add_exam_syllabus_foundation.py` | Creates Exams, sourced syllabus versions, and restricted ordered Topic mappings |
+| `downgrade()` | `migrations/versions/f6b3c9a2d741_add_exam_syllabus_foundation.py` | Removes syllabus Topic mappings, versions, and Exams in dependency order |
 
 ## Tests
 
@@ -256,6 +272,13 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_database_rejects_invalid_note_draft_approval_status()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects draft approval values outside the constrained set | Passed for T-015 |
 | `test_get_approved_note_drafts_returns_empty_list()` | `tests/test_note_drafts.py` | Confirms the approved-draft boundary returns an empty list when none qualify | Passed for T-016 |
 | `test_get_approved_note_drafts_filters_orders_and_preserves_snapshots()` | `tests/test_note_drafts.py` | Confirms DRAFT/REJECTED exclusion, ascending approved-draft order, and stored snapshot stability after Claim approval changes | Passed for T-016 |
+| `test_create_syllabus_version_persists_topics_in_request_order()` | `tests/test_syllabus_api.py` | Confirms API persistence and response order match the supplied Topic order | Passed for T-017 |
+| `test_create_syllabus_version_rejects_missing_reference_without_partial_rows()` | `tests/test_syllabus_api.py` | Confirms missing Exam, Source, or Topic returns 404 without version or mapping rows | Passed three times for T-017 |
+| `test_create_exam_returns_stable_conflict()` | `tests/test_syllabus_api.py` | Confirms duplicate Exam code and name return stable 409 details | Passed twice for T-017 |
+| `test_create_syllabus_version_returns_stable_label_conflict()` | `tests/test_syllabus_api.py` | Confirms a duplicate per-Exam syllabus label returns stable 409 | Passed for T-017 |
+| `test_create_syllabus_version_rejects_invalid_topic_ids()` | `tests/test_syllabus_api.py` | Confirms empty, duplicate, and non-positive Topic ID input returns 422 | Passed three times for T-017 |
+| `test_syllabus_topic_database_constraints_are_enforced()` | `tests/test_syllabus_api.py` | Confirms PostgreSQL rejects negative positions, duplicate positions, and duplicate Topics per version | Passed for T-017 |
+| `test_syllabus_references_restrict_parent_deletion()` | `tests/test_syllabus_api.py` | Confirms PostgreSQL protects referenced Exam, Source, Topic, and mapped SyllabusVersion deletion | Passed four times for T-017 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -529,6 +552,29 @@ flowchart LR
 - `uv run pytest -q`: 52 passed in 2.31s with the same warning.
 - Changed-file Ruff passed and `git diff --check` passed.
 - No database schema migration was required. A fresh dedicated `assam_exam_ai_t016_test` database upgraded through existing head `d4f8a1c7e592`; `uv run alembic check` reported no new upgrade operations.
+
+### T-017 Sourced syllabus-version foundation
+
+```mermaid
+flowchart LR
+    REQUEST["POST /syllabus-versions\nordered topic_ids"] --> VALIDATE["Validate Exam + Source + every Topic"]
+    VALIDATE --> VERSION["SyllabusVersion"]
+    VALIDATE --> LINKS["syllabus_version_topics\nposition order"]
+    VERSION --> COMMIT["One transaction"]
+    LINKS --> COMMIT
+    SOURCE["Documenting Source"] --> VERSION
+    EXAM["Exam"] --> VERSION
+    TOPICS["Topics"] --> LINKS
+    COMMIT --> RESPONSE["Stored IDs + ordered Topic IDs"]
+```
+
+- `POST /api/v1/exams` creates only a unique code/name Exam identity; named PostgreSQL uniqueness constraints remain the concurrency-safe conflict authority.
+- `POST /api/v1/syllabus-versions` validates every reference before persistence and derives non-negative positions from the non-empty duplicate-free request order.
+- PostgreSQL restricts deletion of referenced Exams, Sources, Topics, and mapped SyllabusVersions; no relevance score, likelihood, probability, or syllabus content is inferred.
+- `uv run pytest tests/test_syllabus_api.py -q`: 15 passed in 1.33s with one Starlette deprecation warning.
+- `uv run pytest -q`: 67 passed in 3.57s with the same warning.
+- Changed-file Ruff passed and `git diff --check` passed.
+- Fresh upgrade through `f6b3c9a2d741`, downgrade to `d4f8a1c7e592`, re-upgrade, and `uv run alembic check` all passed; Alembic reported no new upgrade operations.
 
 ## Template for future pushed changes
 

@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session
 from app.models import (
     Claim,
     Evidence,
+    Exam,
     NoteDraft,
     NoteDraftClaim,
     Source,
+    SyllabusVersion,
+    SyllabusVersionTopic,
     Topic,
     Verification,
     VerificationEvidence,
@@ -20,10 +23,14 @@ from app.schemas.knowledge import (
     ClaimCreate,
     ClaimResponse,
     EvidenceCreate,
+    ExamCreate,
+    ExamResponse,
     NoteDraftApprovalCreate,
     NoteDraftPreviewResponse,
     NoteDraftResponse,
     SourceCreate,
+    SyllabusVersionCreate,
+    SyllabusVersionResponse,
     TopicCreate,
     VerificationCreate,
     VerificationEvidenceResponse,
@@ -50,6 +57,65 @@ class KnowledgeService:
     def create_source(self, request: SourceCreate) -> Source:
         source = Source(**request.model_dump())
         return self._commit(self.repository.add_source(source))
+
+    def create_exam(self, request: ExamCreate) -> ExamResponse:
+        exam = Exam(**request.model_dump())
+        try:
+            self._commit(self.repository.add_exam(exam))
+        except IntegrityError as error:
+            constraint_name = getattr(error.orig.diag, "constraint_name", None)
+            if constraint_name == "uq_exams_code":
+                detail = f"Exam code '{request.code}' already exists"
+            elif constraint_name == "uq_exams_name":
+                detail = f"Exam name '{request.name}' already exists"
+            else:
+                raise
+            raise ResourceConflictError(detail) from error
+        return ExamResponse.model_validate(exam)
+
+    def create_syllabus_version(
+        self,
+        request: SyllabusVersionCreate,
+    ) -> SyllabusVersionResponse:
+        if self.repository.get_exam(request.exam_id) is None:
+            raise ResourceNotFoundError("Exam", request.exam_id)
+        if self.repository.get_source(request.source_id) is None:
+            raise ResourceNotFoundError("Source", request.source_id)
+
+        topics = []
+        for topic_id in request.topic_ids:
+            topic = self.repository.get_topic(topic_id)
+            if topic is None:
+                raise ResourceNotFoundError("Topic", topic_id)
+            topics.append(topic)
+
+        syllabus_version = SyllabusVersion(
+            exam_id=request.exam_id,
+            source_id=request.source_id,
+            label=request.label,
+            topic_links=[
+                SyllabusVersionTopic(topic=topic, position=position)
+                for position, topic in enumerate(topics)
+            ],
+        )
+        try:
+            self._commit(self.repository.add_syllabus_version(syllabus_version))
+        except IntegrityError as error:
+            constraint_name = getattr(error.orig.diag, "constraint_name", None)
+            if constraint_name != "uq_syllabus_versions_exam_label":
+                raise
+            raise ResourceConflictError(
+                f"SyllabusVersion label '{request.label}' already exists "
+                f"for Exam {request.exam_id}"
+            ) from error
+        return SyllabusVersionResponse(
+            id=syllabus_version.id,
+            exam_id=syllabus_version.exam_id,
+            source_id=syllabus_version.source_id,
+            label=syllabus_version.label,
+            created_at=syllabus_version.created_at,
+            topic_ids=[link.topic_id for link in syllabus_version.topic_links],
+        )
 
     def create_topic(self, request: TopicCreate) -> Topic:
         topic = Topic(**request.model_dump())
@@ -265,7 +331,16 @@ class KnowledgeService:
 
     def _commit(
         self,
-        instance: Source | Topic | Evidence | Claim | Verification | NoteDraft,
+        instance: (
+            Source
+            | Exam
+            | SyllabusVersion
+            | Topic
+            | Evidence
+            | Claim
+            | Verification
+            | NoteDraft
+        ),
     ):
         try:
             self.session.commit()

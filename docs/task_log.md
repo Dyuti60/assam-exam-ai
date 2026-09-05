@@ -305,3 +305,15 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Documentation-review commit | Pending |
 | Review result | Pending |
 | Notes | This establishes relevance inputs only; it must not claim or calculate exam probability. |
+
+### T-017 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Establish exam and sourced syllabus-version data with ordered Topic mappings |
+| Tests | `uv run pytest tests/test_syllabus_api.py -q`: 15 passed in 1.33s with one Starlette deprecation warning. `uv run pytest -q`: 67 passed in 3.57s with the same warning. |
+| Ruff | Changed-file Ruff check passed. |
+| Migration checks | Fresh upgrade through `f6b3c9a2d741`, downgrade to `d4f8a1c7e592`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
+| Diff check | `git diff --check` passed. |
+| Notes | Added only Exam identity and sourced, labeled SyllabusVersion records with non-empty ordered Topic provenance. Database restrictions protect referenced Exams, Sources, Topics, and mapped versions. This establishes relevance inputs only; no relevance, likelihood, probability, past-paper, or content behavior was added. |

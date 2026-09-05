@@ -10,11 +10,15 @@ from app.schemas.knowledge import (
     ClaimResponse,
     EvidenceCreate,
     EvidenceResponse,
+    ExamCreate,
+    ExamResponse,
     NoteDraftApprovalCreate,
     NoteDraftPreviewResponse,
     NoteDraftResponse,
     SourceCreate,
     SourceResponse,
+    SyllabusVersionCreate,
+    SyllabusVersionResponse,
     TopicCreate,
     TopicResponse,
     VerificationCreate,
@@ -38,6 +42,31 @@ def _conflict(error: ResourceConflictError) -> HTTPException:
 @router.post("/sources", response_model=SourceResponse, status_code=201)
 def create_source(request: SourceCreate, db: DatabaseSession) -> SourceResponse:
     return KnowledgeService(db).create_source(request)
+
+
+@router.post("/exams", response_model=ExamResponse, status_code=201)
+def create_exam(request: ExamCreate, db: DatabaseSession) -> ExamResponse:
+    try:
+        return KnowledgeService(db).create_exam(request)
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.post(
+    "/syllabus-versions",
+    response_model=SyllabusVersionResponse,
+    status_code=201,
+)
+def create_syllabus_version(
+    request: SyllabusVersionCreate,
+    db: DatabaseSession,
+) -> SyllabusVersionResponse:
+    try:
+        return KnowledgeService(db).create_syllabus_version(request)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.post("/topics", response_model=TopicResponse, status_code=201)

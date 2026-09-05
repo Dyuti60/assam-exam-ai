@@ -420,3 +420,5 @@ Build the first data foundation for exam-relevance assessment. This task records
 - Do not edit prior migrations.
 
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only unique Exam identity plus sourced, labeled SyllabusVersion records and non-empty position-ordered Topic mappings through `POST /api/v1/exams` and `POST /api/v1/syllabus-versions`. Migration `f6b3c9a2d741` uses database uniqueness/position constraints and deletion restrictions to preserve syllabus provenance. Missing references remain atomic 404s, conflicts return stable 409s, and invalid Topic lists return 422. No actual syllabus data, relevance or probability calculation, past-paper data, or content feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

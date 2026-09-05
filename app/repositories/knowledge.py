@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.models import (
     Claim,
     Evidence,
+    Exam,
     NoteDraft,
     Source,
+    SyllabusVersion,
     Topic,
     Verification,
     VerificationEvidence,
@@ -27,6 +29,22 @@ class KnowledgeRepository:
 
     def get_source(self, source_id: int) -> Source | None:
         return self.session.get(Source, source_id)
+
+    def add_exam(self, exam: Exam) -> Exam:
+        self.session.add(exam)
+        self.session.flush()
+        return exam
+
+    def get_exam(self, exam_id: int) -> Exam | None:
+        return self.session.get(Exam, exam_id)
+
+    def add_syllabus_version(
+        self,
+        syllabus_version: SyllabusVersion,
+    ) -> SyllabusVersion:
+        self.session.add(syllabus_version)
+        self.session.flush()
+        return syllabus_version
 
     def add_topic(self, topic: Topic) -> Topic:
         self.session.add(topic)

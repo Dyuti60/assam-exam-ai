@@ -56,6 +56,42 @@ class TopicResponse(TopicCreate):
     created_at: datetime
 
 
+class ExamCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+
+
+class ExamResponse(ExamCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
+class SyllabusVersionCreate(BaseModel):
+    exam_id: int = Field(gt=0)
+    source_id: int = Field(gt=0)
+    label: str = Field(min_length=1, max_length=255)
+    topic_ids: list[int] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_topic_ids(self) -> Self:
+        if any(topic_id <= 0 for topic_id in self.topic_ids):
+            raise ValueError("topic_id values must be positive")
+        if len(self.topic_ids) != len(set(self.topic_ids)):
+            raise ValueError("topic_id values must be unique")
+        return self
+
+
+class SyllabusVersionResponse(BaseModel):
+    id: int
+    exam_id: int
+    source_id: int
+    label: str
+    created_at: datetime
+    topic_ids: list[int]
+
+
 class NoteDraftPreviewResponse(BaseModel):
     topic_id: int
     topic_name: str
