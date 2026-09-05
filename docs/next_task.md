@@ -662,3 +662,208 @@ Run the migration upgrade/downgrade/re-upgrade cycle, focused tests, full suite,
 Update `docs/architecture.md` and `docs/workflow.md`. Append T-021 records without rewriting history in `docs/task_log.md` and `docs/next_task.md`. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only the manually supplied internal `QuestionBankItem`, its position-ordered approved-Claim provenance, migration `e9a4c2f7b163`, and create/retrieve endpoints. PostgreSQL constrains non-whitespace text, difficulty, one Claim and one position per item, non-negative positions, and restricted deletion of referenced ContentVersions and Claims. Creation is atomic; retrieval returns the stored snapshot without re-evaluating Claim approval. No complete MCQ, review, release, AI, NoteDraft binding, dependency, configuration, or learner-facing feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## T-021 review outcome
+
+- **APPROVED** after independent review of implementation commit `3b1c425158ca0932b6c8ea9fb80dbf9efd9b8278` (`feat: add grounded question bank candidates`).
+- The implementation preserves the ContentVersion boundary, ordered approved same-Topic Claim provenance, PostgreSQL integrity constraints, transaction atomicity, and stored-snapshot retrieval. It does not add options, correct answers, review/release, AI, learner, mock, or historical-question behavior.
+- Review evidence: the committed workflow records `17 passed` focused tests, `119 passed` full-suite tests, migration upgrade/downgrade/re-upgrade, `uv run alembic check`, changed-file Ruff, and `git diff --check`; GitHub exposes no separate CI status checks for the commit.
+
+---
+# T-022 — Add complete MCQ options and one correct answer to an internal QuestionBankItem candidate
+
+Read `AGENTS.md` and all project documents first. Inspect the current repository, especially T-020 and T-021 implementation conventions, before changing code.
+
+Do **not** commit, push, create a PR, self-approve, or implement T-023.
+
+## Current context
+
+The repository already has:
+
+- `ContentVersion`: reusable version identity for one exact `SyllabusVersion + Topic`.
+- `QuestionBankItem`: manually supplied internal candidate with question text, explanation, difficulty, and ordered approved same-Topic Claim provenance.
+- `QuestionBankItem` is not yet a complete MCQ, approved canonical content, released content, or learner-facing material.
+
+T-022 must complete only the internal MCQ structure.
+
+## Goal
+
+Extend a `QuestionBankItem` with a non-empty, ordered set of answer options and exactly one correct option at creation time.
+
+The correct answer is an internal candidate answer key. It is not human approval, release, publication, AI generation, or learner delivery.
+
+## Data model and database
+
+Add one new Alembic migration. Do not edit historical migrations.
+
+Add the smallest model/table(s) necessary to persist options. Prefer a design equivalent to `QuestionBankOption`:
+
+- `id`;
+- `question_bank_item_id`;
+- non-negative `position`;
+- non-blank `option_text`.
+
+Use the existing `QuestionBankItem` as the parent. The correct option may be represented by a stored option position or option identity, but the persisted schema and service must guarantee that the declared correct answer belongs to the same `QuestionBankItem`.
+
+PostgreSQL must enforce where it can do so cleanly:
+
+- option text cannot be blank/whitespace;
+- option position is non-negative;
+- one option position is unique within a `QuestionBankItem`;
+- an option cannot be linked to another item's answer reference;
+- deleting a `QuestionBankItem` may delete only its dependent option rows;
+- direct deletion of an option that is the persisted correct answer must not leave an invalid answer reference;
+- existing `ContentVersion` and Claim deletion restrictions remain intact.
+
+At the API/service level, require at least two options and exactly one correct answer for newly created complete MCQ candidates. Do not treat a correct-answer flag on multiple child rows as sufficient unless the database design also prevents invalid cross-item references.
+
+Existing T-021 rows must remain migratable and retrievable. Do not make an unsafe non-null migration that breaks existing `QuestionBankItem` records.
+
+## API
+
+Modify only the existing internal QuestionBankItem create/read contract as needed:
+
+- `POST /api/v1/question-bank-items`
+- `GET /api/v1/question-bank-items/{question_bank_item_id}`
+
+The create request must include:
+
+- existing T-021 fields;
+- `options`: ordered, non-empty option texts;
+- a correct-option reference derived from request order, such as `correct_option_position`.
+
+The response must return:
+
+- existing T-021 fields;
+- persisted options in stored position order;
+- the stored correct-option reference.
+
+Choose stable field names and document them.
+
+Behavior:
+
+- fewer than two options, blank options, duplicate/invalid positions, or invalid correct-option reference → HTTP 422;
+- the correct option must refer to an option in the same request/item;
+- missing `ContentVersion` or Claim → existing 404 behavior;
+- unapproved or wrong-Topic Claim → existing stable 409 behavior;
+- failed creation must be atomic: no `QuestionBankItem`, option, or Claim-link partial rows;
+- retrieval returns the stored option/answer/provenance snapshot and must not re-evaluate current Claim approval;
+- preserve backward compatibility for all unrelated routes and models.
+
+Keep routes thin and preserve:
+
+```text
+Route
+ ↓
+Schema
+ ↓
+Service
+ ↓
+Repository
+ ↓
+PostgreSQL
+```
+
+Use eager loading/selectin loading as appropriate so retrieval does not cause obvious N+1 queries.
+
+## Boundaries
+
+Do not add:
+
+- `QuestionBankItem` approval/rejection/review history;
+- release/publication state;
+- learner APIs, users, authentication, personalization, attempts, analytics, mocks;
+- AI generation, prompts, providers, ingestion, RAG, embeddings;
+- previous-paper conversion or merging with `QuestionBankItem`;
+- multi-answer, assertion/reason, descriptive-question, or explanation-generation formats;
+- lists/search;
+- `NoteDraft` binding;
+- dependencies, secrets, environment variables, Docker services, or infrastructure changes unless an actual implementation requirement proves one is needed.
+
+`PreviousQuestion` remains a sourced historical occurrence. `QuestionBankItem` remains a reusable internal practice-question candidate.
+
+## Required affected-component review
+
+Inspect and update only where necessary:
+
+- `app/models` and model registration;
+- Alembic metadata/migration;
+- Pydantic schemas;
+- `KnowledgeRepository`;
+- `KnowledgeService`;
+- knowledge routes;
+- focused API/database tests;
+- migration tests;
+- regression tests;
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append-only `docs/task_log.md`;
+- append-only `docs/next_task.md`.
+
+Inspect but leave unchanged unless genuinely needed:
+
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+If no dependency, configuration, Docker, `AGENTS.md`, or README change is required, explicitly report that each was reviewed and left unchanged.
+
+## Tests and validation
+
+Add focused PostgreSQL/API tests for at least:
+
+- successful atomic creation and retrieval with ordered options and one correct option;
+- preservation of existing ordered Claim provenance;
+- stored-snapshot retrieval after linked Claim approval later changes;
+- fewer than two options;
+- blank/whitespace options;
+- invalid/missing/out-of-range correct-option reference;
+- duplicate option positions if positions are externally persisted;
+- database constraints for blank option text, non-negative/unique option position, and correct-answer-to-same-item integrity;
+- deletion behavior for `QuestionBankItem`/options and restrictions that preserve a valid correct-answer reference;
+- missing resources, wrong-Topic Claims, unapproved Claims, and no partial rows;
+- migration upgrade, downgrade, and re-upgrade;
+- regression coverage for T-021 retrieval and all previous tests.
+
+Run and report exact results for:
+
+- focused T-022 tests;
+- full test suite;
+- changed-file Ruff;
+- fresh migration upgrade/downgrade/re-upgrade;
+- `uv run alembic check`;
+- `git diff --check`;
+- `git status --short`.
+
+## Documentation
+
+Update `architecture.md` and `workflow.md` only for actual implemented behavior.
+
+Append—never rewrite history:
+
+- T-022 implementation note in `task_log.md`;
+- T-022 implementation note in `next_task.md`.
+
+Do not record T-022 as approved. Leave the working tree ready for independent review.
+
+## Final report
+
+Report:
+
+1. files changed;
+2. database design and constraints;
+3. API contract;
+4. atomicity/error behavior;
+5. tests and exact results;
+6. dependency/configuration/Docker/AGENTS/README review outcomes;
+7. migration validation;
+8. known boundaries retained;
+9. git status;
+10. explicit confirmation: no commit, push, PR, self-approval, or T-023 work.
