@@ -356,3 +356,16 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Migration checks | Fresh upgrade through `a8c4e1d7f620`, downgrade to `f6b3c9a2d741`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
 | Diff check | `git diff --check` passed. |
 | Notes | Added only sourced PreviousPaper records and exact Topic-linked PreviousQuestion occurrences with stable conflicts, atomic missing-reference handling, and restrictive provenance. No answers, explanations, ingestion, multi-Topic tagging, relevance bands/scores/percentages, probability, LLMs, or generated questions were added. |
+
+
+## T-018 approval record
+
+| Field | Value |
+| --- | --- |
+| Recorded | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Original task entry | T-018 above |
+| Final status | Approved |
+| Implementation commit | `c7d7b9f18d68c9da1aeea5747b5925bf5922ead8` |
+| Documentation-review commit | Review update series beginning `588999a37e5e4b5bc70792e83bf784c162b6db64` |
+| Review result | Approved |
+| Notes | Sourced previous-paper question occurrences retain Exam, Source, Paper, Topic, position, exact text, and optional location provenance. Historical occurrence is evidence, not a guarantee of future appearance. |
