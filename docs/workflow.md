@@ -788,3 +788,9 @@ flowchart TD
 
 - Reviewed pushed commit `ff326dc5334dfc41ec298d10551f8c5801ae21b1`: the endpoint applies the exact fixed v1 rule, separates question and distinct-paper counts, excludes other Exams, returns deterministic reasons, and performs no writes.
 - The band is an explainable preparation priority. It is not a percentage, calibrated likelihood, or prediction of exam appearance.
+
+
+### T-020 review outcome
+
+- Reviewed pushed commit `c5d2010da24731387162020accc9030d6fcca01e`: ContentVersion membership is enforced by the composite foreign key to the exact syllabus/Topic mapping, version identity is positive and scoped-unique, and the referenced mapping is deletion-restricted.
+- The current API creates and retrieves identity only. There is no update endpoint or database-level prevention of direct ContentVersion update/deletion, and no canonical asset exists yet.
