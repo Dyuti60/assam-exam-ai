@@ -396,3 +396,27 @@ It returns a stable ID-ascending list of `NoteDraftResponse` objects only where 
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, `git diff --check`, and migration checks if applicable. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only the static `GET /api/v1/note-drafts/approved` route before the dynamic NoteDraft ID route. It returns NoteDrafts whose own approval state is exactly APPROVED in ascending ID order, with eagerly loaded Topic and stored ordered Claim provenance. Responses use stored Markdown and Claim IDs without regeneration or current Claim-approval evaluation; no migration or publication feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-017 — Record sourced syllabus versions and Topics
+
+Read `AGENTS.md` and all project documents first.
+
+Build the first data foundation for exam-relevance assessment. This task records what an official syllabus covers; it must not calculate relevance, likelihood, or exam probability.
+
+- Add a new migration and minimal models/tables for:
+  - `Exam`: id, unique short `code`, unique `name`, created_at.
+  - `SyllabusVersion`: id, `exam_id`, `source_id`, unique per-Exam `label`, created_at.
+  - `syllabus_version_topics`: ordered association between a SyllabusVersion and existing Topics, with non-negative `position`, unique position within a version, and one link per version/Topic.
+- SyllabusVersion must reference the existing Source that documents the syllabus. Use deletion restrictions that protect a sourced syllabus record and its Topic mappings.
+- Add `POST /api/v1/exams` to create an Exam.
+- Add `POST /api/v1/syllabus-versions` to atomically create a SyllabusVersion with its ordered, non-empty `topic_ids` list.
+- Return a response containing the persisted ids, source id, label, created_at, and Topic IDs in stored position order.
+- Use existing route → schema → service → repository layering. Missing Exam, Source, or Topic must use the established clear 404 style; duplicate Exam code/name or duplicate syllabus label for one Exam must return stable HTTP 409; duplicate Topic IDs or invalid positions/input must return 422.
+- Add PostgreSQL/API tests for successful ordered persistence, missing references with no partial rows, duplicate Exam and syllabus-version conflicts, association constraints, and migration upgrade/downgrade/re-upgrade.
+- Do not add actual syllabus data, web scraping, PDF ingestion, past-paper questions, Topic hierarchy, exam relevance scores/percentages, LLMs, MCQs, UI, auth, payments, or PDFs.
+- Do not edit prior migrations.
+
+Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
