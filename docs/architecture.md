@@ -238,3 +238,6 @@ T-018 is approved at commit `c7d7b9f18d68c9da1aeea5747b5925bf5922ead8`. The syst
 
 
 T-019 is approved at commit `ff326dc5334dfc41ec298d10551f8c5801ae21b1`. The read-only `topic-priority-v1` endpoint exposes selected-syllabus coverage, same-Exam historical counts, sorted years, a deterministic band, and reason codes. It is a transparent preparation priority, not a probability. T-020 will introduce only the platform-owned ContentVersion identity needed before canonical question assets are stored.
+
+
+T-020 is approved at commit `c5d2010da24731387162020accc9030d6fcca01e`. The platform now has create/read-only ContentVersion identity for an exact SyllabusVersion/Topic mapping, with database-enforced membership, positive explicit versions, scoped uniqueness, and mapping-deletion restriction. It contains no educational asset or review state. T-021 will add the first manually created, Claim-grounded QuestionBankItem candidate under a ContentVersion.
