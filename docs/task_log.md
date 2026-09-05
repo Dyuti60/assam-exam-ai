@@ -344,3 +344,15 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Documentation-review commit | Pending |
 | Review result | Pending |
 | Notes | This adds historical occurrence evidence only. It must not generate questions or claim relevance scores, percentages, or exam probability. |
+
+### T-018 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Record sourced previous papers and Topic-linked historical question occurrences |
+| Tests | `uv run pytest tests/test_previous_papers_api.py -q`: 15 passed in 1.51s with one Starlette deprecation warning. `uv run pytest -q`: 82 passed in 3.44s with the same warning. |
+| Ruff | Changed-file Ruff check passed. |
+| Migration checks | Fresh upgrade through `a8c4e1d7f620`, downgrade to `f6b3c9a2d741`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
+| Diff check | `git diff --check` passed. |
+| Notes | Added only sourced PreviousPaper records and exact Topic-linked PreviousQuestion occurrences with stable conflicts, atomic missing-reference handling, and restrictive provenance. No answers, explanations, ingestion, multi-Topic tagging, relevance bands/scores/percentages, probability, LLMs, or generated questions were added. |

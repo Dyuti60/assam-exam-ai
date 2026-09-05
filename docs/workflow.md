@@ -71,6 +71,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/sources` | `create_source()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Source |
 | `POST /api/v1/exams` | `create_exam()` | `app/api/v1/routes/knowledge.py` | Creates an Exam with stable unique code/name conflict handling |
 | `POST /api/v1/syllabus-versions` | `create_syllabus_version()` | `app/api/v1/routes/knowledge.py` | Atomically stores a sourced syllabus version and ordered Topic mappings |
+| `POST /api/v1/previous-papers` | `create_previous_paper()` | `app/api/v1/routes/knowledge.py` | Creates a sourced previous paper with stable per-Exam/year label conflicts |
+| `POST /api/v1/previous-questions` | `create_previous_question()` | `app/api/v1/routes/knowledge.py` | Records one exact Topic-linked question occurrence at a paper position |
 | `POST /api/v1/topics` | `create_topic()` | `app/api/v1/routes/knowledge.py` | Validates and creates a uniquely named Topic |
 | `GET /api/v1/topics/{topic_id}/claims/approved` | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Returns approved Claims for one existing Topic in stable ID order |
 | `POST /api/v1/topics/{topic_id}/note-draft-preview` | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Returns deterministic Markdown from one Topic's approved Claims without persistence |
@@ -105,6 +107,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_source()` | `app/api/v1/routes/knowledge.py` | Delegates Source creation to `KnowledgeService` |
 | `create_exam()` | `app/api/v1/routes/knowledge.py` | Delegates Exam creation and maps unique conflicts to 409 |
 | `create_syllabus_version()` | `app/api/v1/routes/knowledge.py` | Delegates syllabus creation and maps missing references/conflicts to 404/409 |
+| `create_previous_paper()` | `app/api/v1/routes/knowledge.py` | Delegates previous-paper creation and maps missing references/conflicts to 404/409 |
+| `create_previous_question()` | `app/api/v1/routes/knowledge.py` | Delegates question-occurrence creation and maps missing references/conflicts to 404/409 |
 | `create_topic()` | `app/api/v1/routes/knowledge.py` | Delegates Topic creation to `KnowledgeService` |
 | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Delegates the Topic-scoped approved read and maps a missing Topic to 404 |
 | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Delegates deterministic preview creation and maps missing/empty approved knowledge to 404/409 |
@@ -131,6 +135,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `Exam` | `app/models/exam.py` | Stores a unique short exam code, unique name, and creation time |
 | `SyllabusVersion` | `app/models/syllabus_version.py` | Stores one Exam's labeled syllabus version with its documenting Source |
 | `SyllabusVersionTopic` | `app/models/syllabus_version_topic.py` | Stores one protected Topic mapping per version in constrained position order |
+| `PreviousPaper` | `app/models/previous_paper.py` | Stores one sourced Exam paper with positive year and per-Exam/year unique label |
+| `PreviousQuestion` | `app/models/previous_question.py` | Stores exact non-blank question text, Topic, location reference, and constrained paper position |
 | `Topic` | `app/models/topic.py` | Stores a unique Topic name and creation time, with typed traversal to classified Claims |
 | `Evidence` | `app/models/evidence.py` | Stores text and an optional location reference belonging to a source |
 | `Claim` | `app/models/claim.py` | Stores an atomic statement, optional Topic, verification summary, separate constrained human approval fields, and typed traversal to Topic and relevant Evidence |
@@ -151,6 +157,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `ExamCreate` / `ExamResponse` | `app/schemas/knowledge.py` | Validate and serialize minimal Exam records |
 | `SyllabusVersionCreate` | `app/schemas/knowledge.py` | Validates positive references and a non-empty duplicate-free ordered Topic ID list |
 | `SyllabusVersionResponse` | `app/schemas/knowledge.py` | Serializes persisted syllabus identity, Source, label, time, and stored Topic order |
+| `PreviousPaperCreate` / `PreviousPaperResponse` | `app/schemas/knowledge.py` | Validate and serialize sourced previous-paper identity |
+| `PreviousQuestionCreate` / `PreviousQuestionResponse` | `app/schemas/knowledge.py` | Validate and serialize one Topic-linked historical question occurrence |
 | `TopicCreate` / `TopicResponse` | `app/schemas/knowledge.py` | Validate a Topic name and serialize its identity and creation time |
 | `EvidenceCreate` / `EvidenceResponse` | `app/schemas/knowledge.py` | Validate Evidence input and serialize persisted Evidence |
 | `ClaimCreate` / `ClaimResponse` | `app/schemas/knowledge.py` | Validate Claim input including optional positive `topic_id` and serialize it with evidence and summary fields |
@@ -171,6 +179,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `add_source()` / `get_source()` | `app/repositories/knowledge.py` | Persist or retrieve Sources |
 | `add_exam()` / `get_exam()` | `app/repositories/knowledge.py` | Persist or retrieve Exams |
 | `add_syllabus_version()` | `app/repositories/knowledge.py` | Flushes a SyllabusVersion and its ordered Topic mappings in the caller's transaction |
+| `add_previous_paper()` / `get_previous_paper()` | `app/repositories/knowledge.py` | Persist or retrieve sourced previous papers |
+| `add_previous_question()` | `app/repositories/knowledge.py` | Flushes an exact historical question occurrence in the caller's transaction |
 | `add_topic()` / `get_topic()` | `app/repositories/knowledge.py` | Persist or retrieve Topics |
 | `add_evidence()` / `get_evidence()` | `app/repositories/knowledge.py` | Persist or retrieve Evidence |
 | `add_claim()` / `get_claim()` | `app/repositories/knowledge.py` | Persist Claims or retrieve them with relevant Evidence eagerly loaded |
@@ -191,6 +201,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_source()` | `app/services/knowledge.py` | Creates and commits a Source |
 | `create_exam()` | `app/services/knowledge.py` | Creates an Exam and translates named database uniqueness conflicts to stable domain conflicts |
 | `create_syllabus_version()` | `app/services/knowledge.py` | Validates all references, constructs ordered mappings, and commits the sourced version atomically |
+| `create_previous_paper()` | `app/services/knowledge.py` | Validates Exam/Source, commits a paper, and translates its named uniqueness conflict |
+| `create_previous_question()` | `app/services/knowledge.py` | Validates Paper/Topic, commits an occurrence, and translates its named position conflict |
 | `create_topic()` | `app/services/knowledge.py` | Creates a Topic; rolls back database uniqueness conflicts and raises a domain conflict error |
 | `create_evidence()` | `app/services/knowledge.py` | Verifies the Source exists, then creates Evidence |
 | `get_evidence()` | `app/services/knowledge.py` | Retrieves Evidence through the repository or raises a missing-resource error |
@@ -234,6 +246,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `downgrade()` | `migrations/versions/d4f8a1c7e592_add_note_draft_approval.py` | Removes the NoteDraft approval constraint and three decision fields |
 | `upgrade()` | `migrations/versions/f6b3c9a2d741_add_exam_syllabus_foundation.py` | Creates Exams, sourced syllabus versions, and restricted ordered Topic mappings |
 | `downgrade()` | `migrations/versions/f6b3c9a2d741_add_exam_syllabus_foundation.py` | Removes syllabus Topic mappings, versions, and Exams in dependency order |
+| `upgrade()` | `migrations/versions/a8c4e1d7f620_add_previous_paper_questions.py` | Creates sourced previous papers and constrained Topic-linked question occurrences |
+| `downgrade()` | `migrations/versions/a8c4e1d7f620_add_previous_paper_questions.py` | Removes previous questions and papers in dependency order |
 
 ## Tests
 
@@ -279,6 +293,14 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_create_syllabus_version_rejects_invalid_topic_ids()` | `tests/test_syllabus_api.py` | Confirms empty, duplicate, and non-positive Topic ID input returns 422 | Passed three times for T-017 |
 | `test_syllabus_topic_database_constraints_are_enforced()` | `tests/test_syllabus_api.py` | Confirms PostgreSQL rejects negative positions, duplicate positions, and duplicate Topics per version | Passed for T-017 |
 | `test_syllabus_references_restrict_parent_deletion()` | `tests/test_syllabus_api.py` | Confirms PostgreSQL protects referenced Exam, Source, Topic, and mapped SyllabusVersion deletion | Passed four times for T-017 |
+| `test_create_previous_paper_and_question_preserves_exact_linkage()` | `tests/test_previous_papers_api.py` | Confirms exact Exam, Source, Paper, Topic, position, text, and location persistence | Passed for T-018 |
+| `test_create_previous_paper_rejects_missing_reference_without_partial_row()` | `tests/test_previous_papers_api.py` | Confirms missing Exam/Source returns 404 without a paper row | Passed twice for T-018 |
+| `test_create_previous_question_rejects_missing_reference_without_partial_row()` | `tests/test_previous_papers_api.py` | Confirms missing Paper/Topic returns 404 without a question row | Passed twice for T-018 |
+| `test_create_previous_paper_returns_stable_conflict()` | `tests/test_previous_papers_api.py` | Confirms duplicate per-Exam/year paper label returns stable 409 | Passed for T-018 |
+| `test_create_previous_question_returns_stable_position_conflict()` | `tests/test_previous_papers_api.py` | Confirms duplicate per-paper position returns stable 409 | Passed for T-018 |
+| `test_previous_paper_inputs_return_422()` | `tests/test_previous_papers_api.py` | Confirms invalid year, position, and blank text return 422 | Passed three times for T-018 |
+| `test_previous_paper_database_constraints_are_enforced()` | `tests/test_previous_papers_api.py` | Confirms PostgreSQL rejects invalid years, positions, and blank text | Passed for T-018 |
+| `test_previous_question_provenance_restricts_parent_deletion()` | `tests/test_previous_papers_api.py` | Confirms PostgreSQL protects referenced Exam, Source, Paper, and Topic | Passed four times for T-018 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -575,6 +597,26 @@ flowchart LR
 - `uv run pytest -q`: 67 passed in 3.57s with the same warning.
 - Changed-file Ruff passed and `git diff --check` passed.
 - Fresh upgrade through `f6b3c9a2d741`, downgrade to `d4f8a1c7e592`, re-upgrade, and `uv run alembic check` all passed; Alembic reported no new upgrade operations.
+
+### T-018 Sourced previous-question occurrence foundation
+
+```mermaid
+flowchart LR
+    EXAM["Exam"] --> PAPER["PreviousPaper\nyear + label"]
+    SOURCE["Documenting Source"] --> PAPER
+    PAPER --> QUESTION["PreviousQuestion\nposition + exact text + location"]
+    TOPIC["Topic"] --> QUESTION
+    QUESTION --> HISTORY["Historical occurrence only\nno relevance calculation"]
+```
+
+- `POST /api/v1/previous-papers` validates Exam and Source before committing a positive-year paper whose label is unique for that Exam/year.
+- `POST /api/v1/previous-questions` validates Paper and Topic before committing exact non-blank text at a unique non-negative paper position.
+- Named PostgreSQL constraints remain the concurrency-safe conflict authority; restrictive foreign keys preserve source, exam, paper, and Topic provenance.
+- `uv run pytest tests/test_previous_papers_api.py -q`: 15 passed in 1.51s with one Starlette deprecation warning.
+- `uv run pytest -q`: 82 passed in 3.44s with the same warning.
+- Changed-file Ruff passed.
+- Fresh upgrade through `a8c4e1d7f620`, downgrade to `f6b3c9a2d741`, re-upgrade, and `uv run alembic check` passed; Alembic reported no new upgrade operations.
+- `git diff --check` passed.
 
 ## Template for future pushed changes
 

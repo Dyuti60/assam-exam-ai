@@ -15,6 +15,10 @@ from app.schemas.knowledge import (
     NoteDraftApprovalCreate,
     NoteDraftPreviewResponse,
     NoteDraftResponse,
+    PreviousPaperCreate,
+    PreviousPaperResponse,
+    PreviousQuestionCreate,
+    PreviousQuestionResponse,
     SourceCreate,
     SourceResponse,
     SyllabusVersionCreate,
@@ -63,6 +67,40 @@ def create_syllabus_version(
 ) -> SyllabusVersionResponse:
     try:
         return KnowledgeService(db).create_syllabus_version(request)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.post(
+    "/previous-papers",
+    response_model=PreviousPaperResponse,
+    status_code=201,
+)
+def create_previous_paper(
+    request: PreviousPaperCreate,
+    db: DatabaseSession,
+) -> PreviousPaperResponse:
+    try:
+        return KnowledgeService(db).create_previous_paper(request)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.post(
+    "/previous-questions",
+    response_model=PreviousQuestionResponse,
+    status_code=201,
+)
+def create_previous_question(
+    request: PreviousQuestionCreate,
+    db: DatabaseSession,
+) -> PreviousQuestionResponse:
+    try:
+        return KnowledgeService(db).create_previous_question(request)
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
     except ResourceConflictError as error:

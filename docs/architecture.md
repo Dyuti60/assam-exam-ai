@@ -17,15 +17,15 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health, internal create Exam/SyllabusVersion/Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, separate Claim and NoteDraft approval decisions, individual retrieval, approved-Claim and approved-NoteDraft read boundaries, a deterministic Topic note-draft preview, and stored internal note-draft creation/retrieval under `/api/v1` |
+| API | FastAPI app with health, internal create Exam/SyllabusVersion/PreviousPaper/PreviousQuestion/Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, separate Claim and NoteDraft approval decisions, individual retrieval, approved-Claim and approved-NoteDraft read boundaries, a deterministic Topic note-draft preview, and stored internal note-draft creation/retrieval under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; seven migrations exist, including Topic classification, verification-evidence provenance, Claim approval state, stored note drafts, NoteDraft approval state, and sourced syllabus versions |
-| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `Topic`, `Source`, `Evidence`, `Claim` with optional Topic plus separate verification-summary and human-approval fields, `Verification`, `VerificationEvidence`, `NoteDraft` with its own human-review state, and ordered provenance associations |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; eight migrations exist, including Topic classification, verification-evidence provenance, approval states, stored note drafts, sourced syllabus versions, and sourced previous-paper questions |
+| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Sixty-seven tests cover the foundation, sourced syllabus persistence and constraints, provenance constraints, end-to-end knowledge API, retrieval/linking, separate Claim and NoteDraft approval decisions/reset semantics, approved-Claim and approved-NoteDraft filtering, Topic assignment/conflicts, deterministic preview, stored note-draft provenance/constraints and snapshot retrieval, and failure atomicity |
+| Tests | Eighty-two tests cover the foundation, sourced syllabus and previous-paper persistence/constraints, provenance constraints, end-to-end knowledge API, retrieval/linking, approval decisions, approved read boundaries, deterministic preview, stored note-draft snapshots, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -55,6 +55,10 @@ erDiagram
     SOURCE ||--o{ SYLLABUS_VERSION : "documents"
     SYLLABUS_VERSION ||--|{ SYLLABUS_VERSION_TOPIC : "covers in position order"
     TOPIC ||--o{ SYLLABUS_VERSION_TOPIC : "mapped coverage"
+    EXAM ||--o{ PREVIOUS_PAPER : "has papers"
+    SOURCE ||--o{ PREVIOUS_PAPER : "documents"
+    PREVIOUS_PAPER ||--o{ PREVIOUS_QUESTION : "contains"
+    TOPIC ||--o{ PREVIOUS_QUESTION : "classifies"
     TOPIC ||--o{ CLAIM : "optional topic_id"
     SOURCE ||--o{ EVIDENCE : "source_id"
     CLAIM ||--o{ VERIFICATION : "claim_id"
@@ -149,6 +153,8 @@ Every NoteDraft begins in review state `DRAFT`. `APPROVED` or `REJECTED` records
 `GET /api/v1/note-drafts/approved` is the internal downstream boundary for reviewed drafts. It filters only on each NoteDraft's own `APPROVED` state, returns drafts in ascending ID order, and eagerly loads their Topic and stored ordered Claim links. It returns stored snapshots without regenerating Markdown or reconsidering current Claim approval.
 
 An Exam has unique code and name identifiers. Each SyllabusVersion belongs to one Exam, cites one existing Source, has a label unique within that Exam, and stores a non-empty ordered set of existing Topics. PostgreSQL restricts deletion of referenced Exams, Sources, Topics, and mapped SyllabusVersions so this syllabus provenance cannot be silently broken. This records coverage only; relevance, likelihood, scoring, and exam probability are not implemented.
+
+A PreviousPaper belongs to one Exam, cites one Source, records a positive year, and has a label unique for that Exam/year. A PreviousQuestion records its exact paper, one Topic, non-negative unique position within the paper, non-blank source text, and optional source location reference. PostgreSQL restrictions protect the referenced Exam, Source, Paper, and Topic. These are historical occurrences only: answers, explanations, multi-Topic tags, relevance bands, scores, percentages, and probability are not implemented.
 
 ## Architectural decisions recorded by repository instructions
 

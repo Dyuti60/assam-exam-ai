@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.previous_paper import PreviousPaper
     from app.models.syllabus_version import SyllabusVersion
 
 
@@ -27,6 +28,10 @@ class Exam(Base):
     )
 
     syllabus_versions: Mapped[list["SyllabusVersion"]] = relationship(
+        back_populates="exam",
+        passive_deletes=True,
+    )
+    previous_papers: Mapped[list["PreviousPaper"]] = relationship(
         back_populates="exam",
         passive_deletes=True,
     )

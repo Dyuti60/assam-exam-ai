@@ -9,6 +9,8 @@ from app.models import (
     Exam,
     NoteDraft,
     NoteDraftClaim,
+    PreviousPaper,
+    PreviousQuestion,
     Source,
     SyllabusVersion,
     SyllabusVersionTopic,
@@ -28,6 +30,10 @@ from app.schemas.knowledge import (
     NoteDraftApprovalCreate,
     NoteDraftPreviewResponse,
     NoteDraftResponse,
+    PreviousPaperCreate,
+    PreviousPaperResponse,
+    PreviousQuestionCreate,
+    PreviousQuestionResponse,
     SourceCreate,
     SyllabusVersionCreate,
     SyllabusVersionResponse,
@@ -116,6 +122,53 @@ class KnowledgeService:
             created_at=syllabus_version.created_at,
             topic_ids=[link.topic_id for link in syllabus_version.topic_links],
         )
+
+    def create_previous_paper(
+        self,
+        request: PreviousPaperCreate,
+    ) -> PreviousPaperResponse:
+        if self.repository.get_exam(request.exam_id) is None:
+            raise ResourceNotFoundError("Exam", request.exam_id)
+        if self.repository.get_source(request.source_id) is None:
+            raise ResourceNotFoundError("Source", request.source_id)
+
+        previous_paper = PreviousPaper(**request.model_dump())
+        try:
+            self._commit(self.repository.add_previous_paper(previous_paper))
+        except IntegrityError as error:
+            constraint_name = getattr(error.orig.diag, "constraint_name", None)
+            if constraint_name != "uq_previous_papers_exam_year_label":
+                raise
+            raise ResourceConflictError(
+                f"PreviousPaper label '{request.label}' already exists "
+                f"for Exam {request.exam_id} in year {request.year}"
+            ) from error
+        return PreviousPaperResponse.model_validate(previous_paper)
+
+    def create_previous_question(
+        self,
+        request: PreviousQuestionCreate,
+    ) -> PreviousQuestionResponse:
+        if self.repository.get_previous_paper(request.previous_paper_id) is None:
+            raise ResourceNotFoundError(
+                "PreviousPaper",
+                request.previous_paper_id,
+            )
+        if self.repository.get_topic(request.topic_id) is None:
+            raise ResourceNotFoundError("Topic", request.topic_id)
+
+        previous_question = PreviousQuestion(**request.model_dump())
+        try:
+            self._commit(self.repository.add_previous_question(previous_question))
+        except IntegrityError as error:
+            constraint_name = getattr(error.orig.diag, "constraint_name", None)
+            if constraint_name != "uq_previous_questions_paper_position":
+                raise
+            raise ResourceConflictError(
+                f"PreviousQuestion position {request.position} already exists "
+                f"for PreviousPaper {request.previous_paper_id}"
+            ) from error
+        return PreviousQuestionResponse.model_validate(previous_question)
 
     def create_topic(self, request: TopicCreate) -> Topic:
         topic = Topic(**request.model_dump())
@@ -335,6 +388,8 @@ class KnowledgeService:
             Source
             | Exam
             | SyllabusVersion
+            | PreviousPaper
+            | PreviousQuestion
             | Topic
             | Evidence
             | Claim

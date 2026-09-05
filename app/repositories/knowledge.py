@@ -9,6 +9,8 @@ from app.models import (
     Evidence,
     Exam,
     NoteDraft,
+    PreviousPaper,
+    PreviousQuestion,
     Source,
     SyllabusVersion,
     Topic,
@@ -45,6 +47,22 @@ class KnowledgeRepository:
         self.session.add(syllabus_version)
         self.session.flush()
         return syllabus_version
+
+    def add_previous_paper(self, previous_paper: PreviousPaper) -> PreviousPaper:
+        self.session.add(previous_paper)
+        self.session.flush()
+        return previous_paper
+
+    def get_previous_paper(self, previous_paper_id: int) -> PreviousPaper | None:
+        return self.session.get(PreviousPaper, previous_paper_id)
+
+    def add_previous_question(
+        self,
+        previous_question: PreviousQuestion,
+    ) -> PreviousQuestion:
+        self.session.add(previous_question)
+        self.session.flush()
+        return previous_question
 
     def add_topic(self, topic: Topic) -> Topic:
         self.session.add(topic)

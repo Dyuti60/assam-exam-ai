@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class EvidenceRole(StrEnum):
@@ -90,6 +90,42 @@ class SyllabusVersionResponse(BaseModel):
     label: str
     created_at: datetime
     topic_ids: list[int]
+
+
+class PreviousPaperCreate(BaseModel):
+    exam_id: int = Field(gt=0)
+    source_id: int = Field(gt=0)
+    year: int = Field(gt=0)
+    label: str = Field(min_length=1, max_length=255)
+
+
+class PreviousPaperResponse(PreviousPaperCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
+class PreviousQuestionCreate(BaseModel):
+    previous_paper_id: int = Field(gt=0)
+    topic_id: int = Field(gt=0)
+    position: int = Field(ge=0)
+    question_text: str = Field(min_length=1)
+    source_location_reference: str | None = None
+
+    @field_validator("question_text")
+    @classmethod
+    def validate_question_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("question_text must not be blank")
+        return value
+
+
+class PreviousQuestionResponse(PreviousQuestionCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
 
 
 class NoteDraftPreviewResponse(BaseModel):

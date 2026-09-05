@@ -5,6 +5,8 @@ from app.models.evidence import Evidence
 from app.models.exam import Exam
 from app.models.note_draft import NoteDraft
 from app.models.note_draft_claim import NoteDraftClaim
+from app.models.previous_paper import PreviousPaper
+from app.models.previous_question import PreviousQuestion
 from app.models.source import Source
 from app.models.syllabus_version import SyllabusVersion
 from app.models.syllabus_version_topic import SyllabusVersionTopic
@@ -19,6 +21,8 @@ __all__ = [
     "Exam",
     "NoteDraft",
     "NoteDraftClaim",
+    "PreviousPaper",
+    "PreviousQuestion",
     "Source",
     "SyllabusVersion",
     "SyllabusVersionTopic",

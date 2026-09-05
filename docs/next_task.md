@@ -445,3 +445,5 @@ Add the smallest historical-evidence foundation needed for future exam-priority 
 - Do not edit prior migrations.
 
 Update `docs/architecture.md`, `docs/workflow.md`, and append-only records in `docs/task_log.md` and `docs/next_task.md`. Run focused tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only sourced `PreviousPaper` records and exact Topic-linked `PreviousQuestion` occurrences through `POST /api/v1/previous-papers` and `POST /api/v1/previous-questions`. Migration `a8c4e1d7f620` enforces positive years, non-negative per-paper unique positions, non-blank question text, per-Exam/year paper-label uniqueness, and restrictive provenance foreign keys. Missing references remain atomic 404s, named uniqueness conflicts return stable 409s, and invalid inputs return 422. No answers, explanations, ingestion, relevance/probability calculation, or generated questions were added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
