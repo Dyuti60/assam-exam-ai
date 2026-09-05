@@ -51,6 +51,10 @@ The diagram shows the database foreign keys and association structures currently
 
 ```mermaid
 erDiagram
+    EXAM ||--o{ SYLLABUS_VERSION : "has versions"
+    SOURCE ||--o{ SYLLABUS_VERSION : "documents"
+    SYLLABUS_VERSION ||--|{ SYLLABUS_VERSION_TOPIC : "covers in position order"
+    TOPIC ||--o{ SYLLABUS_VERSION_TOPIC : "mapped coverage"
     TOPIC ||--o{ CLAIM : "optional topic_id"
     SOURCE ||--o{ EVIDENCE : "source_id"
     CLAIM ||--o{ VERIFICATION : "claim_id"
@@ -106,7 +110,7 @@ The user-facing system must distinguish:
 - **AI-generated practice question** — a new question modeled on an exam pattern; and
 - **exam-priority assessment** — an explainable recommendation, not a prediction or guarantee.
 
-This is not implemented yet. The current Topic, approved-Claim boundary, and immutable NoteDraft-to-Claim provenance are deliberate prerequisites for it.
+The scoring and assessment portion is not implemented yet. T-017 now stores the first input—sourced syllabus versions with ordered Topic coverage—while previous-paper evidence, mappings, scoring rules, calibration, and reviewer overrides remain planned.
 
 ## Current known gaps
 
@@ -196,3 +200,6 @@ T-015 is approved at commit `811f10af3ee63a22e253ff24e9450770e2cbbbc2`. A NoteDr
 
 
 T-016 is approved at commit `611fcb87b38b8506b1a509bea1c0abb4f581c5a7`. The system can now read only human-approved NoteDraft snapshots as an internal downstream boundary. It still has no syllabus or previous-paper data, so it cannot yet make evidence-based exam-priority assessments. T-017 begins that data foundation by recording sourced syllabus versions and their ordered Topics.
+
+
+T-017 is approved at commit `e1aea55991671679d1666f4e472a6ad7425310df`. The repository now records Exams and immutable, sourced syllabus versions with ordered Topic coverage. This is provenance-backed exam-scope data only; it does not infer importance, likelihood, or probability. T-018 will add sourced previous-paper question occurrences so later relevance bands can use historical evidence.
