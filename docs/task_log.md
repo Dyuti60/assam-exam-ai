@@ -395,3 +395,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Migration checks | No schema change or migration added. `uv run alembic check` passed with no new upgrade operations detected. |
 | Diff check | `git diff --check` passed. |
 | Notes | Counts only the selected version's Exam, separates question occurrences from distinct matched papers, returns sorted unique years, and performs no writes. No percentages, probabilities, configurable weights, AI, or generation behavior was added. |
+
+
+## T-019 approval record
+
+| Field | Value |
+| --- | --- |
+| Recorded | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Original task entry | T-019 above |
+| Final status | Approved |
+| Implementation commit | `ff326dc5334dfc41ec298d10551f8c5801ae21b1` |
+| Documentation-review commit | Review update series beginning `fc8390b4974f550c3373431712212d7edd86d5c2` |
+| Review result | Approved |
+| Notes | The read-only fixed v1 rule returns syllabus coverage, same-Exam historical counts, years, deterministic reasons, and a HIGH/MEDIUM/LOW preparation priority. It is not a probability or prediction. |
+
+## T-020 — Add canonical ContentVersion identity
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` T-020 at `262fcda5ec96f9fe3fb16dcdcc7b7f45250beb4c` |
+| Scope | Add minimal reusable ContentVersion identity for an exact SyllabusVersion and Topic |
+| Tests | Focused PostgreSQL/API tests, migration cycle, full suite, Ruff, Alembic check, and diff check required |
+| Implementation commit | Pending |
+| Documentation-review commit | Pending |
+| Review result | Pending |
+| Notes | Identity only. NoteDraft binding, canonical assets, question bank, release lifecycle, AI, and learner personalization remain deferred. |
