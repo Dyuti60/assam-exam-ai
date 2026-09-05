@@ -422,3 +422,17 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Documentation-review commit | Pending |
 | Review result | Pending |
 | Notes | Identity only. NoteDraft binding, canonical assets, question bank, release lifecycle, AI, and learner personalization remain deferred. |
+
+### T-020 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add immutable ContentVersion identity for one exact SyllabusVersion/Topic mapping |
+| Tests | `uv run pytest tests/test_content_versions_api.py -q`: 12 passed in 1.18s with one Starlette deprecation warning. `uv run pytest -q`: 102 passed in 4.18s with the same warning. |
+| Ruff | Changed-file Ruff check passed. |
+| Migration checks | Fresh upgrade through `c5e7a9d2b814`, downgrade to `a8c4e1d7f620`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
+| Diff check | `git diff --check` passed. |
+| Notes | Composite membership, positive versions, uniqueness, and restricted deletion are database-enforced. Creation is atomic and explicit; historical versions are retained. No dependencies, configuration, NoteDraft binding, content, release lifecycle, AI, or personalization was added. |
+
+T-020 clarification (2026-09-05 Asia/Kolkata, UTC+05:30): “immutable” in the implementation record means that the current API exposes create and read operations with no update endpoint. Database-level prevention of direct ContentVersion updates or deletion is not implemented; the database guarantees are positive version, unique mapping/version identity, composite syllabus membership, and restricted deletion of the referenced syllabus-topic mapping.

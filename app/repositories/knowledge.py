@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models import (
     Claim,
+    ContentVersion,
     Evidence,
     Exam,
     NoteDraft,
@@ -98,6 +99,17 @@ class KnowledgeRepository:
             matched_paper_count=len(matched_paper_ids),
             matched_years=sorted({row[1] for row in matched_rows}),
         )
+
+    def add_content_version(
+        self,
+        content_version: ContentVersion,
+    ) -> ContentVersion:
+        self.session.add(content_version)
+        self.session.flush()
+        return content_version
+
+    def get_content_version(self, content_version_id: int) -> ContentVersion | None:
+        return self.session.get(ContentVersion, content_version_id)
 
     def add_previous_paper(self, previous_paper: PreviousPaper) -> PreviousPaper:
         self.session.add(previous_paper)

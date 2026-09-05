@@ -8,6 +8,8 @@ from app.schemas.knowledge import (
     ClaimApprovalCreate,
     ClaimCreate,
     ClaimResponse,
+    ContentVersionCreate,
+    ContentVersionResponse,
     EvidenceCreate,
     EvidenceResponse,
     ExamCreate,
@@ -85,6 +87,37 @@ def get_topic_priority(
 ) -> TopicPriorityResponse:
     try:
         return KnowledgeService(db).get_topic_priority(syllabus_version_id, topic_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.post(
+    "/content-versions",
+    response_model=ContentVersionResponse,
+    status_code=201,
+)
+def create_content_version(
+    request: ContentVersionCreate,
+    db: DatabaseSession,
+) -> ContentVersionResponse:
+    try:
+        return KnowledgeService(db).create_content_version(request)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.get(
+    "/content-versions/{content_version_id}",
+    response_model=ContentVersionResponse,
+)
+def get_content_version(
+    content_version_id: int,
+    db: DatabaseSession,
+) -> ContentVersionResponse:
+    try:
+        return KnowledgeService(db).get_content_version(content_version_id)
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
 

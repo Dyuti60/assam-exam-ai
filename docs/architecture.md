@@ -26,7 +26,7 @@ flowchart TD
     LEARNING --> MOCKS["Mocks"]
 ```
 
-The Content Factory is being built incrementally. The Learning Engine, user profiles, learner progress, weakness analysis, personalized sequencing, and mock assembly are planned and not implemented. A future ContentVersion will identify one reusable canonical-content version for an exact SyllabusVersion and Topic; it is not implemented as of T-019.
+The Content Factory is being built incrementally. The Learning Engine, user profiles, learner progress, weakness analysis, personalized sequencing, and mock assembly are planned and not implemented. ContentVersion now provides retained version identity for an exact SyllabusVersion and Topic; its current API is create/read-only and has no update endpoint.
 
 ## Current confirmed implementation
 
@@ -40,10 +40,10 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; eight migrations exist, including Topic classification, verification-evidence provenance, approval states, stored note drafts, sourced syllabus versions, and sourced previous-paper questions |
-| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; nine migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, and canonical ContentVersion identity |
+| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Ninety tests cover the foundation, sourced syllabus and previous-paper persistence/constraints, deterministic Topic priority, provenance constraints, end-to-end knowledge API, retrieval/linking, approval decisions, approved read boundaries, stored note-draft snapshots, and failure atomicity |
+| Tests | One hundred two tests cover the foundation, ContentVersion identity/constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, approval boundaries, stored note-draft snapshots, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -73,6 +73,7 @@ erDiagram
     SOURCE ||--o{ SYLLABUS_VERSION : "documents"
     SYLLABUS_VERSION ||--|{ SYLLABUS_VERSION_TOPIC : "covers in position order"
     TOPIC ||--o{ SYLLABUS_VERSION_TOPIC : "mapped coverage"
+    SYLLABUS_VERSION_TOPIC ||--o{ CONTENT_VERSION : "owns versions"
     EXAM ||--o{ PREVIOUS_PAPER : "has papers"
     SOURCE ||--o{ PREVIOUS_PAPER : "documents"
     PREVIOUS_PAPER ||--o{ PREVIOUS_QUESTION : "contains"
@@ -175,6 +176,8 @@ An Exam has unique code and name identifiers. Each SyllabusVersion belongs to on
 A PreviousPaper belongs to one Exam, cites one Source, records a positive year, and has a label unique for that Exam/year. A PreviousQuestion records its exact paper, one Topic, non-negative unique position within the paper, non-blank source text, and optional source location reference. PostgreSQL restrictions protect the referenced Exam, Source, Paper, and Topic. These are historical occurrences only: answers, explanations, multi-Topic tags, configurable scoring, percentages, and probability are not implemented.
 
 `GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority` combines one selected syllabus version with stored occurrences from that Exam only. The repository eagerly loads syllabus Topic links and uses one outer-join occurrence query, so counts do not use per-paper queries. The service counts question rows separately from distinct papers, returns sorted unique matched years, applies the fixed `topic-priority-v1` rule, and performs no writes. The result is an explainable priority aid, never an appearance probability. Configurable rules, calibration, percentages, likelihood prediction, and reviewer overrides remain planned.
+
+A ContentVersion is retained version identity for one exact SyllabusVersion/Topic mapping and an explicitly supplied positive version number. The current API supports creation and retrieval only; it has no update endpoint. PostgreSQL enforces positive versions, unique mapping/version identity, composite membership through `syllabus_version_topics`, and restricted deletion of the referenced syllabus-topic mapping. Database-level prevention of direct ContentVersion updates or deletion is not implemented. Historical versions can coexist, and the service does not calculate the next number. ContentVersion has no content body, approval, publication, NoteDraft binding, question bank, AI behavior, or learner personalization.
 
 ## Architectural decisions recorded by repository instructions
 

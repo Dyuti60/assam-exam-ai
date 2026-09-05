@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Claim,
+    ContentVersion,
     Evidence,
     Exam,
     NoteDraft,
@@ -24,6 +25,8 @@ from app.schemas.knowledge import (
     ClaimApprovalStatus,
     ClaimCreate,
     ClaimResponse,
+    ContentVersionCreate,
+    ContentVersionResponse,
     EvidenceCreate,
     ExamCreate,
     ExamResponse,
@@ -225,6 +228,59 @@ class KnowledgeService:
             rule_version="topic-priority-v1",
             reason_codes=[coverage_reason, occurrence_reason],
         )
+
+    def create_content_version(
+        self,
+        request: ContentVersionCreate,
+    ) -> ContentVersionResponse:
+        syllabus_version = self.repository.get_syllabus_version(
+            request.syllabus_version_id
+        )
+        if syllabus_version is None:
+            raise ResourceNotFoundError(
+                "SyllabusVersion",
+                request.syllabus_version_id,
+            )
+        if self.repository.get_topic(request.topic_id) is None:
+            raise ResourceNotFoundError("Topic", request.topic_id)
+        if not any(
+            link.topic_id == request.topic_id
+            for link in syllabus_version.topic_links
+        ):
+            raise ResourceConflictError(
+                f"Topic {request.topic_id} is not mapped to "
+                f"SyllabusVersion {request.syllabus_version_id}"
+            )
+
+        content_version = ContentVersion(**request.model_dump())
+        try:
+            self._commit(self.repository.add_content_version(content_version))
+        except IntegrityError as error:
+            constraint_name = getattr(error.orig.diag, "constraint_name", None)
+            if constraint_name == "uq_content_versions_mapping_version":
+                detail = (
+                    f"ContentVersion {request.version} already exists for "
+                    f"SyllabusVersion {request.syllabus_version_id} and "
+                    f"Topic {request.topic_id}"
+                )
+            elif constraint_name == "fk_content_versions_syllabus_topic":
+                detail = (
+                    f"Topic {request.topic_id} is not mapped to "
+                    f"SyllabusVersion {request.syllabus_version_id}"
+                )
+            else:
+                raise
+            raise ResourceConflictError(detail) from error
+        return ContentVersionResponse.model_validate(content_version)
+
+    def get_content_version(
+        self,
+        content_version_id: int,
+    ) -> ContentVersionResponse:
+        content_version = self.repository.get_content_version(content_version_id)
+        if content_version is None:
+            raise ResourceNotFoundError("ContentVersion", content_version_id)
+        return ContentVersionResponse.model_validate(content_version)
 
     def create_topic(self, request: TopicCreate) -> Topic:
         topic = Topic(**request.model_dump())
@@ -442,6 +498,7 @@ class KnowledgeService:
         self,
         instance: (
             Source
+            | ContentVersion
             | Exam
             | SyllabusVersion
             | PreviousPaper

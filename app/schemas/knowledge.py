@@ -92,6 +92,19 @@ class SyllabusVersionResponse(BaseModel):
     topic_ids: list[int]
 
 
+class ContentVersionCreate(BaseModel):
+    syllabus_version_id: int = Field(gt=0)
+    topic_id: int = Field(gt=0)
+    version: int = Field(gt=0)
+
+
+class ContentVersionResponse(ContentVersionCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
 class PreviousPaperCreate(BaseModel):
     exam_id: int = Field(gt=0)
     source_id: int = Field(gt=0)
