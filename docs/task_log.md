@@ -475,3 +475,28 @@ T-020 clarification (2026-09-05 Asia/Kolkata, UTC+05:30): “immutable” in the
 | Migration checks | Fresh upgrade through `e9a4c2f7b163`, downgrade to `c5e7a9d2b814`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
 | Diff check | `git diff --check` passed. |
 | Notes | Candidate creation validates all references and approved same-Topic grounding before atomically committing the item and ordered links. PostgreSQL enforces non-whitespace text, difficulty, Claim/position uniqueness, non-negative positions, and provenance deletion restrictions. Retrieval is a stored snapshot. No dependencies, configuration, complete MCQ, review, release, AI, NoteDraft binding, or learner-facing behavior was added. |
+
+
+---
+
+## T-021 — Grounded QuestionBankItem candidate
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-021` |
+| Implementation commit | `3b1c425158ca0932b6c8ea9fb80dbf9efd9b8278` |
+| Review state | **APPROVED** |
+| Documentation approval/task commit | `e0eb71211d42fc0b1424dcc8e8f8e668b4fed1c4` |
+| Approved capability | Internal, manually supplied QuestionBankItem candidates with ordered approved same-Topic Claim provenance under ContentVersion |
+| Migration | `e9a4c2f7b163_add_question_bank_items.py` |
+| Validation evidence | `17 passed` focused; `119 passed` full suite; upgrade/downgrade/re-upgrade; Alembic check; changed-file Ruff; `git diff --check` |
+| Dependencies/configuration/Docker | No new dependencies, environment variables, secrets, or Docker services required |
+
+The candidate remains unreviewed, unreleased, and not learner-facing. It has no MCQ options or correct answer; that is T-022.
+
+## T-022 — Complete MCQ candidate structure
+
+- **State:** Issued; not implemented.
+- **Goal:** Add ordered answer options and exactly one same-item correct answer to new internal QuestionBankItem candidates while retaining all T-021 provenance and atomicity boundaries.
+- **Architectural phase:** Question / Mock Foundation.
+- **Full implementation prompt:** appended in `docs/next_task.md`.
