@@ -10,6 +10,24 @@ The complete trust rule is:
 
 An AI response is not verified merely because it is confident. Important factual claims must remain traceable to evidence, and insufficient or conflicting evidence must be surfaced rather than hidden.
 
+
+## Canonical content ownership principle
+
+Core educational content belongs to the platform, not to an individual learner. It will be created for an exact Exam, SyllabusVersion, and Topic context; versioned; grounded in approved knowledge; reviewed; and stored once for reuse. Future learner preparation will reference, sequence, and assemble approved canonical content instead of regenerating equivalent notes or questions for every learner.
+
+The two long-term boundaries are:
+
+```mermaid
+flowchart TD
+    FACTORY["Content Factory\nsource → evidence → approved knowledge"] --> CANONICAL["Versioned canonical content\nreviewed and reusable"]
+    CANONICAL --> LEARNING["Learning Engine — planned\nselect and sequence"]
+    LEARNING --> NOTES["Learner notes"]
+    LEARNING --> PRACTICE["Practice"]
+    LEARNING --> MOCKS["Mocks"]
+```
+
+The Content Factory is being built incrementally. The Learning Engine, user profiles, learner progress, weakness analysis, personalized sequencing, and mock assembly are planned and not implemented. A future ContentVersion will identify one reusable canonical-content version for an exact SyllabusVersion and Topic; it is not implemented as of T-019.
+
 ## Current confirmed implementation
 
 This section describes only the repository inspected on 2026-09-05 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
@@ -214,3 +232,6 @@ T-017 is approved at commit `e1aea55991671679d1666f4e472a6ad7425310df`. The repo
 
 
 T-018 is approved at commit `c7d7b9f18d68c9da1aeea5747b5925bf5922ead8`. The system can now retain sourced historical question occurrences with exact Exam, Paper, Topic, position, text, and source-location provenance. These records are evidence that a Topic appeared in stored past-paper data, not proof that it will appear again. T-019 will combine this history with one selected syllabus version through a deterministic, explainable priority rule.
+
+
+T-019 is approved at commit `ff326dc5334dfc41ec298d10551f8c5801ae21b1`. The read-only `topic-priority-v1` endpoint exposes selected-syllabus coverage, same-Exam historical counts, sorted years, a deterministic band, and reason codes. It is a transparent preparation priority, not a probability. T-020 will introduce only the platform-owned ContentVersion identity needed before canonical question assets are stored.
