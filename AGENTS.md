@@ -1176,6 +1176,14 @@ For small changes, proceed directly.
 
 ---
 
+# 35A. Canonical Content Ownership
+
+Core educational assets must be modeled as reusable, platform-owned, versioned canonical content. Generate, ground, verify, review, and store core notes/questions once; do not introduce per-user generation or duplicate per-user storage of equivalent core educational content unless a future approved architecture task explicitly requires it.
+
+Future personalization must select, sequence, and assemble approved canonical content for a learner. It must not bypass factual provenance, verification, or human-review boundaries.
+
+---
+
 # 36. Final Non-Negotiable Rule
 
 Never present unverified information as verified fact.
