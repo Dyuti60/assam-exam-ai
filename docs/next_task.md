@@ -498,3 +498,5 @@ Requirements:
 - Do not add percentages, probabilities, configurable weights, AI/LLMs, generated MCQs, ingestion, UI, auth, payments, or PDFs.
 
 Update `docs/architecture.md`, `docs/workflow.md`, and append-only records in `docs/task_log.md` and `docs/next_task.md`. Run focused tests, full suite, changed-file Ruff, `uv run alembic check`, and `git diff --check`. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority`. The read-only `topic-priority-v1` rule combines the selected version's direct Topic coverage with question occurrences from PreviousPapers belonging to that Exam, counting questions and distinct papers separately and returning sorted unique years plus deterministic reasons. It provides an explainable `HIGH`/`MEDIUM`/`LOW` aid, never a percentage or appearance probability. No migration or unrelated feature was added; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

@@ -17,7 +17,7 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Area | Confirmed state |
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
-| API | FastAPI app with health, internal create Exam/SyllabusVersion/PreviousPaper/PreviousQuestion/Topic/Source/Evidence/Claim/Verification, Claim-to-Evidence linking, separate Claim and NoteDraft approval decisions, individual retrieval, approved-Claim and approved-NoteDraft read boundaries, a deterministic Topic note-draft preview, and stored internal note-draft creation/retrieval under `/api/v1` |
+| API | FastAPI app with health, internal knowledge creation/retrieval/review routes, and a read-only deterministic Topic-priority assessment under `/api/v1` |
 | Configuration | Pydantic Settings loading `.env`; tracked `.env.example` |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
@@ -25,7 +25,7 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Migrations | Alembic is connected to application settings and `Base.metadata`; eight migrations exist, including Topic classification, verification-evidence provenance, approval states, stored note drafts, sourced syllabus versions, and sourced previous-paper questions |
 | Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Eighty-two tests cover the foundation, sourced syllabus and previous-paper persistence/constraints, provenance constraints, end-to-end knowledge API, retrieval/linking, approval decisions, approved read boundaries, deterministic preview, stored note-draft snapshots, and failure atomicity |
+| Tests | Ninety tests cover the foundation, sourced syllabus and previous-paper persistence/constraints, deterministic Topic priority, provenance constraints, end-to-end knowledge API, retrieval/linking, approval decisions, approved read boundaries, stored note-draft snapshots, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -94,7 +94,7 @@ None of the research, ingestion, general search/retrieval, AI verification, full
 
 Claim-to-Evidence linking is idempotent under concurrent requests: PostgreSQL enforces the existing `(claim_id, evidence_id)` composite primary key, and the repository inserts with `ON CONFLICT DO NOTHING`. The service then freshly reloads the relationship before returning numerically sorted evidence IDs.
 
-### Planned exam relevance and likelihood model
+### Exam relevance and likelihood model
 
 Exam relevance is a separate decision from factual correctness. A factual Claim or approved NoteDraft can be correct yet have low relevance to a particular exam.
 
@@ -114,7 +114,7 @@ The user-facing system must distinguish:
 - **AI-generated practice question** — a new question modeled on an exam pattern; and
 - **exam-priority assessment** — an explainable recommendation, not a prediction or guarantee.
 
-The scoring and assessment portion is not implemented yet. T-017 now stores the first input—sourced syllabus versions with ordered Topic coverage—while previous-paper evidence, mappings, scoring rules, calibration, and reviewer overrides remain planned.
+The fixed `topic-priority-v1` assessment is implemented. It combines one selected syllabus version with same-Exam previous-paper occurrences. Broader mappings, configurable scoring rules, calibration, likelihood prediction, and reviewer overrides remain planned.
 
 ## Current known gaps
 
@@ -152,9 +152,11 @@ Every NoteDraft begins in review state `DRAFT`. `APPROVED` or `REJECTED` records
 
 `GET /api/v1/note-drafts/approved` is the internal downstream boundary for reviewed drafts. It filters only on each NoteDraft's own `APPROVED` state, returns drafts in ascending ID order, and eagerly loads their Topic and stored ordered Claim links. It returns stored snapshots without regenerating Markdown or reconsidering current Claim approval.
 
-An Exam has unique code and name identifiers. Each SyllabusVersion belongs to one Exam, cites one existing Source, has a label unique within that Exam, and stores a non-empty ordered set of existing Topics. PostgreSQL restricts deletion of referenced Exams, Sources, Topics, and mapped SyllabusVersions so this syllabus provenance cannot be silently broken. This records coverage only; relevance, likelihood, scoring, and exam probability are not implemented.
+An Exam has unique code and name identifiers. Each SyllabusVersion belongs to one Exam, cites one existing Source, has a label unique within that Exam, and stores a non-empty ordered set of existing Topics. PostgreSQL restricts deletion of referenced Exams, Sources, Topics, and mapped SyllabusVersions so this syllabus provenance cannot be silently broken. SyllabusVersion itself records sourced coverage only. The separate deterministic `topic-priority-v1` assessment is implemented; numeric scoring, percentages, calibrated likelihood, and exam-appearance probability are not implemented.
 
-A PreviousPaper belongs to one Exam, cites one Source, records a positive year, and has a label unique for that Exam/year. A PreviousQuestion records its exact paper, one Topic, non-negative unique position within the paper, non-blank source text, and optional source location reference. PostgreSQL restrictions protect the referenced Exam, Source, Paper, and Topic. These are historical occurrences only: answers, explanations, multi-Topic tags, relevance bands, scores, percentages, and probability are not implemented.
+A PreviousPaper belongs to one Exam, cites one Source, records a positive year, and has a label unique for that Exam/year. A PreviousQuestion records its exact paper, one Topic, non-negative unique position within the paper, non-blank source text, and optional source location reference. PostgreSQL restrictions protect the referenced Exam, Source, Paper, and Topic. These are historical occurrences only: answers, explanations, multi-Topic tags, configurable scoring, percentages, and probability are not implemented.
+
+`GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority` combines one selected syllabus version with stored occurrences from that Exam only. The repository eagerly loads syllabus Topic links and uses one outer-join occurrence query, so counts do not use per-paper queries. The service counts question rows separately from distinct papers, returns sorted unique matched years, applies the fixed `topic-priority-v1` rule, and performs no writes. The result is an explainable priority aid, never an appearance probability. Configurable rules, calibration, percentages, likelihood prediction, and reviewer overrides remain planned.
 
 ## Architectural decisions recorded by repository instructions
 

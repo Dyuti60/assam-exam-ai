@@ -38,6 +38,9 @@ from app.schemas.knowledge import (
     SyllabusVersionCreate,
     SyllabusVersionResponse,
     TopicCreate,
+    TopicPriorityBand,
+    TopicPriorityReason,
+    TopicPriorityResponse,
     VerificationCreate,
     VerificationEvidenceResponse,
     VerificationResponse,
@@ -169,6 +172,59 @@ class KnowledgeService:
                 f"for PreviousPaper {request.previous_paper_id}"
             ) from error
         return PreviousQuestionResponse.model_validate(previous_question)
+
+    def get_topic_priority(
+        self,
+        syllabus_version_id: int,
+        topic_id: int,
+    ) -> TopicPriorityResponse:
+        syllabus_version = self.repository.get_syllabus_version(syllabus_version_id)
+        if syllabus_version is None:
+            raise ResourceNotFoundError("SyllabusVersion", syllabus_version_id)
+        if self.repository.get_topic(topic_id) is None:
+            raise ResourceNotFoundError("Topic", topic_id)
+
+        syllabus_covered = any(
+            link.topic_id == topic_id for link in syllabus_version.topic_links
+        )
+        stats = self.repository.get_topic_occurrence_stats(
+            syllabus_version.exam_id,
+            topic_id,
+        )
+        coverage_reason = (
+            TopicPriorityReason.DIRECT_SYLLABUS_COVERAGE
+            if syllabus_covered
+            else TopicPriorityReason.NOT_IN_SELECTED_SYLLABUS_VERSION
+        )
+        if stats.exam_paper_count == 0:
+            occurrence_reason = TopicPriorityReason.NO_PREVIOUS_PAPER_DATA
+        elif stats.matched_paper_count >= 2:
+            occurrence_reason = TopicPriorityReason.REPEATED_IN_PREVIOUS_PAPERS
+        elif stats.matched_paper_count == 1:
+            occurrence_reason = TopicPriorityReason.APPEARED_IN_PREVIOUS_PAPER
+        else:
+            occurrence_reason = TopicPriorityReason.NO_RECORDED_PREVIOUS_OCCURRENCE
+
+        if not syllabus_covered:
+            priority_band = TopicPriorityBand.LOW
+        elif stats.matched_paper_count >= 2:
+            priority_band = TopicPriorityBand.HIGH
+        else:
+            priority_band = TopicPriorityBand.MEDIUM
+
+        return TopicPriorityResponse(
+            syllabus_version_id=syllabus_version.id,
+            exam_id=syllabus_version.exam_id,
+            topic_id=topic_id,
+            syllabus_covered=syllabus_covered,
+            exam_paper_count=stats.exam_paper_count,
+            matched_question_count=stats.matched_question_count,
+            matched_paper_count=stats.matched_paper_count,
+            matched_years=stats.matched_years,
+            priority_band=priority_band,
+            rule_version="topic-priority-v1",
+            reason_codes=[coverage_reason, occurrence_reason],
+        )
 
     def create_topic(self, request: TopicCreate) -> Topic:
         topic = Topic(**request.model_dump())

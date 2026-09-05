@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -18,6 +19,14 @@ from app.models import (
     VerificationEvidence,
     claim_evidence,
 )
+
+
+@dataclass(frozen=True)
+class TopicOccurrenceStats:
+    exam_paper_count: int
+    matched_question_count: int
+    matched_paper_count: int
+    matched_years: list[int]
 
 
 class KnowledgeRepository:
@@ -47,6 +56,48 @@ class KnowledgeRepository:
         self.session.add(syllabus_version)
         self.session.flush()
         return syllabus_version
+
+    def get_syllabus_version(
+        self,
+        syllabus_version_id: int,
+    ) -> SyllabusVersion | None:
+        statement = (
+            select(SyllabusVersion)
+            .options(selectinload(SyllabusVersion.topic_links))
+            .where(SyllabusVersion.id == syllabus_version_id)
+        )
+        return self.session.scalar(statement)
+
+    def get_topic_occurrence_stats(
+        self,
+        exam_id: int,
+        topic_id: int,
+    ) -> TopicOccurrenceStats:
+        statement = (
+            select(
+                PreviousPaper.id,
+                PreviousPaper.year,
+                PreviousQuestion.id,
+            )
+            .outerjoin(
+                PreviousQuestion,
+                and_(
+                    PreviousQuestion.previous_paper_id == PreviousPaper.id,
+                    PreviousQuestion.topic_id == topic_id,
+                ),
+            )
+            .where(PreviousPaper.exam_id == exam_id)
+        )
+        rows = self.session.execute(statement).all()
+        paper_ids = {row[0] for row in rows}
+        matched_rows = [row for row in rows if row[2] is not None]
+        matched_paper_ids = {row[0] for row in matched_rows}
+        return TopicOccurrenceStats(
+            exam_paper_count=len(paper_ids),
+            matched_question_count=len(matched_rows),
+            matched_paper_count=len(matched_paper_ids),
+            matched_years=sorted({row[1] for row in matched_rows}),
+        )
 
     def add_previous_paper(self, previous_paper: PreviousPaper) -> PreviousPaper:
         self.session.add(previous_paper)

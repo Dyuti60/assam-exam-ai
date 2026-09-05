@@ -128,6 +128,35 @@ class PreviousQuestionResponse(PreviousQuestionCreate):
     created_at: datetime
 
 
+class TopicPriorityBand(StrEnum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+class TopicPriorityReason(StrEnum):
+    DIRECT_SYLLABUS_COVERAGE = "DIRECT_SYLLABUS_COVERAGE"
+    NOT_IN_SELECTED_SYLLABUS_VERSION = "NOT_IN_SELECTED_SYLLABUS_VERSION"
+    REPEATED_IN_PREVIOUS_PAPERS = "REPEATED_IN_PREVIOUS_PAPERS"
+    APPEARED_IN_PREVIOUS_PAPER = "APPEARED_IN_PREVIOUS_PAPER"
+    NO_RECORDED_PREVIOUS_OCCURRENCE = "NO_RECORDED_PREVIOUS_OCCURRENCE"
+    NO_PREVIOUS_PAPER_DATA = "NO_PREVIOUS_PAPER_DATA"
+
+
+class TopicPriorityResponse(BaseModel):
+    syllabus_version_id: int
+    exam_id: int
+    topic_id: int
+    syllabus_covered: bool
+    exam_paper_count: int
+    matched_question_count: int
+    matched_paper_count: int
+    matched_years: list[int]
+    priority_band: TopicPriorityBand
+    rule_version: str
+    reason_codes: list[TopicPriorityReason]
+
+
 class NoteDraftPreviewResponse(BaseModel):
     topic_id: int
     topic_name: str

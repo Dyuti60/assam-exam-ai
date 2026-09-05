@@ -369,3 +369,29 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Documentation-review commit | Review update series beginning `588999a37e5e4b5bc70792e83bf784c162b6db64` |
 | Review result | Approved |
 | Notes | Sourced previous-paper question occurrences retain Exam, Source, Paper, Topic, position, exact text, and optional location provenance. Historical occurrence is evidence, not a guarantee of future appearance. |
+
+## T-019 — Calculate an explainable Topic priority band
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-019) |
+| Scope | Read-only deterministic Topic priority from one syllabus version and same-Exam previous-paper occurrences |
+| Tests | Focused PostgreSQL/API tests, full suite, Ruff, Alembic check, and diff check required |
+| Implementation commit | Pending |
+| Documentation-review commit | Pending |
+| Review result | Pending |
+| Notes | This is an explainable priority aid only. It must not claim a percentage, likelihood, or appearance probability. |
+
+### T-019 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add the read-only `topic-priority-v1` endpoint and deterministic reason codes |
+| Tests | `uv run pytest tests/test_topic_priority_api.py -q`: 8 passed in 1.50s with one Starlette deprecation warning. `uv run pytest -q`: 90 passed in 4.76s with the same warning. |
+| Ruff | Changed-file Ruff check passed. |
+| Migration checks | No schema change or migration added. `uv run alembic check` passed with no new upgrade operations detected. |
+| Diff check | `git diff --check` passed. |
+| Notes | Counts only the selected version's Exam, separates question occurrences from distinct matched papers, returns sorted unique years, and performs no writes. No percentages, probabilities, configurable weights, AI, or generation behavior was added. |

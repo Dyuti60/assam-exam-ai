@@ -24,6 +24,7 @@ from app.schemas.knowledge import (
     SyllabusVersionCreate,
     SyllabusVersionResponse,
     TopicCreate,
+    TopicPriorityResponse,
     TopicResponse,
     VerificationCreate,
     VerificationResponse,
@@ -71,6 +72,21 @@ def create_syllabus_version(
         raise _not_found(error) from error
     except ResourceConflictError as error:
         raise _conflict(error) from error
+
+
+@router.get(
+    "/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority",
+    response_model=TopicPriorityResponse,
+)
+def get_topic_priority(
+    syllabus_version_id: int,
+    topic_id: int,
+    db: DatabaseSession,
+) -> TopicPriorityResponse:
+    try:
+        return KnowledgeService(db).get_topic_priority(syllabus_version_id, topic_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
 
 
 @router.post(
