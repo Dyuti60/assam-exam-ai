@@ -278,3 +278,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Review result | Approved / Changes requested / Blocked / Pending |
 | Notes | Assumptions, risks, and follow-up |
 ```
+
+
+## T-016 approval record
+
+| Field | Value |
+| --- | --- |
+| Recorded | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Original task entry | T-016 above |
+| Final status | Approved |
+| Implementation commit | `611fcb87b38b8506b1a509bea1c0abb4f581c5a7` |
+| Documentation-review commit | Review update series beginning `985219af5d60d0e3b8b52ba83632b75057d3d4db` |
+| Review result | Approved |
+| Notes | The approved-draft boundary filters only on NoteDraft approval, keeps stable ID order, and returns immutable stored snapshots. It is not public release. |
+
+## T-017 — Record sourced syllabus versions and Topics
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` (T-017) |
+| Scope | Establish exam and sourced syllabus-version data with ordered Topic mappings |
+| Tests | PostgreSQL/API integration tests and migration checks required |
+| Implementation commit | Pending |
+| Documentation-review commit | Pending |
+| Review result | Pending |
+| Notes | This establishes relevance inputs only; it must not claim or calculate exam probability. |
