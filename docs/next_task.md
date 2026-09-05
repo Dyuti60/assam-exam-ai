@@ -585,3 +585,78 @@ Update `docs/architecture.md` and `docs/workflow.md`. Append, without rewriting 
 Run focused tests, full suite, changed-file Ruff, fresh migration upgrade/downgrade/re-upgrade, `uv run alembic check`, `git diff --check`, and `git status --short`. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only the identity-only `ContentVersion` model/migration plus `POST /api/v1/content-versions` and `GET /api/v1/content-versions/{content_version_id}`. PostgreSQL enforces positive explicit versions, unique version identity per exact SyllabusVersion/Topic mapping, composite syllabus membership, and restrictive provenance. Historical versions coexist without overwrite or automatic numbering. No dependency, configuration, NoteDraft, canonical asset, question-bank, release, AI, or learner-personalization change was added; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-021 — Add a grounded QuestionBankItem candidate
+
+Read `AGENTS.md` and all project documents first. Inspect repository conventions before changing code.
+
+## Goal
+
+Add the first reusable platform-owned question candidate under a ContentVersion, retaining the exact ordered approved Claims that ground it.
+
+This task stores a manually supplied question stem and explanation. It does not yet create a complete MCQ, approved content, or learner-facing material.
+
+## Data model
+
+Add one migration and minimal models/tables:
+
+- `QuestionBankItem`:
+  - `id`;
+  - `content_version_id`;
+  - non-blank `question_text`;
+  - non-blank `explanation`;
+  - `difficulty`: `EASY`, `MEDIUM`, or `HARD`;
+  - `created_at`.
+- `question_bank_item_claims`:
+  - `question_bank_item_id`;
+  - `claim_id`;
+  - non-negative `position`.
+
+Database constraints must:
+
+- restrict deletion of the referenced ContentVersion and Claims;
+- reject blank question/explanation text;
+- restrict difficulty to the three allowed values;
+- allow each Claim only once per item;
+- enforce unique, non-negative positions within an item.
+
+## API
+
+Add exactly:
+
+- `POST /api/v1/question-bank-items`
+- `GET /api/v1/question-bank-items/{question_bank_item_id}`
+
+The create request contains `content_version_id`, question text, explanation, difficulty, and a non-empty ordered unique `claim_ids` list. Positions are derived from request order.
+
+Creation rules:
+
+- ContentVersion and every Claim must exist; missing resources use established 404 responses.
+- Every Claim must be explicitly `APPROVED`.
+- Every Claim must have the same `topic_id` as the ContentVersion.
+- An unapproved or wrong-Topic Claim returns a stable 409.
+- Invalid difficulty, blank text, empty/duplicate/non-positive Claim IDs return 422.
+- Item and Claim links commit atomically with no partial rows.
+
+Retrieval returns stored fields and Claim IDs in persisted position order. Missing item returns the established 404. Do not re-evaluate current Claim approval during retrieval; it is a stored provenance snapshot.
+
+Use route → schema → service → repository layering and eager loading where appropriate.
+
+## Boundaries
+
+- `PreviousQuestion` remains sourced history and must not be merged with or converted into QuestionBankItem.
+- QuestionBankItem is an internal unreviewed candidate. It is not canonical-approved or learner-ready.
+- Do not add options, correct answers, review/approval fields, release state, AI generation, prompt/model metadata, NoteDraft binding, lists/search, users, personalization, mocks, payments, or PDFs.
+- Do not add dependencies, secrets, environment variables, or Docker services.
+- Do not edit prior migrations or change `topic-priority-v1`.
+
+## Verification
+
+Add focused PostgreSQL/API tests for successful atomic creation/retrieval, ordered Claim provenance, missing resources, empty/duplicate Claim IDs, invalid/blank fields, DRAFT/REJECTED Claims, wrong-Topic Claims, exclusion of partial rows, database constraints, deletion restrictions, and stored-snapshot retrieval after a Claim approval change.
+
+Run the migration upgrade/downgrade/re-upgrade cycle, focused tests, full suite, changed-file Ruff, `uv run alembic check`, `git diff --check`, and `git status --short`.
+
+Update `docs/architecture.md` and `docs/workflow.md`. Append T-021 records without rewriting history in `docs/task_log.md` and `docs/next_task.md`. Do not commit or push.
