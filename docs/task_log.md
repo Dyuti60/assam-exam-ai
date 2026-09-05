@@ -436,3 +436,30 @@ This is an append-only task register. Add new entries without deleting or rewrit
 | Notes | Composite membership, positive versions, uniqueness, and restricted deletion are database-enforced. Creation is atomic and explicit; historical versions are retained. No dependencies, configuration, NoteDraft binding, content, release lifecycle, AI, or personalization was added. |
 
 T-020 clarification (2026-09-05 Asia/Kolkata, UTC+05:30): “immutable” in the implementation record means that the current API exposes create and read operations with no update endpoint. Database-level prevention of direct ContentVersion updates or deletion is not implemented; the database guarantees are positive version, unique mapping/version identity, composite syllabus membership, and restricted deletion of the referenced syllabus-topic mapping.
+
+
+## T-020 approval record
+
+| Field | Value |
+| --- | --- |
+| Recorded | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Original task entry | T-020 above |
+| Final status | Approved |
+| Implementation commit | `c5d2010da24731387162020accc9030d6fcca01e` |
+| Documentation-review commit | Review update series beginning `62a584f776eed7ab57119dce0d67ed2305169dc7` |
+| Review result | Approved |
+| Notes | ContentVersion now provides create/read-only retained identity for an exact syllabus/Topic mapping. PostgreSQL enforces membership, positive version, scoped uniqueness, and referenced-mapping deletion restriction. No content asset or review lifecycle was added. |
+
+## T-021 — Add a grounded QuestionBankItem candidate
+
+| Field | Value |
+| --- | --- |
+| Issued | 2026-09-05 Asia/Kolkata (UTC+05:30) |
+| Status | Ready for VS Code Codex |
+| Prompt source | `docs/next_task.md` T-021 at `601966a7fd5b39577944b9cb0fbbfac6a82b2e93` |
+| Scope | Store a reusable internal question candidate with exact ordered approved-Claim provenance under ContentVersion |
+| Tests | Focused PostgreSQL/API tests, migration cycle, full suite, Ruff, Alembic check, and diff check required |
+| Implementation commit | Pending |
+| Documentation-review commit | Pending |
+| Review result | Pending |
+| Notes | This is not yet a complete MCQ or approved content. Options, correct answer, review, AI generation, and learner delivery remain deferred. |
