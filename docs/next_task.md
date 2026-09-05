@@ -500,3 +500,86 @@ Requirements:
 Update `docs/architecture.md`, `docs/workflow.md`, and append-only records in `docs/task_log.md` and `docs/next_task.md`. Run focused tests, full suite, changed-file Ruff, `uv run alembic check`, and `git diff --check`. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority`. The read-only `topic-priority-v1` rule combines the selected version's direct Topic coverage with question occurrences from PreviousPapers belonging to that Exam, counting questions and distinct papers separately and returning sorted unique years plus deterministic reasons. It provides an explainable `HIGH`/`MEDIUM`/`LOW` aid, never a percentage or appearance probability. No migration or unrelated feature was added; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-020 — Add canonical ContentVersion identity
+
+Read `AGENTS.md` and all project documents first. Inspect the current repository before changing code.
+
+## Goal
+
+Add the smallest platform-owned version identity needed before canonical notes and question-bank items are stored.
+
+A ContentVersion represents one reusable canonical-content version for one exact:
+
+`SyllabusVersion + Topic`
+
+It contains identity only. It is not content, approval, publication, AI generation, or learner personalization.
+
+## Requirements
+
+Add one migration and a minimal `ContentVersion` model/table with only:
+
+- `id`;
+- `syllabus_version_id`;
+- `topic_id`;
+- positive integer `version`;
+- `created_at`.
+
+Database rules:
+
+- Enforce that `(syllabus_version_id, topic_id)` exists in `syllabus_version_topics` using a composite foreign key where supported by the current PostgreSQL/SQLAlchemy model.
+- Use provenance-safe `ON DELETE RESTRICT`.
+- Enforce `version > 0`.
+- Enforce unique `(syllabus_version_id, topic_id, version)`.
+- Historical versions must be retained; never overwrite or automatically calculate the next version.
+
+Add exactly two endpoints:
+
+- `POST /api/v1/content-versions`
+- `GET /api/v1/content-versions/{content_version_id}`
+
+The create request/response contains only the ContentVersion fields appropriate to input/output.
+
+Behavior:
+
+- missing SyllabusVersion → established 404;
+- missing Topic → established 404;
+- Topic not mapped to the selected SyllabusVersion → stable 409 with a clear detail;
+- duplicate version → stable 409;
+- non-positive version → 422;
+- creation is atomic and PostgreSQL remains the concurrency-safe authority;
+- retrieval returns the stored identity only; missing ContentVersion → established 404.
+
+Use the existing route → schema → service → repository layering. Register the model for Alembic metadata.
+
+## Important boundaries
+
+- Do not modify NoteDraft or bind it to ContentVersion in T-020.
+- Do not add version-history listing, release/superseding logic, approval fields, content bodies, Notes, QuestionBankItem, answer/options, user tables, personalization, AI/LLMs, prompts, ingestion, embeddings, payments, or PDFs.
+- Do not modify `topic-priority-v1`.
+- Do not add dependencies, environment variables, secrets, or Docker services; report that none were required.
+- Do not edit prior migrations.
+
+## Tests and documentation
+
+Add focused PostgreSQL/API tests for:
+
+- successful creation and retrieval;
+- versions 1 and 2 for the same mapping;
+- version 1 under different syllabus versions;
+- missing SyllabusVersion, Topic, and ContentVersion;
+- Topic outside the selected syllabus;
+- non-positive version;
+- duplicate conflict;
+- database uniqueness, positive-version, composite-membership, and deletion-restriction constraints;
+- failed creation leaving no partial row;
+- migration upgrade, downgrade, and re-upgrade.
+
+Preserve all T-001 through T-019 behavior.
+
+Update `docs/architecture.md` and `docs/workflow.md`. Append, without rewriting history, the T-020 task/implementation records in `docs/task_log.md` and the implementation note in `docs/next_task.md`. Update `AGENTS.md` only if the canonical ownership rule is missing; do not duplicate it.
+
+Run focused tests, full suite, changed-file Ruff, fresh migration upgrade/downgrade/re-upgrade, `uv run alembic check`, `git diff --check`, and `git status --short`. Do not commit or push.
