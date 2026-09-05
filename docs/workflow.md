@@ -745,3 +745,9 @@ flowchart TD
 
 - Reviewed pushed commit `c7d7b9f18d68c9da1aeea5747b5925bf5922ead8`: previous papers cite their Exam and Source, and each historical question retains its Paper, Topic, position, exact text, and optional source location.
 - The records support future frequency-based reasons but do not themselves generate content or predict an exam.
+
+
+### T-019 review outcome
+
+- Reviewed pushed commit `ff326dc5334dfc41ec298d10551f8c5801ae21b1`: the endpoint applies the exact fixed v1 rule, separates question and distinct-paper counts, excludes other Exams, returns deterministic reasons, and performs no writes.
+- The band is an explainable preparation priority. It is not a percentage, calibrated likelihood, or prediction of exam appearance.
