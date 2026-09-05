@@ -704,3 +704,9 @@ flowchart TD
 
 - Reviewed pushed commit `e1aea55991671679d1666f4e472a6ad7425310df`: Exam identity, sourced SyllabusVersion records, and ordered Topic mappings are protected by database constraints and created atomically.
 - This flow records official syllabus coverage only. It does not calculate relevance, frequency, likelihood, or exam probability.
+
+
+### T-018 review outcome
+
+- Reviewed pushed commit `c7d7b9f18d68c9da1aeea5747b5925bf5922ead8`: previous papers cite their Exam and Source, and each historical question retains its Paper, Topic, position, exact text, and optional source location.
+- The records support future frequency-based reasons but do not themselves generate content or predict an exam.
