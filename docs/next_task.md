@@ -422,3 +422,26 @@ Build the first data foundation for exam-relevance assessment. This task records
 Update all four documents and append an implementation note here. Run relevant tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only unique Exam identity plus sourced, labeled SyllabusVersion records and non-empty position-ordered Topic mappings through `POST /api/v1/exams` and `POST /api/v1/syllabus-versions`. Migration `f6b3c9a2d741` uses database uniqueness/position constraints and deletion restrictions to preserve syllabus provenance. Missing references remain atomic 404s, conflicts return stable 409s, and invalid Topic lists return 422. No actual syllabus data, relevance or probability calculation, past-paper data, or content feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-018 — Record sourced previous-paper question occurrences
+
+Read `AGENTS.md` and all project documents first.
+
+Add the smallest historical-evidence foundation needed for future exam-priority bands. Record what appeared in a sourced previous paper; do not calculate relevance or probability.
+
+- Add one migration and minimal models:
+  - `PreviousPaper`: id, `exam_id`, `source_id`, year, label, created_at; label is unique per Exam/year.
+  - `PreviousQuestion`: id, `previous_paper_id`, `topic_id`, non-negative position, question text, optional source location reference, created_at.
+- A paper must cite an existing Source. Each recorded question must belong to one paper and one existing Topic. Position must be unique within a paper.
+- Protect referenced Exam, Source, Topic, PreviousPaper, and PreviousQuestion provenance with appropriate PostgreSQL constraints/deletion restrictions.
+- Add `POST /api/v1/previous-papers`.
+- Add `POST /api/v1/previous-questions`.
+- Use the existing route → schema → service → repository layering. Missing references return the established 404 style; duplicate paper label/year or question position returns stable 409; invalid year, position, or blank text returns 422.
+- Add PostgreSQL/API tests for successful creation, exact source/location/topic linkage, conflicts, missing references without partial rows, database constraints, and migration upgrade/downgrade/re-upgrade.
+- Do not add answers or explanations, import/scraping, syllabus retrieval, multi-Topic tagging, relevance bands/scores/percentages, LLMs, generated MCQs, UI, auth, payments, or PDFs.
+- Do not edit prior migrations.
+
+Update `docs/architecture.md`, `docs/workflow.md`, and append-only records in `docs/task_log.md` and `docs/next_task.md`. Run focused tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
