@@ -660,3 +660,5 @@ Add focused PostgreSQL/API tests for successful atomic creation/retrieval, order
 Run the migration upgrade/downgrade/re-upgrade cycle, focused tests, full suite, changed-file Ruff, `uv run alembic check`, `git diff --check`, and `git status --short`.
 
 Update `docs/architecture.md` and `docs/workflow.md`. Append T-021 records without rewriting history in `docs/task_log.md` and `docs/next_task.md`. Do not commit or push.
+
+Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only the manually supplied internal `QuestionBankItem`, its position-ordered approved-Claim provenance, migration `e9a4c2f7b163`, and create/retrieve endpoints. PostgreSQL constrains non-whitespace text, difficulty, one Claim and one position per item, non-negative positions, and restricted deletion of referenced ContentVersions and Claims. Creation is atomic; retrieval returns the stored snapshot without re-evaluating Claim approval. No complete MCQ, review, release, AI, NoteDraft binding, dependency, configuration, or learner-facing feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

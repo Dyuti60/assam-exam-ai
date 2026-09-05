@@ -12,6 +12,8 @@ from app.models import (
     NoteDraftClaim,
     PreviousPaper,
     PreviousQuestion,
+    QuestionBankItem,
+    QuestionBankItemClaim,
     Source,
     SyllabusVersion,
     SyllabusVersionTopic,
@@ -37,6 +39,8 @@ from app.schemas.knowledge import (
     PreviousPaperResponse,
     PreviousQuestionCreate,
     PreviousQuestionResponse,
+    QuestionBankItemCreate,
+    QuestionBankItemResponse,
     SourceCreate,
     SyllabusVersionCreate,
     SyllabusVersionResponse,
@@ -282,6 +286,66 @@ class KnowledgeService:
             raise ResourceNotFoundError("ContentVersion", content_version_id)
         return ContentVersionResponse.model_validate(content_version)
 
+    def create_question_bank_item(
+        self,
+        request: QuestionBankItemCreate,
+    ) -> QuestionBankItemResponse:
+        content_version = self.repository.get_content_version(
+            request.content_version_id
+        )
+        if content_version is None:
+            raise ResourceNotFoundError(
+                "ContentVersion",
+                request.content_version_id,
+            )
+
+        claims_by_id = {
+            claim.id: claim
+            for claim in self.repository.get_claims_for_question_bank_item(
+                request.claim_ids
+            )
+        }
+        claims: list[Claim] = []
+        for claim_id in request.claim_ids:
+            claim = claims_by_id.get(claim_id)
+            if claim is None:
+                raise ResourceNotFoundError("Claim", claim_id)
+            if claim.approval_status != "APPROVED":
+                raise ResourceConflictError(f"Claim {claim_id} is not approved")
+            if claim.topic_id != content_version.topic_id:
+                raise ResourceConflictError(
+                    f"Claim {claim_id} does not match ContentVersion "
+                    f"Topic {content_version.topic_id}"
+                )
+            claims.append(claim)
+
+        question_bank_item = QuestionBankItem(
+            content_version_id=request.content_version_id,
+            question_text=request.question_text,
+            explanation=request.explanation,
+            difficulty=request.difficulty.value,
+            claim_links=[
+                QuestionBankItemClaim(claim=claim, position=position)
+                for position, claim in enumerate(claims)
+            ],
+        )
+        self._commit_question_bank_item(question_bank_item)
+        return self._question_bank_item_response(question_bank_item)
+
+    def get_question_bank_item(
+        self,
+        question_bank_item_id: int,
+    ) -> QuestionBankItemResponse:
+        question_bank_item = self.repository.get_question_bank_item(
+            question_bank_item_id
+        )
+        if question_bank_item is None:
+            raise ResourceNotFoundError(
+                "QuestionBankItem",
+                question_bank_item_id,
+            )
+        return self._question_bank_item_response(question_bank_item)
+
     def create_topic(self, request: TopicCreate) -> Topic:
         topic = Topic(**request.model_dump())
         try:
@@ -508,6 +572,7 @@ class KnowledgeService:
             | Claim
             | Verification
             | NoteDraft
+            | QuestionBankItem
         ),
     ):
         try:
@@ -520,6 +585,17 @@ class KnowledgeService:
     def _commit_note_draft(self, note_draft: NoteDraft) -> None:
         try:
             self.repository.add_note_draft(note_draft)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def _commit_question_bank_item(
+        self,
+        question_bank_item: QuestionBankItem,
+    ) -> None:
+        try:
+            self.repository.add_question_bank_item(question_bank_item)
             self.session.commit()
         except Exception:
             self.session.rollback()
@@ -558,6 +634,20 @@ class KnowledgeService:
             approval_status=note_draft.approval_status,
             approval_decided_at=note_draft.approval_decided_at,
             reviewer_note=note_draft.reviewer_note,
+        )
+
+    @staticmethod
+    def _question_bank_item_response(
+        question_bank_item: QuestionBankItem,
+    ) -> QuestionBankItemResponse:
+        return QuestionBankItemResponse(
+            id=question_bank_item.id,
+            content_version_id=question_bank_item.content_version_id,
+            question_text=question_bank_item.question_text,
+            explanation=question_bank_item.explanation,
+            difficulty=question_bank_item.difficulty,
+            created_at=question_bank_item.created_at,
+            claim_ids=[link.claim_id for link in question_bank_item.claim_links],
         )
 
     def _commit_verification(

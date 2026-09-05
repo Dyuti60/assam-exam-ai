@@ -463,3 +463,15 @@ T-020 clarification (2026-09-05 Asia/Kolkata, UTC+05:30): “immutable” in the
 | Documentation-review commit | Pending |
 | Review result | Pending |
 | Notes | This is not yet a complete MCQ or approved content. Options, correct answer, review, AI generation, and learner delivery remain deferred. |
+
+### T-021 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add a manually supplied internal QuestionBankItem with exact ordered approved-Claim provenance under ContentVersion |
+| Tests | `uv run pytest tests/test_question_bank_items_api.py -q`: 17 passed in 2.03s with one Starlette deprecation warning. `uv run pytest -q`: 119 passed in 4.72s with the same warning. |
+| Ruff | Changed-file Ruff check passed. |
+| Migration checks | Fresh upgrade through `e9a4c2f7b163`, downgrade to `c5e7a9d2b814`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
+| Diff check | `git diff --check` passed. |
+| Notes | Candidate creation validates all references and approved same-Topic grounding before atomically committing the item and ordered links. PostgreSQL enforces non-whitespace text, difficulty, Claim/position uniqueness, non-negative positions, and provenance deletion restrictions. Retrieval is a stored snapshot. No dependencies, configuration, complete MCQ, review, release, AI, NoteDraft binding, or learner-facing behavior was added. |

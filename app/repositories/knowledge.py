@@ -13,6 +13,7 @@ from app.models import (
     NoteDraft,
     PreviousPaper,
     PreviousQuestion,
+    QuestionBankItem,
     Source,
     SyllabusVersion,
     Topic,
@@ -110,6 +111,29 @@ class KnowledgeRepository:
 
     def get_content_version(self, content_version_id: int) -> ContentVersion | None:
         return self.session.get(ContentVersion, content_version_id)
+
+    def add_question_bank_item(
+        self,
+        question_bank_item: QuestionBankItem,
+    ) -> QuestionBankItem:
+        self.session.add(question_bank_item)
+        self.session.flush()
+        return question_bank_item
+
+    def get_question_bank_item(
+        self,
+        question_bank_item_id: int,
+    ) -> QuestionBankItem | None:
+        statement = (
+            select(QuestionBankItem)
+            .options(selectinload(QuestionBankItem.claim_links))
+            .where(QuestionBankItem.id == question_bank_item_id)
+        )
+        return self.session.scalar(statement)
+
+    def get_claims_for_question_bank_item(self, claim_ids: list[int]) -> list[Claim]:
+        statement = select(Claim).where(Claim.id.in_(claim_ids)).with_for_update()
+        return list(self.session.scalars(statement))
 
     def add_previous_paper(self, previous_paper: PreviousPaper) -> PreviousPaper:
         self.session.add(previous_paper)

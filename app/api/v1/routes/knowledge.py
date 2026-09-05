@@ -21,6 +21,8 @@ from app.schemas.knowledge import (
     PreviousPaperResponse,
     PreviousQuestionCreate,
     PreviousQuestionResponse,
+    QuestionBankItemCreate,
+    QuestionBankItemResponse,
     SourceCreate,
     SourceResponse,
     SyllabusVersionCreate,
@@ -118,6 +120,37 @@ def get_content_version(
 ) -> ContentVersionResponse:
     try:
         return KnowledgeService(db).get_content_version(content_version_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.post(
+    "/question-bank-items",
+    response_model=QuestionBankItemResponse,
+    status_code=201,
+)
+def create_question_bank_item(
+    request: QuestionBankItemCreate,
+    db: DatabaseSession,
+) -> QuestionBankItemResponse:
+    try:
+        return KnowledgeService(db).create_question_bank_item(request)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.get(
+    "/question-bank-items/{question_bank_item_id}",
+    response_model=QuestionBankItemResponse,
+)
+def get_question_bank_item(
+    question_bank_item_id: int,
+    db: DatabaseSession,
+) -> QuestionBankItemResponse:
+    try:
+        return KnowledgeService(db).get_question_bank_item(question_bank_item_id)
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
 

@@ -105,6 +105,40 @@ class ContentVersionResponse(ContentVersionCreate):
     created_at: datetime
 
 
+class QuestionDifficulty(StrEnum):
+    EASY = "EASY"
+    MEDIUM = "MEDIUM"
+    HARD = "HARD"
+
+
+class QuestionBankItemCreate(BaseModel):
+    content_version_id: int = Field(gt=0)
+    question_text: str = Field(min_length=1)
+    explanation: str = Field(min_length=1)
+    difficulty: QuestionDifficulty
+    claim_ids: list[int] = Field(min_length=1)
+
+    @field_validator("question_text", "explanation")
+    @classmethod
+    def validate_non_blank_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_claim_ids(self) -> Self:
+        if any(claim_id <= 0 for claim_id in self.claim_ids):
+            raise ValueError("claim_id values must be positive")
+        if len(self.claim_ids) != len(set(self.claim_ids)):
+            raise ValueError("claim_id values must be unique")
+        return self
+
+
+class QuestionBankItemResponse(QuestionBankItemCreate):
+    id: int
+    created_at: datetime
+
+
 class PreviousPaperCreate(BaseModel):
     exam_id: int = Field(gt=0)
     source_id: int = Field(gt=0)

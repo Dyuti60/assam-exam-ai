@@ -40,10 +40,10 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; nine migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, and canonical ContentVersion identity |
-| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; ten migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, and grounded question candidates |
+| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | One hundred two tests cover the foundation, ContentVersion identity/constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, approval boundaries, stored note-draft snapshots, and failure atomicity |
+| Tests | One hundred nineteen tests cover the foundation, ContentVersion and grounded question-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, approval boundaries, stored snapshots, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -74,6 +74,9 @@ erDiagram
     SYLLABUS_VERSION ||--|{ SYLLABUS_VERSION_TOPIC : "covers in position order"
     TOPIC ||--o{ SYLLABUS_VERSION_TOPIC : "mapped coverage"
     SYLLABUS_VERSION_TOPIC ||--o{ CONTENT_VERSION : "owns versions"
+    CONTENT_VERSION ||--o{ QUESTION_BANK_ITEM : "owns candidates"
+    QUESTION_BANK_ITEM ||--|{ QUESTION_BANK_ITEM_CLAIM : "grounded in position order"
+    CLAIM ||--o{ QUESTION_BANK_ITEM_CLAIM : "grounds candidate"
     EXAM ||--o{ PREVIOUS_PAPER : "has papers"
     SOURCE ||--o{ PREVIOUS_PAPER : "documents"
     PREVIOUS_PAPER ||--o{ PREVIOUS_QUESTION : "contains"
@@ -177,7 +180,9 @@ A PreviousPaper belongs to one Exam, cites one Source, records a positive year, 
 
 `GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority` combines one selected syllabus version with stored occurrences from that Exam only. The repository eagerly loads syllabus Topic links and uses one outer-join occurrence query, so counts do not use per-paper queries. The service counts question rows separately from distinct papers, returns sorted unique matched years, applies the fixed `topic-priority-v1` rule, and performs no writes. The result is an explainable priority aid, never an appearance probability. Configurable rules, calibration, percentages, likelihood prediction, and reviewer overrides remain planned.
 
-A ContentVersion is retained version identity for one exact SyllabusVersion/Topic mapping and an explicitly supplied positive version number. The current API supports creation and retrieval only; it has no update endpoint. PostgreSQL enforces positive versions, unique mapping/version identity, composite membership through `syllabus_version_topics`, and restricted deletion of the referenced syllabus-topic mapping. Database-level prevention of direct ContentVersion updates or deletion is not implemented. Historical versions can coexist, and the service does not calculate the next number. ContentVersion has no content body, approval, publication, NoteDraft binding, question bank, AI behavior, or learner personalization.
+A ContentVersion is retained version identity for one exact SyllabusVersion/Topic mapping and an explicitly supplied positive version number. The current API supports creation and retrieval only; it has no update endpoint. PostgreSQL enforces positive versions, unique mapping/version identity, composite membership through `syllabus_version_topics`, and restricted deletion of the referenced syllabus-topic mapping. Database-level prevention of direct ContentVersion updates or deletion is not implemented. Historical versions can coexist, and the service does not calculate the next number. ContentVersion has no content body, approval, publication, NoteDraft binding, AI behavior, or learner personalization; it can now own internal QuestionBankItem candidates.
+
+A QuestionBankItem is a manually supplied internal question candidate owned by one ContentVersion. It stores non-blank question and explanation text, constrained difficulty, and the exact approved same-Topic Claims used at creation in persisted position order. PostgreSQL restricts deletion of its ContentVersion and referenced Claims and enforces one Claim per item plus unique non-negative positions. Retrieval returns the stored snapshot without re-evaluating later Claim approval. It is not a complete MCQ, approved canonical content, or learner-ready material; options, answers, review, release, and AI generation are not implemented.
 
 ## Architectural decisions recorded by repository instructions
 
@@ -241,3 +246,5 @@ T-019 is approved at commit `ff326dc5334dfc41ec298d10551f8c5801ae21b1`. The read
 
 
 T-020 is approved at commit `c5d2010da24731387162020accc9030d6fcca01e`. The platform now has create/read-only ContentVersion identity for an exact SyllabusVersion/Topic mapping, with database-enforced membership, positive explicit versions, scoped uniqueness, and mapping-deletion restriction. It contains no educational asset or review state. T-021 will add the first manually created, Claim-grounded QuestionBankItem candidate under a ContentVersion.
+
+T-021 is ready for review. The platform can now create and retrieve one internal QuestionBankItem candidate with exact ordered approved-Claim provenance under a ContentVersion. The stored snapshot remains unreviewed and has no options, answer, release state, AI generation, or learner-facing behavior.

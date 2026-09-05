@@ -73,6 +73,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/syllabus-versions` | `create_syllabus_version()` | `app/api/v1/routes/knowledge.py` | Atomically stores a sourced syllabus version and ordered Topic mappings |
 | `POST /api/v1/content-versions` | `create_content_version()` | `app/api/v1/routes/knowledge.py` | Creates explicit canonical identity for one mapped SyllabusVersion/Topic |
 | `GET /api/v1/content-versions/{content_version_id}` | `get_content_version()` | `app/api/v1/routes/knowledge.py` | Retrieves stored ContentVersion identity only |
+| `POST /api/v1/question-bank-items` | `create_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Atomically stores an internal question candidate with ordered approved-Claim provenance |
+| `GET /api/v1/question-bank-items/{question_bank_item_id}` | `get_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Retrieves one stored question-candidate snapshot and Claim order |
 | `GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority` | `get_topic_priority()` | `app/api/v1/routes/knowledge.py` | Returns the read-only deterministic v1 Topic priority assessment |
 | `POST /api/v1/previous-papers` | `create_previous_paper()` | `app/api/v1/routes/knowledge.py` | Creates a sourced previous paper with stable per-Exam/year label conflicts |
 | `POST /api/v1/previous-questions` | `create_previous_question()` | `app/api/v1/routes/knowledge.py` | Records one exact Topic-linked question occurrence at a paper position |
@@ -111,6 +113,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_exam()` | `app/api/v1/routes/knowledge.py` | Delegates Exam creation and maps unique conflicts to 409 |
 | `create_syllabus_version()` | `app/api/v1/routes/knowledge.py` | Delegates syllabus creation and maps missing references/conflicts to 404/409 |
 | `create_content_version()` / `get_content_version()` | `app/api/v1/routes/knowledge.py` | Delegate identity creation/retrieval and map established 404/409 errors |
+| `create_question_bank_item()` / `get_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Delegate candidate creation/retrieval and map established 404/409 errors |
 | `get_topic_priority()` | `app/api/v1/routes/knowledge.py` | Delegates assessment and maps a missing SyllabusVersion or Topic to 404 |
 | `create_previous_paper()` | `app/api/v1/routes/knowledge.py` | Delegates previous-paper creation and maps missing references/conflicts to 404/409 |
 | `create_previous_question()` | `app/api/v1/routes/knowledge.py` | Delegates question-occurrence creation and maps missing references/conflicts to 404/409 |
@@ -141,6 +144,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `SyllabusVersion` | `app/models/syllabus_version.py` | Stores one Exam's labeled syllabus version with its documenting Source |
 | `SyllabusVersionTopic` | `app/models/syllabus_version_topic.py` | Stores one protected Topic mapping per version in constrained position order |
 | `ContentVersion` | `app/models/content_version.py` | Stores retained version identity for exactly one syllabus/Topic mapping; the API has no update endpoint |
+| `QuestionBankItem` | `app/models/question_bank_item.py` | Stores one internal question candidate under a ContentVersion with constrained text and difficulty |
+| `QuestionBankItemClaim` | `app/models/question_bank_item_claim.py` | Stores exact Claim grounding in constrained persisted position order |
 | `PreviousPaper` | `app/models/previous_paper.py` | Stores one sourced Exam paper with positive year and per-Exam/year unique label |
 | `PreviousQuestion` | `app/models/previous_question.py` | Stores exact non-blank question text, Topic, location reference, and constrained paper position |
 | `Topic` | `app/models/topic.py` | Stores a unique Topic name and creation time, with typed traversal to classified Claims |
@@ -164,6 +169,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `SyllabusVersionCreate` | `app/schemas/knowledge.py` | Validates positive references and a non-empty duplicate-free ordered Topic ID list |
 | `SyllabusVersionResponse` | `app/schemas/knowledge.py` | Serializes persisted syllabus identity, Source, label, time, and stored Topic order |
 | `ContentVersionCreate` / `ContentVersionResponse` | `app/schemas/knowledge.py` | Validate positive explicit versions and serialize stored identity |
+| `QuestionDifficulty` | `app/schemas/knowledge.py` | Restricts candidate difficulty to EASY, MEDIUM, or HARD |
+| `QuestionBankItemCreate` / `QuestionBankItemResponse` | `app/schemas/knowledge.py` | Validate candidate text and ordered unique positive Claim IDs, then serialize the stored snapshot |
 | `TopicPriorityBand` / `TopicPriorityReason` / `TopicPriorityResponse` | `app/schemas/knowledge.py` | Define the fixed bands, deterministic reason codes, and assessment response |
 | `PreviousPaperCreate` / `PreviousPaperResponse` | `app/schemas/knowledge.py` | Validate and serialize sourced previous-paper identity |
 | `PreviousQuestionCreate` / `PreviousQuestionResponse` | `app/schemas/knowledge.py` | Validate and serialize one Topic-linked historical question occurrence |
@@ -190,6 +197,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `get_syllabus_version()` | `app/repositories/knowledge.py` | Retrieves one version with Topic links eagerly loaded |
 | `get_topic_occurrence_stats()` | `app/repositories/knowledge.py` | Uses one Exam-scoped outer join to count papers, questions, matched papers, and years |
 | `add_content_version()` / `get_content_version()` | `app/repositories/knowledge.py` | Persist or retrieve a ContentVersion identity |
+| `add_question_bank_item()` / `get_question_bank_item()` | `app/repositories/knowledge.py` | Flush a candidate with links or eagerly retrieve its ordered Claim provenance |
+| `get_claims_for_question_bank_item()` | `app/repositories/knowledge.py` | Loads all requested Claims in one locking query so eligibility stays stable through creation |
 | `add_previous_paper()` / `get_previous_paper()` | `app/repositories/knowledge.py` | Persist or retrieve sourced previous papers |
 | `add_previous_question()` | `app/repositories/knowledge.py` | Flushes an exact historical question occurrence in the caller's transaction |
 | `add_topic()` / `get_topic()` | `app/repositories/knowledge.py` | Persist or retrieve Topics |
@@ -214,6 +223,9 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_syllabus_version()` | `app/services/knowledge.py` | Validates all references, constructs ordered mappings, and commits the sourced version atomically |
 | `get_topic_priority()` | `app/services/knowledge.py` | Applies the exact read-only `topic-priority-v1` band and reason rules |
 | `create_content_version()` / `get_content_version()` | `app/services/knowledge.py` | Enforce reference/membership behavior, translate named constraints, and return identity |
+| `create_question_bank_item()` / `get_question_bank_item()` | `app/services/knowledge.py` | Enforce approved same-Topic grounding, own atomic creation, and return stored snapshots |
+| `_commit_question_bank_item()` | `app/services/knowledge.py` | Commits candidate and Claim links together and rolls back both on failure |
+| `_question_bank_item_response()` | `app/services/knowledge.py` | Serializes persisted Claim IDs in relationship position order without re-evaluation |
 | `create_previous_paper()` | `app/services/knowledge.py` | Validates Exam/Source, commits a paper, and translates its named uniqueness conflict |
 | `create_previous_question()` | `app/services/knowledge.py` | Validates Paper/Topic, commits an occurrence, and translates its named position conflict |
 | `create_topic()` | `app/services/knowledge.py` | Creates a Topic; rolls back database uniqueness conflicts and raises a domain conflict error |
@@ -263,6 +275,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `downgrade()` | `migrations/versions/a8c4e1d7f620_add_previous_paper_questions.py` | Removes previous questions and papers in dependency order |
 | `upgrade()` | `migrations/versions/c5e7a9d2b814_add_content_versions.py` | Creates constrained canonical ContentVersion identities |
 | `downgrade()` | `migrations/versions/c5e7a9d2b814_add_content_versions.py` | Removes the ContentVersion table |
+| `upgrade()` | `migrations/versions/e9a4c2f7b163_add_question_bank_items.py` | Creates constrained question candidates and ordered Claim provenance |
+| `downgrade()` | `migrations/versions/e9a4c2f7b163_add_question_bank_items.py` | Removes candidate links and items in dependency order |
 
 ## Tests
 
@@ -333,6 +347,16 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_duplicate_content_version_returns_stable_conflict()` | `tests/test_content_versions_api.py` | Confirms named database uniqueness becomes stable 409 | Passed for T-020 |
 | `test_content_version_database_constraints()` | `tests/test_content_versions_api.py` | Confirms PostgreSQL uniqueness, positivity, and composite membership | Passed for T-020 |
 | `test_content_version_restricts_syllabus_topic_mapping_deletion()` | `tests/test_content_versions_api.py` | Confirms referenced syllabus/Topic mapping deletion is restricted | Passed for T-020 |
+| `test_create_and_retrieve_item_preserves_ordered_claim_provenance()` | `tests/test_question_bank_items_api.py` | Confirms exact candidate creation/retrieval and persisted Claim order | Passed for T-021 |
+| `test_missing_content_version_returns_404_without_partial_rows()` | `tests/test_question_bank_items_api.py` | Confirms missing ContentVersion returns 404 without persistence | Passed for T-021 |
+| `test_missing_claim_returns_404_atomically()` | `tests/test_question_bank_items_api.py` | Confirms a later missing Claim leaves no item or association rows | Passed for T-021 |
+| `test_get_missing_item_returns_established_404()` | `tests/test_question_bank_items_api.py` | Confirms missing QuestionBankItem uses the established 404 detail | Passed for T-021 |
+| `test_unapproved_claim_returns_stable_conflict()` | `tests/test_question_bank_items_api.py` | Confirms DRAFT and REJECTED Claims return stable 409 | Passed twice for T-021 |
+| `test_wrong_topic_claim_returns_stable_conflict()` | `tests/test_question_bank_items_api.py` | Confirms a Claim outside the ContentVersion Topic returns stable 409 | Passed for T-021 |
+| `test_invalid_item_input_returns_422()` | `tests/test_question_bank_items_api.py` | Confirms empty/duplicate/non-positive Claim IDs, blank text, and invalid difficulty return 422 | Passed seven times for T-021 |
+| `test_database_constraints_reject_invalid_item_and_link_rows()` | `tests/test_question_bank_items_api.py` | Confirms PostgreSQL text, difficulty, position, per-item order, and per-item Claim constraints | Passed for T-021 |
+| `test_item_provenance_restricts_content_version_and_claim_deletion()` | `tests/test_question_bank_items_api.py` | Confirms referenced ContentVersion and Claims cannot be deleted | Passed for T-021 |
+| `test_retrieval_is_stored_snapshot_after_claim_approval_changes()` | `tests/test_question_bank_items_api.py` | Confirms retrieval preserves stored provenance after Claim approval changes | Passed for T-021 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -689,6 +713,29 @@ flowchart LR
 - Fresh upgrade through `c5e7a9d2b814`, downgrade to `a8c4e1d7f620`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected.
 - Changed-file Ruff and `git diff --check` passed.
 - No dependency, environment, secret, Docker-service, NoteDraft, priority-rule, release, AI, or learner-personalization change was required.
+
+### T-021 Grounded QuestionBankItem candidate
+
+```mermaid
+flowchart LR
+    REQUEST["POST /question-bank-items"] --> CONTENT_VERSION["Load ContentVersion"]
+    CONTENT_VERSION --> CLAIMS["Load all requested Claims"]
+    CLAIMS --> VALIDATE["Require APPROVED and matching Topic"]
+    VALIDATE --> ITEM["QuestionBankItem"]
+    VALIDATE --> LINKS["Ordered QuestionBankItemClaim links"]
+    ITEM --> COMMIT["One transaction"]
+    LINKS --> COMMIT
+    COMMIT --> RESPONSE["Stored snapshot response"]
+```
+
+- Positions are derived from request order; the request rejects empty, duplicate, and non-positive Claim IDs.
+- PostgreSQL enforces non-whitespace text, allowed difficulty, one Claim per item, unique non-negative positions, and restricted deletion of referenced ContentVersions and Claims.
+- Creation locks and validates every requested Claim in one query before persistence, then commits the item and all links together; any failure rolls back the transaction.
+- Retrieval eagerly loads all Claim links and returns stored fields and persisted Claim order without reconsidering current approval.
+- `uv run pytest tests/test_question_bank_items_api.py -q`: 17 passed in 2.03s with one Starlette deprecation warning.
+- `uv run pytest -q`: 119 passed in 4.72s with the same warning.
+- Fresh upgrade through `e9a4c2f7b163`, downgrade to `c5e7a9d2b814`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected.
+- No dependency, configuration, option/answer, review, release, AI, NoteDraft-binding, or learner-facing feature was added.
 
 ## Template for future pushed changes
 
