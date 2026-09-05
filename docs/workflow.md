@@ -656,3 +656,9 @@ flowchart TD
 ### T-016 review outcome
 
 - Reviewed pushed commit `611fcb87b38b8506b1a509bea1c0abb4f581c5a7`: only each NoteDraft's own explicit APPROVED state controls the result. It returns immutable stored snapshots and does not make reviewed content public.
+
+
+### T-017 review outcome
+
+- Reviewed pushed commit `e1aea55991671679d1666f4e472a6ad7425310df`: Exam identity, sourced SyllabusVersion records, and ordered Topic mappings are protected by database constraints and created atomically.
+- This flow records official syllabus coverage only. It does not calculate relevance, frequency, likelihood, or exam probability.
