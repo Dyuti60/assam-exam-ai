@@ -447,3 +447,54 @@ Add the smallest historical-evidence foundation needed for future exam-priority 
 Update `docs/architecture.md`, `docs/workflow.md`, and append-only records in `docs/task_log.md` and `docs/next_task.md`. Run focused tests, full suite, changed-file Ruff, migration upgrade/downgrade/checks, and `git diff --check`. Do not commit or push.
 
 Implementation note (2026-09-05 Asia/Kolkata, UTC+05:30): added only sourced `PreviousPaper` records and exact Topic-linked `PreviousQuestion` occurrences through `POST /api/v1/previous-papers` and `POST /api/v1/previous-questions`. Migration `a8c4e1d7f620` enforces positive years, non-negative per-paper unique positions, non-blank question text, per-Exam/year paper-label uniqueness, and restrictive provenance foreign keys. Missing references remain atomic 404s, named uniqueness conflicts return stable 409s, and invalid inputs return 422. No answers, explanations, ingestion, relevance/probability calculation, or generated questions were added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-019 — Calculate an explainable Topic priority band
+
+Read `AGENTS.md` and all project documents first.
+
+Add one read-only deterministic assessment that combines a selected sourced syllabus version with stored previous-paper occurrences. It is an exam-priority aid, never an appearance probability.
+
+Add exactly one endpoint:
+
+`GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority`
+
+Return:
+
+- `syllabus_version_id`, `exam_id`, and `topic_id`;
+- `syllabus_covered`;
+- `exam_paper_count`: all stored PreviousPapers for that Exam;
+- `matched_question_count`, `matched_paper_count`, and sorted unique `matched_years`;
+- `priority_band`: `HIGH`, `MEDIUM`, or `LOW`;
+- `rule_version`: exactly `topic-priority-v1`;
+- deterministic reason codes.
+
+Use this exact v1 rule:
+
+1. Topic absent from the selected SyllabusVersion → `LOW`.
+2. Topic present and found in at least two distinct PreviousPapers for the same Exam → `HIGH`.
+3. Topic present with fewer than two matched papers → `MEDIUM`.
+
+Reason codes must distinguish:
+
+- `DIRECT_SYLLABUS_COVERAGE`;
+- `NOT_IN_SELECTED_SYLLABUS_VERSION`;
+- `REPEATED_IN_PREVIOUS_PAPERS`;
+- `APPEARED_IN_PREVIOUS_PAPER`;
+- `NO_RECORDED_PREVIOUS_OCCURRENCE`; and
+- `NO_PREVIOUS_PAPER_DATA`.
+
+Requirements:
+
+- Count only PreviousPapers belonging to the selected SyllabusVersion's Exam.
+- Count distinct matched papers separately from question occurrences.
+- Return the established 404 for a missing SyllabusVersion or Topic.
+- Keep route → schema → service → repository layering and avoid N+1 queries.
+- The endpoint must perform no writes.
+- Add focused PostgreSQL/API tests for every rule branch, no-paper versus no-match reasons, distinct-paper counting, multiple questions in one paper, other-Exam exclusion, sorted unique years, missing resources, exact response, and no mutation.
+- No migration unless genuinely required.
+- Do not add percentages, probabilities, configurable weights, AI/LLMs, generated MCQs, ingestion, UI, auth, payments, or PDFs.
+
+Update `docs/architecture.md`, `docs/workflow.md`, and append-only records in `docs/task_log.md` and `docs/next_task.md`. Run focused tests, full suite, changed-file Ruff, `uv run alembic check`, and `git diff --check`. Do not commit or push.
