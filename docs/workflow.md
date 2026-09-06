@@ -986,3 +986,15 @@ flowchart TD
 - Responses reuse stored `QuestionBankItemResponse` snapshots, return `[]` when no item qualifies, do not re-evaluate Claim, NoteDraft, or Verification state, and perform no writes.
 - Developer-recorded validation: `36 passed, 1 warning` focused; `138 passed, 1 warning` full suite; changed-file Ruff, fresh database upgrade, Alembic check, and diff check passed. GitHub exposes no status contexts or workflow runs for the commit, so no CI pass is claimed.
 - No model, schema, migration, dependency, configuration, Docker, release, publication, learner, generation, personalization, mock, or T-025 implementation was included.
+
+
+---
+
+## T-025 independent review outcome
+
+- **APPROVED** after inspection of implementation commit `84e0b20fd81d9bf7b241a93686811db0ccd3e8dc` against the issued T-025 prompt and its parent `91a9ecaa861a0ceba8d557bb1995f6d636bfcd8f`.
+- The migration adds the constrained UNRELEASED/RELEASED/WITHDRAWN lifecycle after `a6d1e8c3f247`, defaults existing candidates without inferred release, and removes only T-025 fields and constraints on downgrade.
+- The release endpoint requires a complete, currently APPROVED stored candidate; withdrawal preserves the original release time; invalid eligibility and transitions return stable 409 without mutation.
+- Approval and release decisions lock the candidate row. Release does not re-evaluate current Claim, NoteDraft, or Verification state and changes no stored content, provenance, answer, or prior review metadata.
+- `GET /api/v1/question-bank-items/approved` remains an approval-only boundary. No released collection, public/learner delivery, generation, personalization, dependency, configuration, Docker, or T-026 implementation was included.
+- Developer-recorded validation: `52 passed, 1 warning` focused; `154 passed, 1 warning` full suite; changed-file Ruff, fresh upgrade, downgrade/re-upgrade, seeded-row preservation, Alembic check, and diff check passed. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
