@@ -259,4 +259,6 @@ T-024 is approved at commit `6dc8e9497fe55870173c584717e3ab78563baf3f`. The syst
 
 T-025 is approved at commit `84e0b20fd81d9bf7b241a93686811db0ccd3e8dc`. QuestionBankItems now have a constrained UNRELEASED/RELEASED/WITHDRAWN lifecycle with explicit eligibility, retained release and withdrawal timestamps, and a review lock while released. Release remains separate from publication transport and learner-facing delivery.
 
-T-026 is ready for review. The new read-only internal boundary returns only currently RELEASED QuestionBankItem snapshots in stable ID order, with ordered Claim and option provenance eagerly loaded. It performs no writes or regeneration and adds no public or learner-facing delivery.
+T-026 is approved at commit `d5c3b484b8268ae745da491617c56c02a1be3853`. The read-only internal boundary returns only currently RELEASED QuestionBankItem snapshots in stable ID order, with ordered Claim and option provenance eagerly loaded. It performs no writes or regeneration and adds no public or learner-facing delivery.
+
+T-027 is issued to bind every newly created NoteDraft to an exact ContentVersion while preserving existing legacy drafts without inferred version ownership. This establishes versioned canonical-note identity before any NoteDraft release or learner boundary.
