@@ -262,4 +262,6 @@ T-025 is approved at commit `84e0b20fd81d9bf7b241a93686811db0ccd3e8dc`. Question
 
 T-026 is approved at commit `d5c3b484b8268ae745da491617c56c02a1be3853`. The read-only internal boundary returns only currently RELEASED QuestionBankItem snapshots in stable ID order, with ordered Claim and option provenance eagerly loaded. It performs no writes or regeneration and adds no public or learner-facing delivery.
 
-T-027 is ready for review. Every newly persisted NoteDraft now records one exact same-Topic ContentVersion; legacy drafts remain readable and reviewable with null ownership rather than inferred data. No NoteDraft release or learner boundary was added.
+T-027 is approved at commit `bcff4c54a04f6ec3cdcb094f71d64241e87a3622`. Every newly persisted NoteDraft records one exact same-Topic ContentVersion; legacy drafts remain readable and reviewable with null ownership rather than inferred data. This establishes versioned canonical-note identity without adding release or learner delivery.
+
+T-028 is issued to add a controlled NoteDraft release lifecycle. Release must remain independent from approval, require both the NoteDraft's own APPROVED state and non-null ContentVersion ownership, preserve stored Markdown and ordered Claim provenance, and add no released collection, publication transport, or learner access.
