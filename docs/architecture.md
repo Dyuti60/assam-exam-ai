@@ -257,4 +257,6 @@ T-023 is approved at commit `1e84907906579c08d7218771669730b9855778d6`. Question
 
 T-024 is approved at commit `6dc8e9497fe55870173c584717e3ab78563baf3f`. The system exposes only explicitly approved QuestionBankItem snapshots through a stable, read-only internal collection. It does not regenerate content, re-evaluate Claim approval, publish questions, or provide learner access. The next bounded increment is a controlled release lifecycle kept separate from candidate approval and learner delivery.
 
-T-025 is ready for review. QuestionBankItems now have a constrained UNRELEASED/RELEASED/WITHDRAWN lifecycle with explicit eligibility, retained release and withdrawal timestamps, and a review lock while released. The implementation adds no released-items collection, publication transport, or learner-facing delivery.
+T-025 is approved at commit `84e0b20fd81d9bf7b241a93686811db0ccd3e8dc`. QuestionBankItems now have a constrained UNRELEASED/RELEASED/WITHDRAWN lifecycle with explicit eligibility, retained release and withdrawal timestamps, and a review lock while released. Release remains separate from publication transport and learner-facing delivery.
+
+T-026 is issued to add only a read-only internal boundary for currently RELEASED QuestionBankItem snapshots. It must preserve stored content and provenance, exclude UNRELEASED and WITHDRAWN items, and add no public or learner-facing delivery.
