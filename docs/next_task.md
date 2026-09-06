@@ -869,3 +869,140 @@ Report:
 10. explicit confirmation: no commit, push, PR, self-approval, or T-023 work.
 
 Implementation note (2026-09-06 Asia/Kolkata, UTC+05:30): extended only the existing QuestionBankItem create/read contract with at least two ordered non-blank `options` and one `correct_option_position`. Migration `f2c8d4a6e915` adds ordered `QuestionBankOption` rows plus a nullable backward-compatible composite same-item correct-option reference. New item, Claim links, options, and answer commit atomically; retrieval returns the stored snapshot, while legacy T-021 rows remain readable with empty options and a null answer position. No review, release, AI, previous-paper conversion, NoteDraft binding, dependency, configuration, Docker, or learner-facing feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## T-022 review outcome
+
+- **APPROVED** after independent review of implementation commit `4dc87a82a1d8695a6316debad03d7f3af43e28e2` (`feat: add complete question bank item options`).
+- The implementation adds ordered non-blank `QuestionBankOption` records and a nullable, composite same-item correct-option reference. New API-created candidates require at least two options and one valid answer; migrated T-021 rows remain readable as legacy incomplete candidates.
+- The review confirmed route → schema → service → repository → PostgreSQL layering, atomic creation, ordered stored-snapshot retrieval, existing Claim-provenance behavior, PostgreSQL constraints/deletion semantics, migration parity, and retained scope boundaries.
+- Review evidence recorded by the implementation: `26 passed, 1 warning in 1.42s` focused; `128 passed, 1 warning in 4.88s` full suite; upgrade/downgrade/re-upgrade; `uv run alembic check`; changed-file Ruff; and `git diff --check`. GitHub exposes no separate CI status checks for this commit.
+
+---
+# T-023 — Add independent human review state to QuestionBankItem candidates
+
+Read `AGENTS.md` and all project documents first. Inspect the current repository and the approved T-021/T-022 implementation before changing code.
+
+Do **not** commit, push, create a PR, self-approve, or implement T-024.
+
+## Goal
+
+Add the smallest independent human-review state needed before a complete `QuestionBankItem` candidate can become eligible for a later approved-question read boundary.
+
+This task records a review decision only. It does not release, publish, deliver, or personalize a question.
+
+## Required model and database changes
+
+Add one new Alembic migration. Do not edit prior migrations.
+
+Extend `QuestionBankItem` with:
+
+- `approval_status`: `DRAFT`, `APPROVED`, or `REJECTED`;
+- `approval_decided_at`: nullable timezone-aware timestamp;
+- `reviewer_note`: nullable text.
+
+PostgreSQL must:
+
+- restrict `approval_status` to exactly the three allowed values;
+- make existing T-021/T-022 rows migrate to `DRAFT` with null decision fields;
+- preserve the existing `ContentVersion`, Claim, option, and correct-answer constraints unchanged.
+
+The migration must retain existing QuestionBankItem records and never infer approval.
+
+## API
+
+Add exactly one endpoint:
+
+`POST /api/v1/question-bank-items/{question_bank_item_id}/approval`
+
+Request:
+
+- `approval_status`: `DRAFT`, `APPROVED`, or `REJECTED`;
+- optional `reviewer_note`.
+
+Response: the existing complete `QuestionBankItemResponse`, including stored Claim IDs, options, correct-option position, and approval fields.
+
+Decision semantics:
+
+- `APPROVED` or `REJECTED`: store the supplied optional reviewer note and set the decision time to current UTC.
+- `DRAFT`: clear both `approval_decided_at` and `reviewer_note`.
+- missing QuestionBankItem: established 404 behavior.
+- approval does not modify QuestionBankItem text, explanation, difficulty, options, correct answer, Claim links, ContentVersion, or linked Claims.
+- approval must not re-evaluate current Claim approval; QuestionBankItem provenance is a stored snapshot.
+
+Eligibility rule:
+
+- an incomplete legacy T-021 QuestionBankItem (fewer than two stored options or no valid stored correct option) may remain `DRAFT` or be `REJECTED`, but an attempt to mark it `APPROVED` must return stable HTTP 409 and leave all fields unchanged.
+- a complete T-022 QuestionBankItem may be approved regardless of later changes to a linked Claim's current approval state.
+
+Use route → Pydantic schema → service → repository → PostgreSQL. Keep routes thin. Commit/rollback semantics must remain atomic.
+
+## Boundaries
+
+Do not add:
+
+- a list of approved QuestionBankItems;
+- release/publication/superseding state;
+- learner access, users, auth, attempts, mock assembly, analytics, or personalization;
+- reviewer identity, user accounts, review history, reviewer assignment, or edit workflow;
+- AI generation, providers, prompts, ingestion, RAG, embeddings;
+- NoteDraft changes;
+- PreviousQuestion conversion or probability semantics;
+- dependencies, secrets, environment variables, Docker services, or infrastructure changes.
+
+QuestionBankItem approval is distinct from Claim approval, NoteDraft approval, verification, release, and publication.
+
+## Required review of affected components
+
+Inspect and update only where necessary:
+
+- models and model registration;
+- Alembic migration;
+- schemas;
+- repository;
+- service;
+- knowledge routes;
+- focused API/database/migration tests and regression tests;
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append-only `docs/task_log.md` and `docs/next_task.md`.
+
+Inspect but leave unchanged unless genuinely needed:
+
+- `pyproject.toml`, `uv.lock`;
+- `.env.example`, `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+If unchanged, explicitly report each reviewed dependency/configuration/infrastructure/document decision.
+
+## Required tests
+
+Add focused tests for:
+
+- a complete T-022 candidate starting as `DRAFT`;
+- APPROVED and REJECTED decisions recording UTC time and optional note;
+- reset to DRAFT clearing decision time and note;
+- missing candidate 404;
+- approval not mutating stored question, options, correct answer, Claim links, or ContentVersion;
+- approval after a linked Claim later becomes DRAFT still preserving the QuestionBankItem stored snapshot;
+- legacy incomplete candidate rejected for APPROVED with stable 409 and no mutation;
+- complete candidate approval;
+- database status constraint;
+- migration upgrade, downgrade, and re-upgrade preserving existing records;
+- all T-021/T-022 regression tests.
+
+Run and report exact results for focused tests, the full suite, changed-file Ruff, fresh migration upgrade/downgrade/re-upgrade, `uv run alembic check`, `git diff --check`, and `git status --short`.
+
+## Documentation and handoff
+
+Update architecture/workflow only for implemented behavior. Append implementation notes without rewriting history in task_log/next_task. Do not state T-023 is approved.
+
+Leave the implementation in the working tree for independent review. Do not commit or push.
+
+## Final report
+
+Report files changed, data/migration design, API/error semantics, atomicity, test results, dependency/configuration/Docker/AGENTS/README decisions, documentation updates, git status, and explicit confirmation that no commit, push, PR, self-approval, or T-024 work occurred.
