@@ -255,4 +255,6 @@ T-022 is approved at commit `4dc87a82a1d8695a6316debad03d7f3af43e28e2`. New Ques
 
 T-023 is approved at commit `1e84907906579c08d7218771669730b9855778d6`. QuestionBankItems now have an independent human decision with DRAFT reset semantics and an approval guard for incomplete legacy candidates. This decision is separate from Claim and NoteDraft approval and does not release or publish a question. The next bounded increment is an internal read boundary for approved QuestionBankItem snapshots; it must not add release or learner delivery.
 
-T-024 is ready for review. The system now exposes only explicitly approved QuestionBankItem snapshots through a stable, read-only internal collection. It does not regenerate content, re-evaluate Claim approval, publish questions, or provide learner access.
+T-024 is approved at commit `6dc8e9497fe55870173c584717e3ab78563baf3f`. The system exposes only explicitly approved QuestionBankItem snapshots through a stable, read-only internal collection. It does not regenerate content, re-evaluate Claim approval, publish questions, or provide learner access. The next bounded increment is a controlled release lifecycle kept separate from candidate approval and learner delivery.
+
+T-025 is issued to add only that controlled QuestionBankItem release lifecycle. It must preserve approved stored snapshots, require explicit eligibility, retain release/withdrawal provenance, and add no public or learner-facing delivery.
