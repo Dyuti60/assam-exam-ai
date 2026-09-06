@@ -598,3 +598,26 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Migration checks | No model or database schema change was required. Existing migrations upgraded a fresh dedicated test database through `a6d1e8c3f247`; `uv run alembic check` reported `No new upgrade operations detected.` |
 | Diff check | `git diff --check` passed; only line-ending normalization warnings were emitted. |
 | Notes | The query filters exactly on QuestionBankItem APPROVED state, orders by ascending item ID, and select-in loads ordered Claim links and options. It returns stored snapshots without re-evaluating Claim approval or writing data. No release, publication, generation, learner, personalization, dependency, configuration, Docker, AGENTS, README, migration, or T-025 behavior was added. |
+
+
+---
+
+## T-024 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-024` |
+| Implementation commit | `6dc8e9497fe55870173c584717e3ab78563baf3f` |
+| Base/task-issuance commit | `e2c62be92006061b77ef2c260489ad5e0821f17b` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only internal collection of explicitly approved stored QuestionBankItem snapshots in ascending item order |
+| Validation evidence | Developer-recorded: `36 passed, 1 warning` focused; `138 passed, 1 warning` full suite; changed-file Ruff, fresh database upgrade, Alembic check, and diff check passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | Static route ordering, exact own-status filtering, eager ordered provenance loading, stored-snapshot serialization, empty-list behavior, no writes, and retained T-021–T-023 compatibility were confirmed. |
+| Boundaries | No model/schema/migration change, release, publication, learner delivery, generation, personalization, mocks, or T-025 implementation. |
+
+## T-025 — Controlled QuestionBankItem release lifecycle
+
+- **State:** Issued; not implemented.
+- **Goal:** Add a small, auditable release/withdrawal lifecycle for complete approved QuestionBankItems, separate from human approval, publication transport, and learner access.
+- **Architectural phase:** Canonical Content / Controlled Release Foundation.
+- **Full implementation prompt:** appended to `docs/next_task.md`.
