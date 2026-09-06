@@ -1064,3 +1064,11 @@ flowchart LR
 - `uv run pytest tests/test_content_versions_api.py -q`: 12 passed, 1 warning in 0.96s.
 - `uv run pytest -q`: 164 passed, 1 warning in 7.88s.
 - Changed-file Ruff passed; `uv run alembic heads` reports `c7a4e9d2f816 (head)` and `uv run alembic check` reports no new upgrade operations.
+### T-027 post-push review
+
+- **APPROVED** at implementation commit `bcff4c54a04f6ec3cdcb094f71d64241e87a3622`, whose parent is the T-027 issuance head `a2e9f2ba19ba599255a18f3724e07482489b4b72`.
+- The persisted NoteDraft creation boundary now requires a positive ContentVersion ID, validates Topic then ContentVersion then same-Topic ownership before approved Claims, and atomically stores the exact ContentVersion with deterministic Markdown and ordered Claim provenance.
+- Migration `c7a4e9d2f816` follows `b3e7f1a9c462`, preserves legacy drafts with null ownership, and enforces non-null same-Topic ownership plus restricted ContentVersion deletion through PostgreSQL.
+- Individual retrieval, approval responses, and the approved-drafts collection preserve stored ownership; explicit tests cover non-null new ownership and null legacy compatibility.
+- Developer-recorded evidence is 22 focused NoteDraft tests, 12 focused ContentVersion tests, and 164 full-suite tests, each with one existing warning, plus successful Ruff, migration-cycle, Alembic, and diff checks. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
+- No NoteDraft release, released collection, publication transport, public/learner delivery, PDF, AI, personalization, dependency, configuration, Docker, or T-028 implementation was included.
