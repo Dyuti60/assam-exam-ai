@@ -1367,3 +1367,267 @@ Report:
 Leave T-025 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-06 Asia/Kolkata, UTC+05:30): added only the controlled QuestionBankItem release lifecycle, migration `b3e7f1a9c462`, and `POST /api/v1/question-bank-items/{question_bank_item_id}/release`. Existing and new candidates default to UNRELEASED without inferred release. Only a complete, currently approved stored candidate can be released; release records UTC time, withdrawal preserves that time and records its own, and withdrawn candidates cannot be re-released in place. PostgreSQL enforces status/metadata/approval consistency, while row locking and rollback-safe commits protect decisions. The approved-items endpoint remains approval-only. No released-items collection, public delivery, generation, personalization, or T-026 work was added; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## T-025 review outcome
+
+- **APPROVED** after independent inspection of implementation commit \`84e0b20fd81d9bf7b241a93686811db0ccd3e8dc\` (\`feat: add controlled question bank item release lifecycle\`) against its issued prompt and parent \`91a9ecaa861a0ceba8d557bb1995f6d636bfcd8f\`.
+- The implementation adds only the constrained UNRELEASED/RELEASED/WITHDRAWN lifecycle and one release-decision endpoint. It safely defaults existing candidates without inferred release, preserves stored snapshots and review provenance, serializes approval/release decisions, and rejects invalid eligibility or transitions without mutation.
+- Developer-recorded evidence is \`52 passed, 1 warning\` focused and \`154 passed, 1 warning\` full suite, plus changed-file Ruff, fresh migration upgrade, downgrade/re-upgrade, seeded-row preservation, Alembic check, and diff check. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No released-items collection, public or learner delivery, publication transport, generation, personalization, mock assembly, dependency, configuration, Docker, or T-026 implementation was included.
+
+
+---
+
+# T-026 — Add released QuestionBankItem read boundary
+
+Read \`AGENTS.md\` and all project documents first. Inspect the live repository and the approved T-021 through T-025 implementation conventions before changing code.
+
+Do **not** commit, push, create a PR, self-approve, or implement T-027. Leave the complete T-026 working tree uncommitted and unpushed for independent review.
+
+## Current context
+
+The repository has platform-owned QuestionBankItem candidates under an exact ContentVersion, ordered approved-Claim provenance, complete MCQ options with one same-item correct answer, independent human review, and a controlled release lifecycle.
+
+T-025 is approved at implementation commit:
+
+\`84e0b20fd81d9bf7b241a93686811db0ccd3e8dc\`
+
+A QuestionBankItem can be UNRELEASED, RELEASED, or WITHDRAWN. Only a complete candidate with its own APPROVED review state can become RELEASED. Release is still separate from publication transport, public access, learner delivery, personalization, and mock assembly.
+
+The existing \`GET /api/v1/question-bank-items/approved\` endpoint remains an approval-only boundary. It is not a release boundary and must remain unchanged in meaning.
+
+## Goal
+
+Add the smallest read-only internal boundary that returns stored QuestionBankItem snapshots whose current release state is exactly RELEASED.
+
+This endpoint exposes released canonical assets to a later delivery or assembly stage. T-026 must not implement that later stage. Preserve **Generate Once, Personalize Later**: return the stored platform-owned canonical asset without regeneration or per-learner copying.
+
+## Data model and migration
+
+No model or database schema change is expected.
+
+Do not add or edit a migration. Preserve migration head \`b3e7f1a9c462\` and all existing QuestionBankItem review/release fields and PostgreSQL constraints.
+
+If inspection proves that a model, schema-persistence, or migration change is genuinely required, stop and report the architectural need before implementing it.
+
+Preserve unchanged:
+
+- ContentVersion ownership;
+- ordered Claim provenance;
+- ordered options;
+- same-item correct answer;
+- DRAFT/APPROVED/REJECTED review state and metadata;
+- UNRELEASED/RELEASED/WITHDRAWN lifecycle and metadata;
+- release/withdrawal transition history represented by stored state and timestamps;
+- all PostgreSQL constraints from T-021 through T-025.
+
+## API contract
+
+Add exactly one endpoint:
+
+\`GET /api/v1/question-bank-items/released\`
+
+Response:
+
+- HTTP 200;
+- a list of the existing complete \`QuestionBankItemResponse\` objects;
+- include only rows whose current \`release_status\` is exactly \`RELEASED\`;
+- order results by ascending QuestionBankItem ID;
+- return \`[]\` when no currently released candidates exist.
+
+Each response item must retain:
+
+- QuestionBankItem ID;
+- ContentVersion ID;
+- question text;
+- explanation;
+- difficulty;
+- creation timestamp;
+- ordered Claim IDs;
+- ordered option text;
+- correct-option position;
+- review status, decision timestamp, and reviewer note;
+- release status, released timestamp, withdrawn timestamp, and release note.
+
+Register the static \`/question-bank-items/released\` route before \`/question-bank-items/{question_bank_item_id}\` so \`released\` cannot be interpreted as an item ID.
+
+Do not add query parameters, search, filtering, pagination, or another endpoint.
+
+## Eligibility and read behavior
+
+- Eligibility depends only on the QuestionBankItem's current persisted \`release_status = RELEASED\`.
+- UNRELEASED candidates must be excluded, including candidates whose review state is APPROVED.
+- WITHDRAWN candidates must be excluded, even if their review state remains APPROVED.
+- PostgreSQL already guarantees that a RELEASED row has its own APPROVED review state. Do not create a second release decision or recalculate eligibility in the route.
+- Do not substitute Claim approval, NoteDraft approval, Verification state, or the approved-items collection for release state.
+- Later Claim approval changes must not change released-item eligibility or the stored QuestionBankItem snapshot.
+- Return stored question content and provenance. Do not regenerate content, recalculate the correct answer, rebuild Claim provenance, or mutate any database state.
+- Eagerly load ordered Claim links and ordered options for every returned item. Avoid N+1 queries.
+- Preserve stable ascending QuestionBankItem order and each item's persisted Claim and option position order.
+- No eligible candidates is a successful HTTP 200 with an empty list.
+- No new 404, 409, or other collection-specific error response is expected.
+
+## Boundary compatibility
+
+Preserve all existing QuestionBankItem behavior:
+
+- creation;
+- individual retrieval;
+- approval decisions;
+- approved-items collection;
+- release and withdrawal decisions;
+- released-item approval lock;
+- stored-snapshot behavior;
+- migration and PostgreSQL invariants.
+
+\`GET /api/v1/question-bank-items/approved\` must continue to return items based only on their own APPROVED review state, including APPROVED UNRELEASED and APPROVED WITHDRAWN items.
+
+The new released endpoint must exclude both UNRELEASED and WITHDRAWN items. Approval and release remain distinct boundaries.
+
+## Layering and transaction behavior
+
+Preserve:
+
+\`Route → Pydantic schema → Service → Repository → PostgreSQL\`
+
+Requirements:
+
+- keep the route thin;
+- reuse \`QuestionBankItemResponse\`;
+- perform filtering, ordering, and eager-loading in the repository;
+- serialize stored snapshots through the service;
+- perform no database write, flush, commit, release transition, approval transition, or row lock for this read-only endpoint;
+- do not re-evaluate current Claim, NoteDraft, or Verification state.
+
+## Affected components
+
+Inspect and update only where necessary:
+
+- \`app/api/v1/routes/knowledge.py\`;
+- \`app/repositories/knowledge.py\`;
+- \`app/services/knowledge.py\`;
+- focused QuestionBankItem API/PostgreSQL tests;
+- \`docs/architecture.md\`;
+- \`docs/workflow.md\`;
+- append-only \`docs/task_log.md\`;
+- append-only \`docs/next_task.md\`.
+
+Inspect and reuse, but do not change unless a demonstrated T-026 requirement makes it necessary:
+
+- QuestionBankItem models and relationships;
+- \`app/schemas/knowledge.py\`;
+- migration history and Alembic metadata;
+- \`pyproject.toml\`;
+- \`uv.lock\`;
+- \`.env.example\`;
+- \`app/core/config.py\`;
+- \`docker-compose.yml\`;
+- \`AGENTS.md\`;
+- \`README.md\`.
+
+Report the inspection outcome for every dependency, configuration, Docker, governance, model, schema, and migration component listed above.
+
+## Required tests
+
+Add focused PostgreSQL/API coverage proving:
+
+- an empty database returns HTTP 200 with \`[]\`;
+- a database with no RELEASED candidates returns \`[]\`;
+- UNRELEASED candidates are excluded, including APPROVED UNRELEASED candidates;
+- WITHDRAWN candidates are excluded, including APPROVED WITHDRAWN candidates;
+- multiple RELEASED candidates are returned in stable ascending QuestionBankItem ID order;
+- each returned item preserves its stored ordered Claim IDs;
+- each returned item preserves its stored ordered options and correct-option position;
+- each returned item preserves review and release metadata;
+- later Claim approval changes do not change released-item eligibility or stored snapshots;
+- Claim, NoteDraft, and Verification state cannot make an UNRELEASED item eligible;
+- the endpoint performs no database mutation;
+- the approved-items endpoint remains approval-only and distinct from the released-items endpoint;
+- existing T-021 through T-025 create, retrieve, approval, approved-list, release, withdrawal, migration, and PostgreSQL-constraint tests continue to pass.
+
+Where consistent with the existing test infrastructure, use multiple returned items to exercise eager loading and ordering. Do not weaken, rewrite, or remove existing tests.
+
+## Exclusions
+
+Do not add:
+
+- public or learner-facing APIs;
+- authentication, authorization, users, or learner profiles;
+- publication transport;
+- PDF generation, exports, downloads, or deployment;
+- mock assembly, practice sessions, attempts, scoring, analytics, or personalization;
+- per-learner QuestionBankItem copies;
+- AI/LLM providers, prompts, generation, ingestion, RAG, embeddings, or scraping;
+- release transitions beyond T-025;
+- automatic release;
+- release history or reviewer/releaser identity tables;
+- editing or deleting released content;
+- query parameters, search, filtering, pagination, or additional collections;
+- NoteDraft or ContentVersion release behavior;
+- PreviousQuestion conversion;
+- probability, prediction, or likelihood semantics;
+- dependencies, secrets, environment variables, Docker services, payments, or unrelated infrastructure.
+
+A PreviousQuestion remains a sourced historical occurrence and must never be treated as a generated or released QuestionBankItem.
+
+Release remains distinct from Claim approval, QuestionBankItem review, NoteDraft approval, Verification, publication transport, and learner delivery.
+
+## Documentation
+
+Update \`docs/architecture.md\` and \`docs/workflow.md\` only for behavior actually implemented.
+
+Append—never rewrite, reorder, or delete history:
+
+- the T-026 implementation record in \`docs/task_log.md\`;
+- an implementation note beneath this T-026 prompt in \`docs/next_task.md\`.
+
+Do not mark T-026 approved.
+
+Do not define or implement T-027.
+
+## Validation
+
+Run and report exact results for:
+
+\`\`\`bash
+uv run pytest tests/test_question_bank_items_api.py -q
+uv run pytest -q
+uv run ruff check app/api/v1/routes/knowledge.py app/repositories/knowledge.py app/services/knowledge.py tests/test_question_bank_items_api.py
+uv run alembic heads
+uv run alembic check
+git diff --check
+git status --short
+\`\`\`
+
+No migration cycle is expected because T-026 must not change the model or database schema. Confirm that Alembic head remains \`b3e7f1a9c462\`.
+
+If any unexpected migration or schema drift appears, stop and report it.
+
+## Final report
+
+Report:
+
+1. files changed;
+2. endpoint and exact release-status eligibility behavior;
+3. result and nested provenance ordering;
+4. eager-loading and N+1 avoidance;
+5. stored-snapshot and no-mutation behavior;
+6. empty-result and error behavior;
+7. compatibility with approval, approved-list, release, and withdrawal behavior;
+8. focused and full test results;
+9. Ruff, Alembic-head, Alembic-check, and diff-check results;
+10. model, schema, migration, dependency, configuration, Docker, AGENTS, and README inspection outcomes;
+11. retained trust, provenance, review, release, versioning, and Generate Once/Personalize Later boundaries;
+12. final git status;
+13. explicit confirmation that no commit, push, PR, self-approval, T-027, public/learner delivery, publication transport, mock assembly, AI generation, or personalization work occurred.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-027.
+
+Leave T-026 uncommitted and unpushed in the working tree for independent review.
