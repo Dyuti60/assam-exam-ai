@@ -681,3 +681,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Ruff | Changed-file Ruff passed (`All checks passed!`). |
 | Migration checks | No model/schema migration required. `uv run alembic heads` reported `b3e7f1a9c462 (head)` and `uv run alembic check` reported `No new upgrade operations detected.` |
 | Notes | The repository filters exactly on current RELEASED state, orders by ascending item ID, and select-in loads ordered Claim links and options. The service returns stored `QuestionBankItemResponse` snapshots without writes or re-evaluation. UNRELEASED and WITHDRAWN candidates are excluded; the existing approved-items boundary remains approval-only. No delivery, publication transport, generation, personalization, dependency, configuration, Docker, AGENTS, README, migration, or T-027 behavior was added. |
+
+
+---
+
+## T-026 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-026` |
+| Implementation commit | `d5c3b484b8268ae745da491617c56c02a1be3853` |
+| Base/task-issuance commit | `3e630d9fd952dcb24a320295fbc281b6396b0e45` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only internal collection of currently RELEASED stored QuestionBankItem snapshots in ascending item order |
+| Validation evidence | Developer-recorded: `54 passed, 1 warning` combined focused tests; `52 passed, 1 warning` existing QuestionBankItem tests; `156 passed, 1 warning` full suite; changed-file Ruff; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The route is static and correctly ordered; the repository filters only RELEASED rows and eagerly loads ordered Claim/option relationships; the service returns stored snapshots without writes or re-evaluation. The approved boundary remains intact and distinct. |
+| Boundaries | No model, schema, migration, delivery, publication transport, learner, personalization, mock, AI, dependency, configuration, Docker, or T-027 implementation was included. |
+
+
+---
+
+## T-027 issued — Bind new NoteDrafts to ContentVersion
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Require every newly persisted NoteDraft to belong to one exact same-Topic ContentVersion while preserving legacy drafts without inferred ownership |
+| Architectural phase | Canonical Content / Versioned Note Foundation |
+| Scope | ContentVersion ownership and migration-safe compatibility only; no NoteDraft release, publication, learner delivery, AI generation, or personalization |
+| Full implementation prompt | Appended to `docs/next_task.md` |
