@@ -23,6 +23,7 @@ from app.schemas.knowledge import (
     PreviousQuestionResponse,
     QuestionBankItemApprovalCreate,
     QuestionBankItemCreate,
+    QuestionBankItemReleaseCreate,
     QuestionBankItemResponse,
     SourceCreate,
     SourceResponse,
@@ -177,6 +178,26 @@ def record_question_bank_item_approval(
 ) -> QuestionBankItemResponse:
     try:
         return KnowledgeService(db).record_question_bank_item_approval(
+            question_bank_item_id,
+            request,
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.post(
+    "/question-bank-items/{question_bank_item_id}/release",
+    response_model=QuestionBankItemResponse,
+)
+def record_question_bank_item_release(
+    question_bank_item_id: int,
+    request: QuestionBankItemReleaseCreate,
+    db: DatabaseSession,
+) -> QuestionBankItemResponse:
+    try:
+        return KnowledgeService(db).record_question_bank_item_release(
             question_bank_item_id,
             request,
         )

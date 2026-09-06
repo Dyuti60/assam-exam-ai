@@ -621,3 +621,19 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 - **Goal:** Add a small, auditable release/withdrawal lifecycle for complete approved QuestionBankItems, separate from human approval, publication transport, and learner access.
 - **Architectural phase:** Canonical Content / Controlled Release Foundation.
 - **Full implementation prompt:** appended to `docs/next_task.md`.
+
+
+---
+
+## T-025 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only the controlled UNRELEASED/RELEASED/WITHDRAWN lifecycle and one release-decision endpoint for QuestionBankItem |
+| Migration | `b3e7f1a9c462_add_question_bank_item_release.py`, parent `a6d1e8c3f247` |
+| Tests | `uv run pytest tests/test_question_bank_items_api.py -q`: 52 passed, 1 warning in 3.45s. `uv run pytest -q`: 154 passed, 1 warning in 6.11s. |
+| Ruff | Changed-file Ruff passed (`All checks passed!`). |
+| Migration checks | Fresh upgrade through `b3e7f1a9c462` passed. Downgrade to `a6d1e8c3f247` and re-upgrade passed twice. A seeded pre-T-025 APPROVED candidate survived both cycles and became UNRELEASED with null timestamps/note, without inferred release. `uv run alembic check` reported no new upgrade operations. |
+| Diff check | `git diff --check` passed; only line-ending normalization warnings were emitted. |
+| Notes | Release requires a complete, currently approved stored candidate; withdrawal is one-way and preserves the original release time. PostgreSQL enforces lifecycle metadata and approved-release consistency. Released items lock DRAFT/REJECTED review changes until withdrawal. The existing approved-items endpoint remains approval-only. No released-items list, public/learner delivery, generation, personalization, dependency, configuration, Docker, AGENTS, README, or T-026 behavior was added. |

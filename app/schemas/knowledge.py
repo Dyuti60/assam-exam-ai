@@ -111,6 +111,17 @@ class QuestionDifficulty(StrEnum):
     HARD = "HARD"
 
 
+class QuestionBankItemReleaseStatus(StrEnum):
+    UNRELEASED = "UNRELEASED"
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
+class QuestionBankItemReleaseDecision(StrEnum):
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
 class QuestionBankItemCreate(BaseModel):
     content_version_id: int = Field(gt=0)
     question_text: str = Field(min_length=1)
@@ -153,11 +164,20 @@ class QuestionBankItemResponse(BaseModel):
     approval_status: ClaimApprovalStatus
     approval_decided_at: datetime | None
     reviewer_note: str | None
+    release_status: QuestionBankItemReleaseStatus
+    released_at: datetime | None
+    withdrawn_at: datetime | None
+    release_note: str | None
 
 
 class QuestionBankItemApprovalCreate(BaseModel):
     approval_status: ClaimApprovalStatus
     reviewer_note: str | None = None
+
+
+class QuestionBankItemReleaseCreate(BaseModel):
+    release_status: QuestionBankItemReleaseDecision
+    release_note: str | None = None
 
 
 class PreviousPaperCreate(BaseModel):

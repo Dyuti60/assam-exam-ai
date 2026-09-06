@@ -134,6 +134,21 @@ class KnowledgeRepository:
         )
         return self.session.scalar(statement)
 
+    def get_question_bank_item_for_update(
+        self,
+        question_bank_item_id: int,
+    ) -> QuestionBankItem | None:
+        statement = (
+            select(QuestionBankItem)
+            .options(
+                selectinload(QuestionBankItem.claim_links),
+                selectinload(QuestionBankItem.options),
+            )
+            .where(QuestionBankItem.id == question_bank_item_id)
+            .with_for_update()
+        )
+        return self.session.scalar(statement)
+
     def get_approved_question_bank_items(self) -> list[QuestionBankItem]:
         statement = (
             select(QuestionBankItem)
@@ -160,6 +175,19 @@ class KnowledgeRepository:
         question_bank_item.approval_status = approval_status
         question_bank_item.approval_decided_at = decided_at
         question_bank_item.reviewer_note = reviewer_note
+
+    def update_question_bank_item_release(
+        self,
+        question_bank_item: QuestionBankItem,
+        release_status: str,
+        released_at: datetime | None,
+        withdrawn_at: datetime | None,
+        release_note: str | None,
+    ) -> None:
+        question_bank_item.release_status = release_status
+        question_bank_item.released_at = released_at
+        question_bank_item.withdrawn_at = withdrawn_at
+        question_bank_item.release_note = release_note
 
     def add_previous_paper(self, previous_paper: PreviousPaper) -> PreviousPaper:
         self.session.add(previous_paper)

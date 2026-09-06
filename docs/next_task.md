@@ -1365,3 +1365,5 @@ Report:
 13. explicit confirmation that no commit, push, PR, self-approval, T-026, released-items list, public delivery, AI generation, or learner-personalization work occurred.
 
 Leave T-025 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-06 Asia/Kolkata, UTC+05:30): added only the controlled QuestionBankItem release lifecycle, migration `b3e7f1a9c462`, and `POST /api/v1/question-bank-items/{question_bank_item_id}/release`. Existing and new candidates default to UNRELEASED without inferred release. Only a complete, currently approved stored candidate can be released; release records UTC time, withdrawal preserves that time and records its own, and withdrawn candidates cannot be re-released in place. PostgreSQL enforces status/metadata/approval consistency, while row locking and rollback-safe commits protect decisions. The approved-items endpoint remains approval-only. No released-items collection, public delivery, generation, personalization, or T-026 work was added; exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

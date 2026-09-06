@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -151,6 +152,10 @@ def test_create_and_retrieve_item_preserves_ordered_claim_provenance(
         "approval_status": "DRAFT",
         "approval_decided_at": None,
         "reviewer_note": None,
+        "release_status": "UNRELEASED",
+        "released_at": None,
+        "withdrawn_at": None,
+        "release_note": None,
     }
     assert retrieved.status_code == 200
     assert retrieved.json() == created
@@ -505,6 +510,10 @@ def test_legacy_item_without_options_remains_retrievable(
     assert response.json()["approval_status"] == "DRAFT"
     assert response.json()["approval_decided_at"] is None
     assert response.json()["reviewer_note"] is None
+    assert response.json()["release_status"] == "UNRELEASED"
+    assert response.json()["released_at"] is None
+    assert response.json()["withdrawn_at"] is None
+    assert response.json()["release_note"] is None
 
 
 @pytest.mark.parametrize("approval_status", ["APPROVED", "REJECTED"])
@@ -853,3 +862,451 @@ def test_get_approved_items_filters_orders_and_preserves_stored_snapshots(
     assert draft["id"] not in {item["id"] for item in response.json()}
     assert rejected["id"] not in {item["id"] for item in response.json()}
     assert counts_after == counts_before
+
+
+def test_release_and_withdraw_preserve_stored_snapshot_and_approval_boundary(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, topic_id = _foundation(client, "release-success")
+    first_claim_id = _claim(client, topic_id, "release-first")
+    second_claim_id = _claim(client, topic_id, "release-second")
+    created = _post(
+        client,
+        "/api/v1/question-bank-items",
+        {
+            **_item_payload(
+                content_version_id,
+                [second_claim_id, first_claim_id],
+            ),
+            "options": ["Release A", "Release B", "Release C"],
+            "correct_option_position": 2,
+        },
+    )
+    approved = client.post(
+        f"/api/v1/question-bank-items/{created['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Reviewed"},
+    )
+    claim_reset = client.post(
+        f"/api/v1/claims/{second_claim_id}/approval",
+        json={"approval_status": "DRAFT"},
+    )
+    assert approved.status_code == 200
+    assert claim_reset.status_code == 200
+
+    counts_before = (
+        db_connection.scalar(select(func.count()).select_from(QuestionBankItem)),
+        db_connection.scalar(select(func.count()).select_from(QuestionBankItemClaim)),
+        db_connection.scalar(select(func.count()).select_from(QuestionBankOption)),
+        db_connection.scalar(select(func.count()).select_from(Claim)),
+    )
+    claim_states_before = db_connection.execute(
+        select(
+            Claim.id,
+            Claim.approval_status,
+            Claim.approval_decided_at,
+            Claim.reviewer_note,
+        )
+        .where(Claim.id.in_([first_claim_id, second_claim_id]))
+        .order_by(Claim.id)
+    ).all()
+    released = client.post(
+        f"/api/v1/question-bank-items/{created['id']}/release",
+        json={"release_status": "RELEASED", "release_note": "Initial release"},
+    )
+
+    assert released.status_code == 200
+    released_body = released.json()
+    assert released_body["release_status"] == "RELEASED"
+    assert released_body["released_at"] is not None
+    assert datetime.fromisoformat(released_body["released_at"]).utcoffset() == UTC.utcoffset(
+        None
+    )
+    assert released_body["withdrawn_at"] is None
+    assert released_body["release_note"] == "Initial release"
+    for field in (
+        "content_version_id",
+        "question_text",
+        "explanation",
+        "difficulty",
+        "claim_ids",
+        "options",
+        "correct_option_position",
+        "created_at",
+        "approval_status",
+        "approval_decided_at",
+        "reviewer_note",
+    ):
+        assert released_body[field] == approved.json()[field]
+
+    approved_collection = client.get("/api/v1/question-bank-items/approved")
+    assert approved_collection.status_code == 200
+    assert approved_collection.json() == [released_body]
+
+    withdrawn = client.post(
+        f"/api/v1/question-bank-items/{created['id']}/release",
+        json={"release_status": "WITHDRAWN", "release_note": "Superseded later"},
+    )
+    assert withdrawn.status_code == 200
+    withdrawn_body = withdrawn.json()
+    assert withdrawn_body["release_status"] == "WITHDRAWN"
+    assert withdrawn_body["released_at"] == released_body["released_at"]
+    assert withdrawn_body["withdrawn_at"] is not None
+    assert datetime.fromisoformat(withdrawn_body["withdrawn_at"]).utcoffset() == UTC.utcoffset(
+        None
+    )
+    assert withdrawn_body["release_note"] == "Superseded later"
+    assert client.get("/api/v1/question-bank-items/approved").json() == [
+        withdrawn_body
+    ]
+    counts_after = (
+        db_connection.scalar(select(func.count()).select_from(QuestionBankItem)),
+        db_connection.scalar(select(func.count()).select_from(QuestionBankItemClaim)),
+        db_connection.scalar(select(func.count()).select_from(QuestionBankOption)),
+        db_connection.scalar(select(func.count()).select_from(Claim)),
+    )
+    claim_states_after = db_connection.execute(
+        select(
+            Claim.id,
+            Claim.approval_status,
+            Claim.approval_decided_at,
+            Claim.reviewer_note,
+        )
+        .where(Claim.id.in_([first_claim_id, second_claim_id]))
+        .order_by(Claim.id)
+    ).all()
+    assert counts_after == counts_before
+    assert claim_states_after == claim_states_before
+
+
+@pytest.mark.parametrize("approval_status", ["DRAFT", "REJECTED"])
+def test_unapproved_item_cannot_be_released_and_remains_unchanged(
+    client: TestClient,
+    approval_status: str,
+) -> None:
+    content_version_id, topic_id = _foundation(client, f"release-{approval_status}")
+    claim_id = _claim(client, topic_id, f"release-{approval_status}")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+    if approval_status == "REJECTED":
+        decision = client.post(
+            f"/api/v1/question-bank-items/{item['id']}/approval",
+            json={"approval_status": "REJECTED", "reviewer_note": "Not suitable"},
+        )
+        assert decision.status_code == 200
+        before = decision.json()
+    else:
+        before = item
+
+    response = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"QuestionBankItem {item['id']} must be approved before release"
+    }
+    assert client.get(f"/api/v1/question-bank-items/{item['id']}").json() == before
+
+
+def test_incomplete_approved_legacy_item_cannot_be_released(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, _ = _foundation(client, "release-legacy")
+    legacy_id = db_connection.scalar(
+        QuestionBankItem.__table__.insert()
+        .values(
+            content_version_id=content_version_id,
+            question_text="Incomplete approved legacy item",
+            explanation="It has no options or answer.",
+            difficulty="EASY",
+            approval_status="APPROVED",
+        )
+        .returning(QuestionBankItem.id)
+    )
+    assert legacy_id is not None
+    before = client.get(f"/api/v1/question-bank-items/{legacy_id}").json()
+
+    response = client.post(
+        f"/api/v1/question-bank-items/{legacy_id}/release",
+        json={"release_status": "RELEASED", "release_note": "Must not persist"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"QuestionBankItem {legacy_id} is incomplete and cannot be released"
+    }
+    assert client.get(f"/api/v1/question-bank-items/{legacy_id}").json() == before
+
+
+def test_other_approved_state_cannot_substitute_for_item_approval(
+    client: TestClient,
+) -> None:
+    content_version_id, topic_id = _foundation(client, "release-independent")
+    claim_id = _claim(client, topic_id, "release-independent")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+    source = _post(
+        client,
+        "/api/v1/sources",
+        {
+            "title": "Release independence source",
+            "source_type": "official",
+            "authority_tier": 1,
+            "location": "https://example.gov/release-independent",
+            "license_status": "UNKNOWN",
+        },
+    )
+    evidence = _post(
+        client,
+        "/api/v1/evidence",
+        {"source_id": source["id"], "content": "Independent evidence"},
+    )
+    verification = _post(
+        client,
+        "/api/v1/verifications",
+        {
+            "claim_id": claim_id,
+            "verdict": "SUPPORTED",
+            "confidence": 0.95,
+            "evidence": [
+                {
+                    "evidence_id": evidence["id"],
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    note_draft = _post(
+        client,
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        {},
+    )
+    note_approved = client.post(
+        f"/api/v1/note-drafts/{note_draft['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert verification["claim"]["id"] == claim_id
+    assert note_approved.status_code == 200
+
+    response = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"QuestionBankItem {item['id']} must be approved before release"
+    }
+    assert client.get(f"/api/v1/question-bank-items/{item['id']}").json() == item
+
+
+def test_release_transition_conflicts_are_stable_and_do_not_mutate(
+    client: TestClient,
+) -> None:
+    content_version_id, topic_id = _foundation(client, "release-transitions")
+    claim_id = _claim(client, topic_id, "release-transitions")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+    approved = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert approved.status_code == 200
+
+    unreleased_withdrawal = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert unreleased_withdrawal.status_code == 409
+    assert unreleased_withdrawal.json() == {
+        "detail": (
+            f"QuestionBankItem {item['id']} cannot transition "
+            "from UNRELEASED to WITHDRAWN"
+        )
+    }
+    assert client.get(f"/api/v1/question-bank-items/{item['id']}").json() == approved.json()
+
+    released = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert released.status_code == 200
+    duplicate_release = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "RELEASED", "release_note": "Must not persist"},
+    )
+    assert duplicate_release.status_code == 409
+    assert client.get(f"/api/v1/question-bank-items/{item['id']}").json() == released.json()
+
+    withdrawn = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawn.status_code == 200
+    for requested_status in ("WITHDRAWN", "RELEASED"):
+        response = client.post(
+            f"/api/v1/question-bank-items/{item['id']}/release",
+            json={"release_status": requested_status, "release_note": "No mutation"},
+        )
+        assert response.status_code == 409
+        assert response.json() == {
+            "detail": (
+                f"QuestionBankItem {item['id']} cannot transition "
+                f"from WITHDRAWN to {requested_status}"
+            )
+        }
+        assert (
+            client.get(f"/api/v1/question-bank-items/{item['id']}").json()
+            == withdrawn.json()
+        )
+
+
+@pytest.mark.parametrize("approval_status", ["DRAFT", "REJECTED"])
+def test_released_item_approval_is_locked_until_withdrawal(
+    client: TestClient,
+    approval_status: str,
+) -> None:
+    content_version_id, topic_id = _foundation(client, f"release-lock-{approval_status}")
+    claim_id = _claim(client, topic_id, f"release-lock-{approval_status}")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+    approved = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Initial review"},
+    )
+    released = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert approved.status_code == 200
+    assert released.status_code == 200
+
+    blocked = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/approval",
+        json={"approval_status": approval_status, "reviewer_note": "Blocked"},
+    )
+    assert blocked.status_code == 409
+    assert blocked.json() == {
+        "detail": (
+            f"QuestionBankItem {item['id']} must be withdrawn before changing approval"
+        )
+    }
+    assert client.get(f"/api/v1/question-bank-items/{item['id']}").json() == released.json()
+
+    withdrawn = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    changed = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/approval",
+        json={"approval_status": approval_status, "reviewer_note": "Allowed"},
+    )
+    assert withdrawn.status_code == 200
+    assert changed.status_code == 200
+    assert changed.json()["approval_status"] == approval_status
+    assert changed.json()["release_status"] == "WITHDRAWN"
+
+
+def test_release_returns_404_and_invalid_decisions_return_422(
+    client: TestClient,
+) -> None:
+    missing = client.post(
+        "/api/v1/question-bank-items/999999/release",
+        json={"release_status": "RELEASED"},
+    )
+    invalid = client.post(
+        "/api/v1/question-bank-items/1/release",
+        json={"release_status": "INVALID"},
+    )
+    unreleased = client.post(
+        "/api/v1/question-bank-items/1/release",
+        json={"release_status": "UNRELEASED"},
+    )
+
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "QuestionBankItem 999999 not found"}
+    assert invalid.status_code == 422
+    assert unreleased.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"release_status": "INVALID"},
+        {"release_status": "UNRELEASED", "released_at": datetime.now(UTC)},
+        {"release_status": "UNRELEASED", "release_note": "invalid"},
+        {"release_status": "RELEASED", "released_at": None},
+        {
+            "release_status": "RELEASED",
+            "released_at": datetime.now(UTC),
+            "withdrawn_at": datetime.now(UTC),
+        },
+        {
+            "release_status": "WITHDRAWN",
+            "released_at": None,
+            "withdrawn_at": datetime.now(UTC),
+        },
+    ],
+)
+def test_database_rejects_invalid_release_state_combinations(
+    client: TestClient,
+    db_connection: Connection,
+    values: dict,
+) -> None:
+    content_version_id, topic_id = _foundation(client, f"release-db-{len(values)}")
+    claim_id = _claim(client, topic_id, f"release-db-{len(values)}")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+
+    savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(
+            update(QuestionBankItem)
+            .where(QuestionBankItem.id == item["id"])
+            .values(**values)
+        )
+    savepoint.rollback()
+
+
+def test_database_rejects_released_item_without_approved_review(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, topic_id = _foundation(client, "release-db-approval")
+    claim_id = _claim(client, topic_id, "release-db-approval")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+
+    savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(
+            update(QuestionBankItem)
+            .where(QuestionBankItem.id == item["id"])
+            .values(
+                release_status="RELEASED",
+                released_at=datetime.now(UTC),
+            )
+        )
+    savepoint.rollback()

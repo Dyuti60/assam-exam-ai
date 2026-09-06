@@ -42,6 +42,8 @@ from app.schemas.knowledge import (
     PreviousQuestionResponse,
     QuestionBankItemApprovalCreate,
     QuestionBankItemCreate,
+    QuestionBankItemReleaseCreate,
+    QuestionBankItemReleaseDecision,
     QuestionBankItemResponse,
     SourceCreate,
     SyllabusVersionCreate,
@@ -366,13 +368,21 @@ class KnowledgeService:
         question_bank_item_id: int,
         request: QuestionBankItemApprovalCreate,
     ) -> QuestionBankItemResponse:
-        question_bank_item = self.repository.get_question_bank_item(
+        question_bank_item = self.repository.get_question_bank_item_for_update(
             question_bank_item_id
         )
         if question_bank_item is None:
             raise ResourceNotFoundError(
                 "QuestionBankItem",
                 question_bank_item_id,
+            )
+        if (
+            question_bank_item.release_status == "RELEASED"
+            and request.approval_status != ClaimApprovalStatus.APPROVED
+        ):
+            raise ResourceConflictError(
+                f"QuestionBankItem {question_bank_item_id} must be withdrawn "
+                "before changing approval"
             )
         if (
             request.approval_status == ClaimApprovalStatus.APPROVED
@@ -389,6 +399,60 @@ class KnowledgeService:
             None if is_draft else request.reviewer_note,
             None if is_draft else datetime.now(UTC),
         )
+        self._commit(question_bank_item)
+        return self.get_question_bank_item(question_bank_item.id)
+
+    def record_question_bank_item_release(
+        self,
+        question_bank_item_id: int,
+        request: QuestionBankItemReleaseCreate,
+    ) -> QuestionBankItemResponse:
+        question_bank_item = self.repository.get_question_bank_item_for_update(
+            question_bank_item_id
+        )
+        if question_bank_item is None:
+            raise ResourceNotFoundError("QuestionBankItem", question_bank_item_id)
+
+        requested_status = request.release_status.value
+        current_status = question_bank_item.release_status
+        if (
+            request.release_status == QuestionBankItemReleaseDecision.RELEASED
+            and current_status == "UNRELEASED"
+        ):
+            if question_bank_item.approval_status != "APPROVED":
+                raise ResourceConflictError(
+                    f"QuestionBankItem {question_bank_item_id} must be approved "
+                    "before release"
+                )
+            if not self._is_complete_question_bank_item(question_bank_item):
+                raise ResourceConflictError(
+                    f"QuestionBankItem {question_bank_item_id} is incomplete "
+                    "and cannot be released"
+                )
+            self.repository.update_question_bank_item_release(
+                question_bank_item,
+                requested_status,
+                datetime.now(UTC),
+                None,
+                request.release_note,
+            )
+        elif (
+            request.release_status == QuestionBankItemReleaseDecision.WITHDRAWN
+            and current_status == "RELEASED"
+        ):
+            self.repository.update_question_bank_item_release(
+                question_bank_item,
+                requested_status,
+                question_bank_item.released_at,
+                datetime.now(UTC),
+                request.release_note,
+            )
+        else:
+            raise ResourceConflictError(
+                f"QuestionBankItem {question_bank_item_id} cannot transition "
+                f"from {current_status} to {requested_status}"
+            )
+
         self._commit(question_bank_item)
         return self.get_question_bank_item(question_bank_item.id)
 
@@ -711,6 +775,10 @@ class KnowledgeService:
             approval_status=question_bank_item.approval_status,
             approval_decided_at=question_bank_item.approval_decided_at,
             reviewer_note=question_bank_item.reviewer_note,
+            release_status=question_bank_item.release_status,
+            released_at=question_bank_item.released_at,
+            withdrawn_at=question_bank_item.withdrawn_at,
+            release_note=question_bank_item.release_note,
         )
 
     @staticmethod
