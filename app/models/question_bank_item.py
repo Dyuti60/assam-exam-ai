@@ -35,6 +35,10 @@ class QuestionBankItem(Base):
             "difficulty IN ('EASY', 'MEDIUM', 'HARD')",
             name="ck_question_bank_items_difficulty",
         ),
+        CheckConstraint(
+            "approval_status IN ('DRAFT', 'APPROVED', 'REJECTED')",
+            name="ck_question_bank_items_approval_status",
+        ),
         ForeignKeyConstraint(
             ["id", "correct_option_id"],
             [
@@ -60,6 +64,16 @@ class QuestionBankItem(Base):
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
     difficulty: Mapped[str] = mapped_column(String(10), nullable=False)
     correct_option_id: Mapped[int | None] = mapped_column(Integer)
+    approval_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="DRAFT",
+        server_default="DRAFT",
+    )
+    approval_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+    )
+    reviewer_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

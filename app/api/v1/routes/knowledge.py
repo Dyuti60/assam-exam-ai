@@ -21,6 +21,7 @@ from app.schemas.knowledge import (
     PreviousPaperResponse,
     PreviousQuestionCreate,
     PreviousQuestionResponse,
+    QuestionBankItemApprovalCreate,
     QuestionBankItemCreate,
     QuestionBankItemResponse,
     SourceCreate,
@@ -153,6 +154,26 @@ def get_question_bank_item(
         return KnowledgeService(db).get_question_bank_item(question_bank_item_id)
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
+
+
+@router.post(
+    "/question-bank-items/{question_bank_item_id}/approval",
+    response_model=QuestionBankItemResponse,
+)
+def record_question_bank_item_approval(
+    question_bank_item_id: int,
+    request: QuestionBankItemApprovalCreate,
+    db: DatabaseSession,
+) -> QuestionBankItemResponse:
+    try:
+        return KnowledgeService(db).record_question_bank_item_approval(
+            question_bank_item_id,
+            request,
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.post(

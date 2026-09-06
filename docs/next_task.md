@@ -1006,3 +1006,5 @@ Leave the implementation in the working tree for independent review. Do not comm
 ## Final report
 
 Report files changed, data/migration design, API/error semantics, atomicity, test results, dependency/configuration/Docker/AGENTS/README decisions, documentation updates, git status, and explicit confirmation that no commit, push, PR, self-approval, or T-024 work occurred.
+
+Implementation note (2026-09-06 Asia/Kolkata, UTC+05:30): added only independent DRAFT/APPROVED/REJECTED human-review state and `POST /api/v1/question-bank-items/{question_bank_item_id}/approval`. APPROVED/REJECTED store current UTC decision time and the supplied note; DRAFT clears both. Approval requires a complete stored option/answer snapshot but does not re-evaluate current Claim approval or mutate content/provenance. Existing candidates migrate to DRAFT without inferred approval. No approved-item list, release, publication, learner, AI, dependency, configuration, Docker, or T-024 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

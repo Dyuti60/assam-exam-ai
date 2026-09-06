@@ -138,6 +138,17 @@ class KnowledgeRepository:
         statement = select(Claim).where(Claim.id.in_(claim_ids)).with_for_update()
         return list(self.session.scalars(statement))
 
+    def update_question_bank_item_approval(
+        self,
+        question_bank_item: QuestionBankItem,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        question_bank_item.approval_status = approval_status
+        question_bank_item.approval_decided_at = decided_at
+        question_bank_item.reviewer_note = reviewer_note
+
     def add_previous_paper(self, previous_paper: PreviousPaper) -> PreviousPaper:
         self.session.add(previous_paper)
         self.session.flush()

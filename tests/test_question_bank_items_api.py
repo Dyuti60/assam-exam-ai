@@ -146,6 +146,9 @@ def test_create_and_retrieve_item_preserves_ordered_claim_provenance(
         **payload,
         "id": created["id"],
         "created_at": created["created_at"],
+        "approval_status": "DRAFT",
+        "approval_decided_at": None,
+        "reviewer_note": None,
     }
     assert retrieved.status_code == 200
     assert retrieved.json() == created
@@ -497,3 +500,206 @@ def test_legacy_item_without_options_remains_retrievable(
     assert response.status_code == 200
     assert response.json()["options"] == []
     assert response.json()["correct_option_position"] is None
+    assert response.json()["approval_status"] == "DRAFT"
+    assert response.json()["approval_decided_at"] is None
+    assert response.json()["reviewer_note"] is None
+
+
+@pytest.mark.parametrize("approval_status", ["APPROVED", "REJECTED"])
+def test_record_item_decision_preserves_complete_stored_snapshot(
+    client: TestClient,
+    db_connection: Connection,
+    approval_status: str,
+) -> None:
+    content_version_id, topic_id = _foundation(client, approval_status)
+    claim_id = _claim(client, topic_id, approval_status)
+    created = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+
+    response = client.post(
+        f"/api/v1/question-bank-items/{created['id']}/approval",
+        json={
+            "approval_status": approval_status,
+            "reviewer_note": f"Human decision: {approval_status}",
+        },
+    )
+
+    assert response.status_code == 200
+    decided = response.json()
+    assert decided["approval_status"] == approval_status
+    assert decided["approval_decided_at"] is not None
+    assert decided["reviewer_note"] == f"Human decision: {approval_status}"
+    for field in (
+        "content_version_id",
+        "question_text",
+        "explanation",
+        "difficulty",
+        "claim_ids",
+        "options",
+        "correct_option_position",
+        "created_at",
+    ):
+        assert decided[field] == created[field]
+    assert db_connection.scalar(select(Claim.approval_status).where(Claim.id == claim_id)) == "APPROVED"
+
+
+def test_returning_item_to_draft_clears_decision_metadata(
+    client: TestClient,
+) -> None:
+    content_version_id, topic_id = _foundation(client, "reset")
+    claim_id = _claim(client, topic_id, "reset")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+    approved = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Approved"},
+    )
+    assert approved.status_code == 200
+
+    response = client.post(
+        f"/api/v1/question-bank-items/{item['id']}/approval",
+        json={"approval_status": "DRAFT", "reviewer_note": "discarded"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["approval_status"] == "DRAFT"
+    assert response.json()["approval_decided_at"] is None
+    assert response.json()["reviewer_note"] is None
+
+
+def test_item_approval_returns_404_and_invalid_status_returns_422(
+    client: TestClient,
+) -> None:
+    missing = client.post(
+        "/api/v1/question-bank-items/999999/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    invalid = client.post(
+        "/api/v1/question-bank-items/1/approval",
+        json={"approval_status": "INVALID"},
+    )
+
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "QuestionBankItem 999999 not found"}
+    assert invalid.status_code == 422
+
+
+def test_complete_item_can_be_approved_after_claim_returns_to_draft(
+    client: TestClient,
+) -> None:
+    content_version_id, topic_id = _foundation(client, "claim-reset")
+    claim_id = _claim(client, topic_id, "claim-reset")
+    created = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+    claim_reset = client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={"approval_status": "DRAFT"},
+    )
+
+    approved = client.post(
+        f"/api/v1/question-bank-items/{created['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+
+    assert claim_reset.status_code == 200
+    assert approved.status_code == 200
+    assert approved.json()["approval_status"] == "APPROVED"
+    assert approved.json()["claim_ids"] == created["claim_ids"]
+    assert approved.json()["options"] == created["options"]
+    assert approved.json()["correct_option_position"] == created["correct_option_position"]
+
+
+def test_incomplete_legacy_item_cannot_be_approved_and_is_unchanged(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, _ = _foundation(client, "legacy-approval")
+    legacy_id = db_connection.scalar(
+        QuestionBankItem.__table__.insert()
+        .values(
+            content_version_id=content_version_id,
+            question_text="Incomplete legacy candidate",
+            explanation="It has no stored options.",
+            difficulty="EASY",
+        )
+        .returning(QuestionBankItem.id)
+    )
+    assert legacy_id is not None
+
+    response = client.post(
+        f"/api/v1/question-bank-items/{legacy_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Must not persist"},
+    )
+    retrieved = client.get(f"/api/v1/question-bank-items/{legacy_id}")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": (
+            f"QuestionBankItem {legacy_id} is incomplete and cannot be approved"
+        )
+    }
+    assert retrieved.status_code == 200
+    assert retrieved.json()["approval_status"] == "DRAFT"
+    assert retrieved.json()["approval_decided_at"] is None
+    assert retrieved.json()["reviewer_note"] is None
+    assert retrieved.json()["options"] == []
+    assert retrieved.json()["correct_option_position"] is None
+
+
+def test_incomplete_legacy_item_can_be_rejected(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, _ = _foundation(client, "legacy-rejection")
+    legacy_id = db_connection.scalar(
+        QuestionBankItem.__table__.insert()
+        .values(
+            content_version_id=content_version_id,
+            question_text="Rejectable legacy candidate",
+            explanation="Incomplete candidates may be rejected.",
+            difficulty="EASY",
+        )
+        .returning(QuestionBankItem.id)
+    )
+    assert legacy_id is not None
+
+    response = client.post(
+        f"/api/v1/question-bank-items/{legacy_id}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "Incomplete"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["approval_status"] == "REJECTED"
+    assert response.json()["approval_decided_at"] is not None
+    assert response.json()["reviewer_note"] == "Incomplete"
+
+
+def test_database_rejects_invalid_item_approval_status(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, topic_id = _foundation(client, "approval-constraint")
+    claim_id = _claim(client, topic_id, "approval-constraint")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+
+    savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(
+            update(QuestionBankItem)
+            .where(QuestionBankItem.id == item["id"])
+            .values(approval_status="INVALID")
+        )
+    savepoint.rollback()

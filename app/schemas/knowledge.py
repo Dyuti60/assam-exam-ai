@@ -150,6 +150,14 @@ class QuestionBankItemResponse(BaseModel):
     claim_ids: list[int]
     options: list[str]
     correct_option_position: int | None
+    approval_status: ClaimApprovalStatus
+    approval_decided_at: datetime | None
+    reviewer_note: str | None
+
+
+class QuestionBankItemApprovalCreate(BaseModel):
+    approval_status: ClaimApprovalStatus
+    reviewer_note: str | None = None
 
 
 class PreviousPaperCreate(BaseModel):

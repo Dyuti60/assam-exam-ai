@@ -40,6 +40,7 @@ from app.schemas.knowledge import (
     PreviousPaperResponse,
     PreviousQuestionCreate,
     PreviousQuestionResponse,
+    QuestionBankItemApprovalCreate,
     QuestionBankItemCreate,
     QuestionBankItemResponse,
     SourceCreate,
@@ -353,6 +354,37 @@ class KnowledgeService:
                 question_bank_item_id,
             )
         return self._question_bank_item_response(question_bank_item)
+
+    def record_question_bank_item_approval(
+        self,
+        question_bank_item_id: int,
+        request: QuestionBankItemApprovalCreate,
+    ) -> QuestionBankItemResponse:
+        question_bank_item = self.repository.get_question_bank_item(
+            question_bank_item_id
+        )
+        if question_bank_item is None:
+            raise ResourceNotFoundError(
+                "QuestionBankItem",
+                question_bank_item_id,
+            )
+        if (
+            request.approval_status == ClaimApprovalStatus.APPROVED
+            and not self._is_complete_question_bank_item(question_bank_item)
+        ):
+            raise ResourceConflictError(
+                f"QuestionBankItem {question_bank_item_id} is incomplete "
+                "and cannot be approved"
+            )
+        is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
+        self.repository.update_question_bank_item_approval(
+            question_bank_item,
+            request.approval_status.value,
+            None if is_draft else request.reviewer_note,
+            None if is_draft else datetime.now(UTC),
+        )
+        self._commit(question_bank_item)
+        return self.get_question_bank_item(question_bank_item.id)
 
     def create_topic(self, request: TopicCreate) -> Topic:
         topic = Topic(**request.model_dump())
@@ -670,6 +702,18 @@ class KnowledgeService:
             claim_ids=[link.claim_id for link in question_bank_item.claim_links],
             options=[option.option_text for option in question_bank_item.options],
             correct_option_position=correct_option_position,
+            approval_status=question_bank_item.approval_status,
+            approval_decided_at=question_bank_item.approval_decided_at,
+            reviewer_note=question_bank_item.reviewer_note,
+        )
+
+    @staticmethod
+    def _is_complete_question_bank_item(
+        question_bank_item: QuestionBankItem,
+    ) -> bool:
+        return len(question_bank_item.options) >= 2 and any(
+            option.id == question_bank_item.correct_option_id
+            for option in question_bank_item.options
         )
 
     def _commit_verification(

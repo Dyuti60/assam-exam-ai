@@ -537,3 +537,15 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 - **Goal:** Record DRAFT/APPROVED/REJECTED review decisions for complete QuestionBankItem candidates while preventing approval of legacy incomplete candidates.
 - **Architectural phase:** Canonical Content / Question Foundation.
 - **Full implementation prompt:** appended in `docs/next_task.md`.
+
+### T-023 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add independent DRAFT/APPROVED/REJECTED review decisions for QuestionBankItem candidates, guarding approval of incomplete legacy rows |
+| Tests | `uv run pytest tests/test_question_bank_items_api.py -q`: 34 passed in 2.28s with one Starlette deprecation warning. `uv run pytest -q`: 136 passed in 6.13s with the same warning. |
+| Ruff | Changed-file Ruff check passed. |
+| Migration checks | Fresh upgrade through `a6d1e8c3f247`, downgrade to `f2c8d4a6e915`, and re-upgrade passed. A seeded complete T-022 row remained present and became DRAFT with null decision metadata on each upgrade. `uv run alembic check` reported no new upgrade operations. |
+| Diff check | `git diff --check` passed. |
+| Notes | Candidate review is independent from Claim and NoteDraft approval. APPROVED/REJECTED record UTC decision metadata; DRAFT clears it. Incomplete legacy candidates cannot be approved and return stable 409 without mutation. No release, publication, learner, AI, dependency, configuration, Docker, AGENTS, or README behavior changed. |

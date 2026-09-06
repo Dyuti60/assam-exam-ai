@@ -75,6 +75,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `GET /api/v1/content-versions/{content_version_id}` | `get_content_version()` | `app/api/v1/routes/knowledge.py` | Retrieves stored ContentVersion identity only |
 | `POST /api/v1/question-bank-items` | `create_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Atomically stores a complete internal MCQ candidate with ordered Claim provenance and options |
 | `GET /api/v1/question-bank-items/{question_bank_item_id}` | `get_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Retrieves one stored candidate snapshot with Claim order, options, and answer |
+| `POST /api/v1/question-bank-items/{question_bank_item_id}/approval` | `record_question_bank_item_approval()` | `app/api/v1/routes/knowledge.py` | Records an independent candidate decision and maps missing/conflict errors |
 | `GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority` | `get_topic_priority()` | `app/api/v1/routes/knowledge.py` | Returns the read-only deterministic v1 Topic priority assessment |
 | `POST /api/v1/previous-papers` | `create_previous_paper()` | `app/api/v1/routes/knowledge.py` | Creates a sourced previous paper with stable per-Exam/year label conflicts |
 | `POST /api/v1/previous-questions` | `create_previous_question()` | `app/api/v1/routes/knowledge.py` | Records one exact Topic-linked question occurrence at a paper position |
@@ -173,6 +174,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `QuestionDifficulty` | `app/schemas/knowledge.py` | Restricts candidate difficulty to EASY, MEDIUM, or HARD |
 | `QuestionBankItemCreate` | `app/schemas/knowledge.py` | Validates T-021 fields, at least two non-blank ordered options, and an in-range correct-option position |
 | `QuestionBankItemResponse` | `app/schemas/knowledge.py` | Serializes stored Claim provenance, options, and answer; supports legacy empty/null option state |
+| `QuestionBankItemApprovalCreate` | `app/schemas/knowledge.py` | Restricts candidate decisions to DRAFT, APPROVED, or REJECTED with an optional note |
 | `TopicPriorityBand` / `TopicPriorityReason` / `TopicPriorityResponse` | `app/schemas/knowledge.py` | Define the fixed bands, deterministic reason codes, and assessment response |
 | `PreviousPaperCreate` / `PreviousPaperResponse` | `app/schemas/knowledge.py` | Validate and serialize sourced previous-paper identity |
 | `PreviousQuestionCreate` / `PreviousQuestionResponse` | `app/schemas/knowledge.py` | Validate and serialize one Topic-linked historical question occurrence |
@@ -201,6 +203,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `add_content_version()` / `get_content_version()` | `app/repositories/knowledge.py` | Persist or retrieve a ContentVersion identity |
 | `add_question_bank_item()` / `get_question_bank_item()` | `app/repositories/knowledge.py` | Flush a candidate with dependencies or eagerly retrieve ordered Claims and options |
 | `get_claims_for_question_bank_item()` | `app/repositories/knowledge.py` | Loads all requested Claims in one locking query so eligibility stays stable through creation |
+| `update_question_bank_item_approval()` | `app/repositories/knowledge.py` | Assigns candidate review status, decision time, and reviewer note in the caller's transaction |
 | `add_previous_paper()` / `get_previous_paper()` | `app/repositories/knowledge.py` | Persist or retrieve sourced previous papers |
 | `add_previous_question()` | `app/repositories/knowledge.py` | Flushes an exact historical question occurrence in the caller's transaction |
 | `add_topic()` / `get_topic()` | `app/repositories/knowledge.py` | Persist or retrieve Topics |
@@ -228,6 +231,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_question_bank_item()` / `get_question_bank_item()` | `app/services/knowledge.py` | Enforce approved same-Topic grounding, own atomic creation, and return stored snapshots |
 | `_commit_question_bank_item()` | `app/services/knowledge.py` | Flushes item/options, assigns the selected option ID, and commits all candidate rows atomically |
 | `_question_bank_item_response()` | `app/services/knowledge.py` | Serializes persisted Claim and option order plus correct position without re-evaluation |
+| `record_question_bank_item_approval()` | `app/services/knowledge.py` | Applies review/reset semantics and blocks approval of incomplete stored candidates |
+| `_is_complete_question_bank_item()` | `app/services/knowledge.py` | Requires at least two options and a correct option belonging to the stored item |
 | `create_previous_paper()` | `app/services/knowledge.py` | Validates Exam/Source, commits a paper, and translates its named uniqueness conflict |
 | `create_previous_question()` | `app/services/knowledge.py` | Validates Paper/Topic, commits an occurrence, and translates its named position conflict |
 | `create_topic()` | `app/services/knowledge.py` | Creates a Topic; rolls back database uniqueness conflicts and raises a domain conflict error |
@@ -281,6 +286,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `downgrade()` | `migrations/versions/e9a4c2f7b163_add_question_bank_items.py` | Removes candidate links and items in dependency order |
 | `upgrade()` | `migrations/versions/f2c8d4a6e915_add_question_bank_options.py` | Adds ordered options and nullable same-item correct-answer references |
 | `downgrade()` | `migrations/versions/f2c8d4a6e915_add_question_bank_options.py` | Removes the answer reference before removing options |
+| `upgrade()` | `migrations/versions/a6d1e8c3f247_add_question_bank_item_approval.py` | Adds constrained independent candidate-review fields with safe DRAFT defaults |
+| `downgrade()` | `migrations/versions/a6d1e8c3f247_add_question_bank_item_approval.py` | Removes only candidate-review fields and their status constraint |
 
 ## Tests
 
@@ -365,6 +372,13 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_option_database_constraints_and_same_item_answer_integrity()` | `tests/test_question_bank_items_api.py` | Confirms PostgreSQL option text/order constraints, cross-item answer rejection, and selected-option deletion restriction | Passed for T-022 |
 | `test_deleting_item_cascades_only_its_dependent_rows()` | `tests/test_question_bank_items_api.py` | Confirms parent deletion removes options and Claim links but retains ContentVersion and Claims | Passed for T-022 |
 | `test_legacy_item_without_options_remains_retrievable()` | `tests/test_question_bank_items_api.py` | Confirms migrated T-021 rows serialize with empty options and null correct position | Passed for T-022 |
+| `test_record_item_decision_preserves_complete_stored_snapshot()` | `tests/test_question_bank_items_api.py` | Confirms APPROVED/REJECTED decisions set metadata without changing content, provenance, or Claims | Passed twice for T-023 |
+| `test_returning_item_to_draft_clears_decision_metadata()` | `tests/test_question_bank_items_api.py` | Confirms DRAFT clears the decision timestamp and reviewer note | Passed for T-023 |
+| `test_item_approval_returns_404_and_invalid_status_returns_422()` | `tests/test_question_bank_items_api.py` | Confirms established missing-item 404 and schema-driven invalid-status 422 | Passed for T-023 |
+| `test_complete_item_can_be_approved_after_claim_returns_to_draft()` | `tests/test_question_bank_items_api.py` | Confirms review uses the stored candidate snapshot rather than current Claim approval | Passed for T-023 |
+| `test_incomplete_legacy_item_cannot_be_approved_and_is_unchanged()` | `tests/test_question_bank_items_api.py` | Confirms stable 409 and no mutation for incomplete-candidate approval | Passed for T-023 |
+| `test_incomplete_legacy_item_can_be_rejected()` | `tests/test_question_bank_items_api.py` | Confirms incomplete legacy candidates may be rejected | Passed for T-023 |
+| `test_database_rejects_invalid_item_approval_status()` | `tests/test_question_bank_items_api.py` | Confirms PostgreSQL restricts candidate review status | Passed for T-023 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -767,6 +781,27 @@ flowchart LR
 - `uv run pytest -q`: 128 passed in 4.88s with the same warning.
 - Fresh upgrade through `f2c8d4a6e915`, downgrade to `e9a4c2f7b163`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected.
 - No dependency, configuration, Docker, AGENTS, README, review, release, AI, previous-question conversion, NoteDraft binding, or learner feature changed.
+
+### T-023 Independent QuestionBankItem review
+
+```mermaid
+flowchart LR
+    REQUEST["POST /question-bank-items/{id}/approval"] --> LOAD["Load stored candidate snapshot"]
+    LOAD --> COMPLETE{"APPROVED and complete?"}
+    COMPLETE -->|No| CONFLICT["Stable 409; no mutation"]
+    COMPLETE -->|Yes or non-APPROVED| DECISION["Set or clear decision metadata"]
+    DECISION --> COMMIT["Atomic commit"]
+    COMMIT --> RESPONSE["Complete stored response"]
+```
+
+- New and migrated candidates default to DRAFT with null decision time and reviewer note; migration never infers approval.
+- APPROVED and REJECTED decisions record current UTC time and the supplied note. DRAFT clears both metadata fields.
+- APPROVED requires at least two stored options and a valid same-item correct option. Incomplete legacy rows remain DRAFT-capable and rejectable.
+- Review does not re-evaluate current Claim approval or change text, explanation, difficulty, ContentVersion, Claims, options, or answer.
+- `uv run pytest tests/test_question_bank_items_api.py -q`: 34 passed in 2.28s with one Starlette deprecation warning.
+- `uv run pytest -q`: 136 passed in 6.13s with the same warning.
+- A seeded complete T-022 row survived downgrade/re-upgrade and received DRAFT with null decision metadata on each upgrade; `uv run alembic check` reported no new upgrade operations.
+- Changed-file Ruff and `git diff --check` passed.
 
 ## Template for future pushed changes
 
