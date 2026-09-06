@@ -637,3 +637,33 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Migration checks | Fresh upgrade through `b3e7f1a9c462` passed. Downgrade to `a6d1e8c3f247` and re-upgrade passed twice. A seeded pre-T-025 APPROVED candidate survived both cycles and became UNRELEASED with null timestamps/note, without inferred release. `uv run alembic check` reported no new upgrade operations. |
 | Diff check | `git diff --check` passed; only line-ending normalization warnings were emitted. |
 | Notes | Release requires a complete, currently approved stored candidate; withdrawal is one-way and preserves the original release time. PostgreSQL enforces lifecycle metadata and approved-release consistency. Released items lock DRAFT/REJECTED review changes until withdrawal. The existing approved-items endpoint remains approval-only. No released-items list, public/learner delivery, generation, personalization, dependency, configuration, Docker, AGENTS, README, or T-026 behavior was added. |
+
+
+---
+
+## T-025 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-025` |
+| Implementation commit | `84e0b20fd81d9bf7b241a93686811db0ccd3e8dc` |
+| Base/task-issuance commit | `91a9ecaa861a0ceba8d557bb1995f6d636bfcd8f` |
+| Review state | **APPROVED** |
+| Approved capability | Controlled UNRELEASED/RELEASED/WITHDRAWN lifecycle for complete, independently approved QuestionBankItem snapshots |
+| Migration | `b3e7f1a9c462_add_question_bank_item_release.py`, parent `a6d1e8c3f247`; historical migrations unchanged |
+| Validation evidence | Developer-recorded: `52 passed, 1 warning` focused; `154 passed, 1 warning` full suite; changed-file Ruff; fresh upgrade; downgrade/re-upgrade; seeded-record preservation; Alembic check; and diff check. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | Release requires the item's own APPROVED state and complete stored MCQ structure. Withdrawal preserves release time. Invalid transitions and released-item review changes fail with stable 409 and no mutation. Row locking serializes decisions, and stored content/provenance is not re-evaluated or changed. |
+| Boundaries | Release remains distinct from review, Claim/NoteDraft approval, Verification, publication transport, and learner delivery. No released collection, T-026 implementation, AI, auth, personalization, mock, PDF, dependency, configuration, or Docker work was included. |
+
+
+---
+
+## T-026 issued — Add released QuestionBankItem read boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one read-only internal collection that returns only currently RELEASED stored QuestionBankItem snapshots in stable ID order |
+| Architectural phase | Canonical Content / Controlled Release Foundation |
+| Scope | Released canonical-question selection boundary only; no public/learner delivery, publication transport, generation, personalization, or mock assembly |
+| Full implementation prompt | Appended to `docs/next_task.md` |
