@@ -2220,3 +2220,382 @@ Do not implement T-028.
 Leave T-027 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-07 Asia/Kolkata, UTC+05:30): added nullable legacy-safe `NoteDraft.content_version_id` and migration `c7a4e9d2f816`, plus a required positive ContentVersion request for persisted draft creation. The service validates Topic, ContentVersion, same-Topic ownership, then approved Claims; PostgreSQL independently enforces the same-Topic composite reference and restricts deletion of referenced ContentVersions. Existing drafts retain null ownership without inference and remain retrievable, reviewable, and approval-list eligible. Preview, QuestionBankItem behavior, NoteDraft release, delivery, publication, AI, personalization, and T-028 were not added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+---
+
+## T-027 review outcome
+
+- **APPROVED** after independent inspection of implementation commit `bcff4c54a04f6ec3cdcb094f71d64241e87a3622` against its canonical T-027 prompt and parent `a2e9f2ba19ba599255a18f3724e07482489b4b72`.
+- The commit requires a positive ContentVersion for every newly persisted NoteDraft, preserves legacy null ownership without inference, validates Topic and same-Topic ContentVersion ownership before Claim eligibility, and enforces the ownership invariant in PostgreSQL.
+- New and legacy ownership are preserved through individual retrieval, approval responses, and approved-list responses. The requested explicit non-null approval/list assertions and legacy-null assertions are present.
+- Developer-recorded evidence is 22 focused NoteDraft tests, 12 focused ContentVersion tests, and 164 full-suite tests, each with one existing warning, plus successful Ruff, migration-cycle, PostgreSQL constraint, Alembic, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No NoteDraft release, released collection, publication transport, learner delivery, PDF, AI, personalization, dependency, configuration, Docker, or T-028 implementation was included.
+
+---
+
+# T-028 — Add controlled NoteDraft release lifecycle
+
+Read `AGENTS.md` and all project documents first. Inspect the live repository and the approved T-013 through T-027 implementation conventions before changing code.
+
+Do **not** commit, push, create a PR, self-approve, or implement T-029. Leave the complete T-028 working tree uncommitted and unpushed for independent review.
+
+## Current context
+
+T-027 is approved at implementation commit:
+
+`bcff4c54a04f6ec3cdcb094f71d64241e87a3622`
+
+The platform now stores deterministic NoteDraft snapshots with:
+
+- one Topic;
+- one exact ContentVersion for every newly created draft;
+- nullable ContentVersion ownership only for legacy drafts where ownership cannot be inferred;
+- exact ordered approved-Claim provenance captured at creation;
+- independent DRAFT/APPROVED/REJECTED human review;
+- individual retrieval and an approval-only collection.
+
+A reviewed NoteDraft still has no controlled release state. Approval must not automatically imply release, and a legacy draft without exact ContentVersion ownership must not become releasable.
+
+## Goal
+
+Add the smallest explicit release lifecycle for stored NoteDrafts:
+
+`UNRELEASED → RELEASED → WITHDRAWN`
+
+Release must remain a separate human-controlled decision from NoteDraft approval. A NoteDraft may be released only when:
+
+- its own review state is exactly `APPROVED`; and
+- it has a non-null stored `content_version_id`.
+
+T-028 adds release and withdrawal state only. It must not add a released-drafts collection, publication transport, public or learner delivery, PDF generation, AI generation, or personalization.
+
+## Data model and migration
+
+Add exactly one new Alembic migration after current head:
+
+`c7a4e9d2f816`
+
+Never edit historical migrations.
+
+Extend `NoteDraft` with:
+
+- `release_status`: non-null string, defaulting to `UNRELEASED`;
+- `released_at`: nullable timezone-aware timestamp;
+- `withdrawn_at`: nullable timezone-aware timestamp;
+- `release_note`: nullable text.
+
+Migration behavior:
+
+- every existing NoteDraft becomes `UNRELEASED`;
+- `released_at`, `withdrawn_at`, and `release_note` remain null;
+- do not infer release from NoteDraft approval, ContentVersion ownership, creation time, Claim state, or any other field;
+- preserve every existing Topic, ContentVersion ownership value including legacy nulls, Markdown snapshot, ordered Claim link, review field, and creation timestamp;
+- use a migration-safe temporary server default only if required, then keep model/migration metadata aligned and avoid unintended permanent database defaults.
+
+Add named PostgreSQL constraints enforcing:
+
+1. `release_status` is exactly one of:
+   - `UNRELEASED`
+   - `RELEASED`
+   - `WITHDRAWN`
+
+2. State/metadata consistency:
+   - `UNRELEASED`: `released_at IS NULL`, `withdrawn_at IS NULL`, and `release_note IS NULL`;
+   - `RELEASED`: `released_at IS NOT NULL`, `withdrawn_at IS NULL`, `approval_status = 'APPROVED'`, and `content_version_id IS NOT NULL`;
+   - `WITHDRAWN`: `released_at IS NOT NULL`, `withdrawn_at IS NOT NULL`, and `content_version_id IS NOT NULL`.
+
+The database must prevent a currently RELEASED NoteDraft from becoming DRAFT or REJECTED through direct persistence.
+
+The downgrade must remove only the T-028 constraints and release columns. It must preserve all T-027 and earlier data and behavior, including NoteDraft ContentVersion ownership and legacy null ownership.
+
+Keep model metadata and migration constraint names aligned so `uv run alembic check` reports no drift.
+
+## API contract
+
+Add exactly one endpoint:
+
+`POST /api/v1/note-drafts/{note_draft_id}/release`
+
+Add a Pydantic request schema accepting:
+
+- `release_status`: exactly `RELEASED` or `WITHDRAWN`;
+- `release_note`: optional string or null.
+
+Do not accept `UNRELEASED` as an API decision. Invalid or missing release status must return standard HTTP 422.
+
+Extend `NoteDraftResponse` with:
+
+- `release_status`;
+- `released_at`;
+- `withdrawn_at`;
+- `release_note`.
+
+All existing NoteDraft response boundaries must return the stored release fields:
+
+- persisted creation;
+- individual retrieval;
+- approval decisions;
+- approved-draft collection;
+- the new release decision endpoint.
+
+New and migrated NoteDrafts return `UNRELEASED` with null release metadata until explicitly released.
+
+## Allowed transitions
+
+Allow only:
+
+1. `UNRELEASED → RELEASED`
+   - requires the NoteDraft's own `approval_status == 'APPROVED'`;
+   - requires non-null stored `content_version_id`;
+   - records the current UTC `released_at`;
+   - keeps `withdrawn_at` null;
+   - stores the optional release note.
+
+2. `RELEASED → WITHDRAWN`
+   - preserves the original `released_at`;
+   - records the current UTC `withdrawn_at`;
+   - replaces the release note with the optional withdrawal note supplied for this decision.
+
+Reject every other transition with stable HTTP 409 and no mutation, including:
+
+- `UNRELEASED → WITHDRAWN`;
+- `RELEASED → RELEASED`;
+- `WITHDRAWN → WITHDRAWN`;
+- `WITHDRAWN → RELEASED`.
+
+A WITHDRAWN NoteDraft cannot be re-released in place. A future corrected release must use a new canonical version/snapshot rather than silently reactivating historical content.
+
+## Eligibility and independence
+
+Release eligibility depends only on the stored NoteDraft's:
+
+- own review state;
+- own release state;
+- stored ContentVersion ownership.
+
+Do not re-evaluate current Claim approval, Verification, Evidence, Source, SyllabusVersion, Topic-priority, QuestionBankItem review, or QuestionBankItem release state.
+
+Do not regenerate Markdown, recalculate Claim provenance, infer ContentVersion ownership, or mutate the Topic, ContentVersion, Claims, Claim links, Evidence, Verification, QuestionBankItems, or other NoteDrafts.
+
+An approved legacy NoteDraft whose `content_version_id` is null:
+
+- remains retrievable, reviewable, and eligible for the approval-only collection;
+- cannot be released;
+- must receive a stable HTTP 409 with no mutation when release is attempted;
+- may remain DRAFT/APPROVED or be REJECTED according to the existing review behavior while it is UNRELEASED.
+
+## Review-state interaction
+
+While a NoteDraft is currently `RELEASED`:
+
+- block attempts to change its approval state to `DRAFT` or `REJECTED`;
+- return stable HTTP 409 without changing review or release metadata.
+
+After it becomes `WITHDRAWN`:
+
+- allow the existing approval transitions again;
+- never clear or reactivate its historical release/withdrawal metadata;
+- never permit in-place re-release.
+
+Approval remains distinct from release. Approving an UNRELEASED NoteDraft must not release it.
+
+## Error behavior
+
+Use the established error shape and mappings:
+
+- missing NoteDraft: HTTP 404 with the existing deterministic detail;
+- release of a DRAFT or REJECTED NoteDraft: stable HTTP 409 with no mutation;
+- release of an approved legacy NoteDraft with null ContentVersion: stable HTTP 409 with no mutation;
+- invalid transition: stable HTTP 409 with no mutation;
+- invalid request body or `UNRELEASED` decision: standard HTTP 422.
+
+Use clear deterministic conflict details and assert them exactly in tests.
+
+Do not expose raw database constraint names or convert generic persistence failures into misleading domain conflicts.
+
+## Layering, locking, and atomicity
+
+Preserve:
+
+`Route → Pydantic schema → Service → Repository → PostgreSQL`
+
+Requirements:
+
+- keep the route thin;
+- validate request shape in Pydantic;
+- keep transition and eligibility rules in the service;
+- perform persistence through the repository;
+- enforce persistence invariants again in PostgreSQL;
+- load the target NoteDraft with `SELECT ... FOR UPDATE` for both release decisions and approval decisions that can conflict with release state;
+- perform each decision in one transaction;
+- commit once on success;
+- roll back fully on every failure;
+- return the stored NoteDraft snapshot after the successful commit;
+- avoid partial timestamp, note, review, or release mutations.
+
+Reuse established error and transaction helpers where appropriate without weakening their behavior.
+
+## Boundary compatibility
+
+Preserve unchanged:
+
+- `POST /api/v1/topics/{topic_id}/note-draft-preview`;
+- `POST /api/v1/topics/{topic_id}/note-drafts`, including required ContentVersion ownership;
+- `GET /api/v1/note-drafts/{note_draft_id}`;
+- `POST /api/v1/note-drafts/{note_draft_id}/approval`, except for the required RELEASED-state guard and row lock;
+- `GET /api/v1/note-drafts/approved`, which must remain approval-only and may include approved UNRELEASED, RELEASED, or WITHDRAWN drafts;
+- all ContentVersion behavior;
+- all QuestionBankItem creation, review, approval-list, release, and released-list behavior;
+- all PreviousPaper, PreviousQuestion, and Topic-priority semantics.
+
+Do not add `GET /api/v1/note-drafts/released` in T-028.
+
+## Affected components
+
+Inspect and update only where necessary:
+
+- `app/models/note_draft.py`;
+- model registration and Alembic metadata;
+- exactly one new Alembic migration;
+- `app/schemas/knowledge.py`;
+- `app/repositories/knowledge.py`;
+- `app/services/knowledge.py`;
+- `app/api/v1/routes/knowledge.py`;
+- focused NoteDraft API/PostgreSQL tests;
+- migration and regression tests;
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append-only `docs/task_log.md`;
+- append-only `docs/next_task.md`.
+
+Inspect but leave unchanged unless a genuine T-028 requirement proves otherwise:
+
+- ContentVersion models and APIs;
+- QuestionBankItem models, schemas, repositories, services, routes, and tests;
+- PreviousPaper and PreviousQuestion components;
+- Topic-priority components;
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+Report the inspection result for every unchanged dependency, configuration, infrastructure, and governance file.
+
+## Required tests
+
+Add focused PostgreSQL/API coverage proving:
+
+- migration upgrades all existing NoteDrafts to `UNRELEASED` with null release metadata and without inferred release;
+- migration downgrade to `c7a4e9d2f816` and re-upgrade preserve Topic, ContentVersion ownership including legacy nulls, Markdown, ordered Claim links, approval fields, and creation time;
+- new NoteDrafts begin UNRELEASED with null release metadata;
+- approval does not imply release;
+- a complete version-owned APPROVED NoteDraft can transition UNRELEASED → RELEASED;
+- release records a timezone-aware UTC timestamp and optional note;
+- release preserves Topic, ContentVersion, Markdown, ordered Claim provenance, creation time, and approval metadata;
+- later Claim approval changes do not affect release eligibility or the stored snapshot;
+- Claim, Verification, QuestionBankItem, and other NoteDraft states cannot substitute for the target NoteDraft's own approval;
+- DRAFT and REJECTED NoteDrafts cannot be released and remain unchanged;
+- an approved legacy null-ContentVersion draft cannot be released and remains unchanged;
+- UNRELEASED → WITHDRAWN returns the exact stable 409 with no mutation;
+- duplicate release returns the exact stable 409 with no mutation;
+- RELEASED → WITHDRAWN preserves `released_at`, records timezone-aware UTC `withdrawn_at`, and stores the optional withdrawal note;
+- WITHDRAWN cannot be withdrawn again or re-released;
+- DRAFT/REJECTED approval changes are blocked while RELEASED;
+- approval changes are allowed again after withdrawal without changing historical release metadata;
+- missing NoteDraft returns the established 404;
+- missing, invalid, and UNRELEASED request decisions return standard 422;
+- PostgreSQL rejects invalid release statuses and every invalid status/timestamp/note combination;
+- PostgreSQL rejects RELEASED rows without APPROVED review;
+- PostgreSQL rejects RELEASED or WITHDRAWN rows without ContentVersion ownership;
+- decision failures are atomic and leave no partial mutation;
+- the approved-drafts collection remains approval-only and preserves release metadata;
+- preview, persisted creation, retrieval, and existing approval behavior remain compatible;
+- all T-013 through T-027 regressions continue to pass.
+
+Do not weaken, delete, or silently skip existing tests.
+
+## Exclusions
+
+Do not add:
+
+- a released NoteDraft collection;
+- publication transport or publication records;
+- public or learner-facing APIs;
+- PDF generation, export, download, storage, or deployment;
+- users, authentication, authorization, reviewer/releaser identity, or decision-history tables;
+- edit, delete, supersede, retrofit, or backfill endpoints;
+- automatic ContentVersion selection or inference;
+- automatic next-version calculation;
+- per-learner note copies;
+- practice sessions, attempts, analytics, mock assembly, or personalization;
+- AI/LLM providers, prompts, generation, ingestion, RAG, embeddings, or scraping;
+- QuestionBankItem changes;
+- PreviousQuestion conversion;
+- prediction, probability, or likelihood semantics;
+- dependencies, secrets, environment variables, Docker services, payments, or unrelated infrastructure.
+
+A PreviousQuestion remains a sourced historical occurrence and must never be converted into a generated question or represented as prediction.
+
+## Documentation
+
+Update `docs/architecture.md` and `docs/workflow.md` only for behavior actually implemented.
+
+Append—never rewrite, reorder, consolidate, or delete history:
+
+- the T-028 implementation record in `docs/task_log.md`;
+- an implementation note beneath this T-028 prompt in `docs/next_task.md`.
+
+Do not mark T-028 approved.
+
+Do not define or implement T-029.
+
+## Validation
+
+Run and report exact results for:
+
+- focused NoteDraft tests;
+- the full test suite;
+- Ruff on every changed Python file;
+- fresh upgrade through the new T-028 migration;
+- downgrade to T-027 head `c7a4e9d2f816`;
+- re-upgrade to the new T-028 migration;
+- seeded version-owned and legacy-null NoteDraft preservation across the migration cycle;
+- direct PostgreSQL rejection of invalid release states and missing approval/ownership;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- `git diff --check`;
+- `git status --short`.
+
+Use a dedicated PostgreSQL test database. Never run destructive migration-cycle testing against a non-test database.
+
+## Final report
+
+Report:
+
+1. files changed;
+2. release fields and PostgreSQL constraints;
+3. migration revision, parent, upgrade, downgrade, and seeded-row behavior;
+4. exact release request and response contract;
+5. allowed transitions and stable 404/409/422 behavior;
+6. approval and non-null ContentVersion eligibility;
+7. review-state locking while RELEASED;
+8. transaction locking, atomicity, and rollback behavior;
+9. stored Markdown, ContentVersion, and ordered Claim-provenance preservation;
+10. legacy null-ownership compatibility and release rejection;
+11. approved-list compatibility;
+12. focused, migration, and full-suite test results;
+13. Ruff, Alembic-head, Alembic-check, and diff-check results;
+14. dependency/configuration/Docker/AGENTS/README review outcomes;
+15. retained trust, provenance, versioning, approval, release, and Generate Once/Personalize Later boundaries;
+16. final git status;
+17. explicit confirmation that no commit, push, PR, self-approval, T-029, released-draft collection, publication transport, public/learner delivery, PDF, AI generation, mock assembly, or personalization work occurred.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-029.
+
+Leave T-028 uncommitted and unpushed in the working tree for independent review.
