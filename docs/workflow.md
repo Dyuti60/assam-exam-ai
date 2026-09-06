@@ -1022,3 +1022,15 @@ flowchart TD
 - Approval and release decisions lock the candidate row. Release does not re-evaluate current Claim, NoteDraft, or Verification state and changes no stored content, provenance, answer, or prior review metadata.
 - `GET /api/v1/question-bank-items/approved` remains an approval-only boundary. No released collection, public/learner delivery, generation, personalization, dependency, configuration, Docker, or T-026 implementation was included.
 - Developer-recorded validation: `52 passed, 1 warning` focused; `154 passed, 1 warning` full suite; changed-file Ruff, fresh upgrade, downgrade/re-upgrade, seeded-row preservation, Alembic check, and diff check passed. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
+
+
+---
+
+## T-026 independent review outcome
+
+- **APPROVED** after inspection of implementation commit `d5c3b484b8268ae745da491617c56c02a1be3853` against the canonical T-026 prompt and parent `3e630d9fd952dcb24a320295fbc281b6396b0e45`.
+- The static released-candidate route precedes the dynamic item route. Its repository query filters exactly on current RELEASED state, orders by item ID, and select-in loads ordered Claim links and options.
+- Responses reuse stored `QuestionBankItemResponse` snapshots. UNRELEASED and WITHDRAWN candidates are excluded; the approved-items collection remains an independent approval-only boundary.
+- The endpoint performs no write, lock, transition, regeneration, or current Claim/NoteDraft/Verification evaluation. Existing T-021 through T-025 behavior remains intact.
+- Developer-recorded validation: `54 passed, 1 warning` combined focused tests; `52 passed, 1 warning` existing QuestionBankItem tests; `156 passed, 1 warning` full suite; changed-file Ruff and Alembic checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No model, schema, migration, dependency, configuration, Docker, public/learner delivery, publication transport, mock assembly, AI, personalization, or T-027 implementation was included.
