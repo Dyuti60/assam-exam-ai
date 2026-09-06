@@ -512,3 +512,28 @@ The candidate remains unreviewed, unreleased, and not learner-facing. It has no 
 | Migration checks | Fresh upgrade through `f2c8d4a6e915`, downgrade to `e9a4c2f7b163`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
 | Diff check | `git diff --check` passed. |
 | Notes | New API-created items require at least two non-blank ordered options and one in-range correct position. PostgreSQL enforces option text/order and same-item answer integrity while nullable migration state keeps T-021 rows readable. Item creation remains atomic and retrieval remains a stored snapshot. No dependency, configuration, Docker, AGENTS, README, review, release, AI, NoteDraft binding, previous-paper conversion, or learner behavior changed. |
+
+
+---
+
+## T-022 — Complete internal MCQ structure
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-022` |
+| Implementation commit | `4dc87a82a1d8695a6316debad03d7f3af43e28e2` |
+| Review state | **APPROVED** |
+| Documentation approval/task commit | `265fee439ad9b11cc51800515349270095038f46` |
+| Approved capability | Complete internal QuestionBankItem candidates with ordered options and one same-item correct answer |
+| Migration | `f2c8d4a6e915_add_question_bank_options.py` |
+| Validation evidence | `26 passed, 1 warning in 1.42s` focused; `128 passed, 1 warning in 4.88s` full suite; upgrade/downgrade/re-upgrade; Alembic check; changed-file Ruff; `git diff --check` |
+| Dependencies/configuration/Docker | No new dependencies, environment variables, secrets, or Docker services required |
+
+The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T-023 will add its independent human-review decision; it will not add a release or learner-facing boundary.
+
+## T-023 — Independent QuestionBankItem human review
+
+- **State:** Issued; not implemented.
+- **Goal:** Record DRAFT/APPROVED/REJECTED review decisions for complete QuestionBankItem candidates while preventing approval of legacy incomplete candidates.
+- **Architectural phase:** Canonical Content / Question Foundation.
+- **Full implementation prompt:** appended in `docs/next_task.md`.
