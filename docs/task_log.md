@@ -724,3 +724,29 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Ruff | Changed-file Ruff passed (`All checks passed!`). |
 | Migration checks | Fresh upgrade through `c7a4e9d2f816`, downgrade to `b3e7f1a9c462`, and re-upgrade passed. A seeded legacy draft retained Markdown, Topic, approval metadata, and ordered Claim provenance with null ContentVersion ownership. `uv run alembic heads` reported `c7a4e9d2f816 (head)` and `uv run alembic check` reported no new upgrade operations. |
 | Notes | Creation validates Topic, ContentVersion, same-Topic ownership, then approved Claims before atomically writing the draft and Claim links. PostgreSQL independently enforces the same-Topic composite reference and restricts deletion of referenced ContentVersions. Preview, legacy reads/review, QuestionBankItems, dependencies, configuration, Docker, AGENTS, README, release, delivery, AI, personalization, and T-028 behavior remain unchanged. |
+---
+
+## T-027 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-027` |
+| Implementation commit | `bcff4c54a04f6ec3cdcb094f71d64241e87a3622` |
+| Base/task-issuance commit | `a2e9f2ba19ba599255a18f3724e07482489b4b72` |
+| Review state | **APPROVED** |
+| Approved capability | Every newly persisted NoteDraft is bound to one exact same-Topic ContentVersion; legacy drafts remain compatible with null ownership and no inferred data |
+| Validation evidence | Developer-recorded: 22 focused NoteDraft tests, 12 focused ContentVersion tests, and 164 full-suite tests, each with one existing warning; changed-file Ruff; fresh upgrade; seeded downgrade/re-upgrade; PostgreSQL mismatch/deletion checks; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The immutable commit is exactly one commit over the issued base. Route/schema/service/repository/PostgreSQL layering, validation order, atomicity, migration safety, same-Topic enforcement, stored-snapshot behavior, explicit new-ownership assertions, and legacy-null compatibility satisfy T-027. |
+| Boundaries | No NoteDraft release, released collection, publication transport, learner delivery, PDF, AI, personalization, dependency, configuration, Docker, or T-028 implementation was included. |
+
+---
+
+## T-028 issued — Add controlled NoteDraft release lifecycle
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add an explicit UNRELEASED/RELEASED/WITHDRAWN lifecycle to stored NoteDrafts, requiring independent NoteDraft approval and non-null ContentVersion ownership before release |
+| Architectural phase | Canonical Content / Controlled Note Release |
+| Scope | Release and withdrawal state only; no released collection, publication transport, public/learner delivery, PDF, AI generation, or personalization |
+| Full implementation prompt | Appended to `docs/next_task.md` |
