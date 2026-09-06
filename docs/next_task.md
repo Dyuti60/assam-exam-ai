@@ -1893,3 +1893,328 @@ Leave T-026 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-07 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/question-bank-items/released` through the existing route, service, repository, and `QuestionBankItemResponse` flow. It filters exactly on current RELEASED state, returns stored snapshots in ascending item ID order with ordered Claim and option provenance eagerly loaded, and returns `[]` when none qualify. UNRELEASED and WITHDRAWN candidates are excluded, while the existing approved-items endpoint remains approval-only. No model, schema, migration, write, regeneration, public/learner delivery, publication transport, mock assembly, AI, personalization, or T-027 work was added; exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
 
+
+---
+
+## T-026 review outcome
+
+- **APPROVED** after independent inspection of implementation commit `d5c3b484b8268ae745da491617c56c02a1be3853` (`feat: add released question bank item read boundary`) against its canonical prompt and parent `3e630d9fd952dcb24a320295fbc281b6396b0e45`.
+- The implementation adds only `GET /api/v1/question-bank-items/released`; it filters exact current RELEASED state, preserves stable item and nested provenance order, returns stored snapshots, keeps the approved-items boundary distinct, and performs no writes or re-evaluation.
+- Developer-recorded evidence is `54 passed, 1 warning` combined focused tests, `52 passed, 1 warning` existing QuestionBankItem tests, and `156 passed, 1 warning` full suite, plus changed-file Ruff, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No model, schema, migration, dependency, configuration, delivery, publication transport, learner, personalization, mock, AI, or T-027 implementation was included.
+
+
+---
+
+# T-027 — Bind new NoteDrafts to ContentVersion
+
+Read `AGENTS.md` and all project documents first. Inspect the live repository and the approved T-013 through T-026 implementation conventions before changing code.
+
+Do **not** commit, push, create a PR, self-approve, or implement T-028. Leave the complete T-027 working tree uncommitted and unpushed for independent review.
+
+## Current context
+
+The platform has stored NoteDraft snapshots with ordered Claim provenance, individual retrieval, independent DRAFT/APPROVED/REJECTED review, and an approved-draft read boundary.
+
+However, a NoteDraft currently belongs only to a Topic. It does not belong to the exact ContentVersion that identifies one Exam, sourced SyllabusVersion, Topic, and explicit version number.
+
+QuestionBankItems already belong to ContentVersion. The canonical-content rule requires the same version ownership foundation for notes before any NoteDraft release, public delivery, learner access, generation, or personalization work.
+
+T-026 is approved at implementation commit:
+
+`d5c3b484b8268ae745da491617c56c02a1be3853`
+
+## Goal
+
+Require every newly persisted NoteDraft to belong to one exact ContentVersion whose Topic matches the NoteDraft Topic.
+
+Preserve existing NoteDraft rows as readable legacy snapshots without guessing or inferring a ContentVersion.
+
+This task establishes versioned canonical-note ownership only. It must not add NoteDraft release, publication, learner delivery, AI generation, or personalization.
+
+## Data model and migration
+
+Add exactly one new Alembic migration after current head:
+
+`b3e7f1a9c462`
+
+Never edit historical migrations.
+
+Extend `NoteDraft` with:
+
+- `content_version_id`: nullable integer at the database/model level for migration-safe legacy compatibility.
+
+Migration behavior:
+
+- existing NoteDraft rows must receive `content_version_id = null`;
+- do not infer ContentVersion from Topic, current syllabus data, creation time, approval state, or any other field;
+- existing Markdown, Topic ownership, Claim links and positions, approval status, approval timestamp, reviewer note, and creation timestamp must remain unchanged;
+- new API-created NoteDrafts must always persist a non-null ContentVersion ID.
+
+PostgreSQL must enforce that a non-null NoteDraft ContentVersion belongs to the same Topic as the NoteDraft.
+
+Use a composite database invariant:
+
+- add a named unique constraint on `content_versions(id, topic_id)` if PostgreSQL requires it as the referenced key;
+- add a named composite foreign key from `note_drafts(content_version_id, topic_id)` to `content_versions(id, topic_id)`;
+- use `ON DELETE RESTRICT`;
+- allow the composite foreign key to remain satisfied for legacy rows whose `content_version_id` is null.
+
+Do not make `note_drafts.content_version_id` globally non-null because historical rows have no source-backed basis for inferring ownership.
+
+The downgrade must remove only the T-027 composite foreign key, ContentVersion composite uniqueness support added by T-027, and NoteDraft `content_version_id` column. It must preserve every legacy NoteDraft, Claim link, approval field, ContentVersion, QuestionBankItem, and T-013 through T-026 behavior.
+
+Keep model metadata and migration constraint names aligned so `uv run alembic check` reports no drift.
+
+## API contract
+
+Change only the existing persisted NoteDraft creation endpoint:
+
+`POST /api/v1/topics/{topic_id}/note-drafts`
+
+Add a Pydantic request body:
+
+```json
+{
+  "content_version_id": 1
+}
+```
+
+Requirements:
+
+- `content_version_id` is required;
+- it must be a positive integer;
+- missing or invalid input returns standard HTTP 422;
+- no new NoteDraft-creation endpoint is added;
+- the non-persistent NoteDraft preview endpoint remains unchanged.
+
+Extend `NoteDraftResponse` with:
+
+- `content_version_id: int | null`.
+
+Response compatibility:
+
+- newly created NoteDrafts return the supplied persisted ContentVersion ID;
+- legacy NoteDrafts return `content_version_id: null`;
+- individual retrieval, approval responses, and approved-list responses must all include this field;
+- all existing Topic identity, Topic name, ordered Claim IDs, Markdown, creation time, approval status, approval timestamp, and reviewer note fields remain unchanged.
+
+## Validation and error behavior
+
+For persisted draft creation, validate in this order:
+
+1. Resolve the path Topic.
+   - Missing Topic returns the established HTTP 404.
+2. Resolve the requested ContentVersion.
+   - Missing ContentVersion returns the established HTTP 404 format for ContentVersion.
+3. Confirm `ContentVersion.topic_id == topic_id`.
+   - Mismatch returns stable HTTP 409.
+   - Use a clear deterministic detail such as:
+     `ContentVersion {content_version_id} does not belong to Topic {topic_id}`.
+4. Load the Topic's currently approved Claims using the existing deterministic ordering.
+   - No approved Claims returns the existing stable HTTP 409.
+
+Every failure must occur without persisting a NoteDraft or NoteDraftClaim row.
+
+Do not re-evaluate or alter SyllabusVersion mappings. ContentVersion creation already establishes the exact sourced SyllabusVersion/Topic membership.
+
+## Creation and stored-snapshot behavior
+
+For successful creation:
+
+- persist `topic_id` and `content_version_id` together;
+- retain the existing deterministic Markdown rendering;
+- retain the exact ordered approved Claims used at creation;
+- commit NoteDraft and NoteDraftClaim rows atomically;
+- return the stored NoteDraft response with the ContentVersion ID;
+- do not copy syllabus data into NoteDraft;
+- do not mutate the ContentVersion, Topic, Claims, Evidence, Verification, or other drafts.
+
+After creation:
+
+- later Claim approval changes must not alter stored Markdown or ordered Claim provenance;
+- later syllabus or priority reads must not alter the stored draft;
+- retrieval and approval must use the stored `content_version_id` without recalculating or inferring it;
+- legacy drafts with null ContentVersion must remain retrievable, reviewable, and eligible for the existing approved-draft collection based only on their own approval status.
+
+Do not add an endpoint to retrofit, backfill, edit, or replace a legacy draft's ContentVersion.
+
+## Boundary compatibility
+
+Preserve unchanged:
+
+- `POST /api/v1/topics/{topic_id}/note-draft-preview`;
+- `GET /api/v1/note-drafts/{note_draft_id}`;
+- `POST /api/v1/note-drafts/{note_draft_id}/approval`;
+- `GET /api/v1/note-drafts/approved`;
+- all ContentVersion creation/retrieval behavior;
+- all QuestionBankItem creation, review, approval-list, release, and released-list behavior;
+- all PreviousPaper, PreviousQuestion, and Topic-priority semantics.
+
+The only intentional request-contract change is that persisted NoteDraft creation now requires the ContentVersion request body. Update existing tests and documentation accordingly.
+
+NoteDraft approval remains separate from Claim approval, QuestionBankItem approval, Verification, release, publication, and learner access.
+
+## Layering and atomicity
+
+Preserve:
+
+`Route → Pydantic schema → Service → Repository → PostgreSQL`
+
+Requirements:
+
+- keep the route thin;
+- validate request shape in Pydantic;
+- perform reference and same-Topic validation in the service;
+- perform persistence through the repository;
+- enforce same-Topic ownership again through PostgreSQL;
+- keep NoteDraft and NoteDraftClaim creation atomic;
+- roll back fully on every persistence failure;
+- translate the new named constraint only if needed for stable API behavior;
+- do not catch generic database errors as domain conflicts.
+
+## Affected components
+
+Inspect and update only where necessary:
+
+- `app/models/note_draft.py`;
+- `app/models/content_version.py` if composite referenced-key metadata is required;
+- model registration and Alembic metadata;
+- exactly one new Alembic migration;
+- `app/schemas/knowledge.py`;
+- `app/repositories/knowledge.py`;
+- `app/services/knowledge.py`;
+- `app/api/v1/routes/knowledge.py`;
+- focused NoteDraft API/PostgreSQL tests;
+- migration and regression tests;
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append-only `docs/task_log.md`;
+- append-only `docs/next_task.md`.
+
+Inspect but leave unchanged unless a genuine T-027 requirement proves otherwise:
+
+- QuestionBankItem models, routes, schemas, services, repositories, and tests;
+- PreviousPaper and PreviousQuestion components;
+- Topic-priority components;
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+Report the inspection result for every unchanged dependency, configuration, infrastructure, and governance file.
+
+## Required tests
+
+Add focused PostgreSQL/API coverage proving:
+
+- the migration upgrades existing NoteDraft rows with `content_version_id = null`;
+- migration downgrade and re-upgrade preserve legacy NoteDraft rows, ordered Claim links, Markdown, Topic, approval status, and approval metadata;
+- no ContentVersion is inferred for legacy drafts;
+- a new persisted NoteDraft request without `content_version_id` returns 422 with no persistence;
+- zero, negative, non-integer, and otherwise invalid ContentVersion IDs return standard 422 where applicable;
+- a missing path Topic returns the established 404 with no persistence;
+- a missing ContentVersion returns the established ContentVersion 404 with no persistence;
+- a ContentVersion belonging to another Topic returns the stable 409 with no persistence;
+- PostgreSQL rejects a direct non-null mismatched NoteDraft ContentVersion/Topic pair;
+- PostgreSQL rejects deletion of a ContentVersion referenced by a new NoteDraft;
+- successful creation stores and returns the exact ContentVersion ID;
+- successful creation retains deterministic Markdown and exact ordered approved-Claim provenance;
+- creation remains atomic on failure;
+- individual retrieval returns the stored ContentVersion ID;
+- approval responses preserve the stored ContentVersion ID;
+- the approved-drafts collection preserves the stored ContentVersion ID;
+- legacy drafts with null ContentVersion remain retrievable and reviewable;
+- legacy approved drafts remain included in the approved-drafts collection with `content_version_id: null`;
+- later Claim approval changes do not alter ContentVersion ownership, Markdown, or ordered provenance;
+- NoteDraft preview remains non-persistent and unchanged;
+- existing T-013 through T-016 NoteDraft behavior continues after updating creation calls for the new request body;
+- all T-017 through T-026 exam, version, question, review, release, and read-boundary tests continue to pass.
+
+Do not weaken, delete, or silently skip existing tests.
+
+## Exclusions
+
+Do not add:
+
+- NoteDraft release status, timestamps, notes, transitions, or released collection;
+- public or learner-facing APIs;
+- publication transport;
+- PDF generation, exports, downloads, or deployment;
+- users, authentication, authorization, reviewer identity, or history tables;
+- edit, delete, retrofit, or backfill endpoints;
+- automatic ContentVersion selection or inference;
+- automatic next-version calculation;
+- per-learner note copies;
+- practice sessions, attempts, analytics, mock assembly, or personalization;
+- AI/LLM providers, prompts, generation, ingestion, RAG, embeddings, or scraping;
+- QuestionBankItem changes;
+- PreviousQuestion conversion;
+- prediction, probability, or likelihood semantics;
+- dependencies, secrets, environment variables, Docker services, payments, or unrelated infrastructure.
+
+A PreviousQuestion remains a sourced historical occurrence. It must never be converted into a generated question or treated as prediction evidence beyond the existing deterministic Topic-priority rules.
+
+## Documentation
+
+Update `docs/architecture.md` and `docs/workflow.md` only for behavior actually implemented.
+
+Append—never rewrite, reorder, consolidate, or delete history:
+
+- the T-027 implementation record in `docs/task_log.md`;
+- an implementation note beneath this T-027 prompt in `docs/next_task.md`.
+
+Do not mark T-027 approved.
+
+Do not define or implement T-028.
+
+## Validation
+
+Run and report exact results for:
+
+- focused NoteDraft tests;
+- focused ContentVersion tests if affected;
+- the full test suite;
+- Ruff on every changed Python file;
+- a fresh migration upgrade;
+- downgrade to T-026 head `b3e7f1a9c462`;
+- re-upgrade to the new T-027 migration;
+- seeded legacy NoteDraft and NoteDraftClaim preservation across the migration cycle;
+- database rejection of mismatched ContentVersion/Topic ownership;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- `git diff --check`;
+- `git status --short`.
+
+Use a dedicated PostgreSQL test database. Never run destructive migration-cycle testing against a non-test database.
+
+## Final report
+
+Report:
+
+1. files changed;
+2. new NoteDraft ContentVersion field and database constraints;
+3. migration revision, parent, upgrade, downgrade, and legacy-row behavior;
+4. exact persisted-creation request and response contract;
+5. stable 404/409/422 behavior;
+6. same-Topic validation at service and PostgreSQL layers;
+7. atomic creation and rollback behavior;
+8. legacy retrieval, review, and approved-list compatibility;
+9. stored Markdown, Claim provenance, and ContentVersion snapshot behavior;
+10. focused, migration, and full-suite test results;
+11. Ruff, Alembic-head, Alembic-check, and diff-check results;
+12. dependency/configuration/Docker/AGENTS/README review outcomes;
+13. retained trust, provenance, versioning, approval, release, and Generate Once/Personalize Later boundaries;
+14. final git status;
+15. explicit confirmation that no commit, push, PR, self-approval, T-028, NoteDraft release, public/learner delivery, publication transport, PDF, AI generation, mock assembly, or personalization work occurred.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-028.
+
+Leave T-027 uncommitted and unpushed in the working tree for independent review.
