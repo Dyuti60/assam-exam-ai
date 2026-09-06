@@ -566,3 +566,20 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Validation evidence | Developer-recorded: `34 passed` focused; `136 passed` full suite; changed-file Ruff; upgrade/downgrade/re-upgrade with seeded-row preservation; Alembic check; `git diff --check`. GitHub exposes no status contexts or check runs for this commit, so no CI pass is claimed. |
 | Review findings | The implementation preserves stored content, ordered Claim/option provenance, correct answer, ContentVersion, and linked Claim state. It does not re-evaluate later Claim approval. Incomplete legacy candidates remain DRAFT or may be REJECTED, but APPROVED returns stable 409 without mutation. |
 | Boundaries | Candidate approval remains separate from Claim approval, NoteDraft approval, verification, release, and publication. No T-024 capability is present. |
+
+
+---
+
+## T-023 documentation synchronization and T-024 issuance
+
+| Field | Value |
+| --- | --- |
+| T-023 approval documentation commit | `145502a56a0d53a11fe9b6e80ce611847109a993` |
+| T-023 implementation commit | `1e84907906579c08d7218771669730b9855778d6` |
+| T-023 final review state | **APPROVED** |
+| GitHub validation status | No status contexts or check runs were available; developer-recorded validation remains documented without a CI-pass claim |
+| Next task | `T-024` — Add approved QuestionBankItem read boundary |
+| T-024 status | Ready for VS Code Codex; not implemented |
+| Architectural phase | Canonical Content / Question Foundation |
+| Scope | Read only explicitly approved stored QuestionBankItem snapshots in stable ID order; no release, publication, learner delivery, generation, or personalization |
+| Full implementation prompt | Appended to `docs/next_task.md` |

@@ -1008,3 +1008,134 @@ Leave the implementation in the working tree for independent review. Do not comm
 Report files changed, data/migration design, API/error semantics, atomicity, test results, dependency/configuration/Docker/AGENTS/README decisions, documentation updates, git status, and explicit confirmation that no commit, push, PR, self-approval, or T-024 work occurred.
 
 Implementation note (2026-09-06 Asia/Kolkata, UTC+05:30): added only independent DRAFT/APPROVED/REJECTED human-review state and `POST /api/v1/question-bank-items/{question_bank_item_id}/approval`. APPROVED/REJECTED store current UTC decision time and the supplied note; DRAFT clears both. Approval requires a complete stored option/answer snapshot but does not re-evaluate current Claim approval or mutate content/provenance. Existing candidates migrate to DRAFT without inferred approval. No approved-item list, release, publication, learner, AI, dependency, configuration, Docker, or T-024 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## T-023 review outcome
+
+T-023 implementation commit `1e84907906579c08d7218771669730b9855778d6` is independently approved. Documentation synchronization commit `145502a56a0d53a11fe9b6e80ce611847109a993` records the review. GitHub exposed no status contexts or check runs; the focused/full test, Ruff, migration, Alembic, and diff results remain accurately identified as developer-recorded evidence.
+
+
+---
+
+# T-024 — Add approved QuestionBankItem read boundary
+
+Read `AGENTS.md` and all project documents first. Inspect the current repository and the approved T-021 through T-023 implementation conventions before changing code.
+
+Do **not** commit, push, create a PR, self-approve, or implement T-025. Leave the complete T-024 working tree for independent review.
+
+## Goal
+
+Add the smallest read-only internal boundary that returns stored `QuestionBankItem` candidates whose own independent human-review state is exactly `APPROVED`.
+
+This endpoint makes reviewed canonical question candidates available to later platform stages. It does not release, publish, deliver, generate, or personalize questions. Preserve the project rule: **Generate Once, Personalize Later**. T-024 performs neither generation nor personalization.
+
+## Data model and persistence
+
+No schema change is expected. Do not add a migration unless inspection proves a genuine persistence change is necessary; if that occurs, stop and report the architectural need before proceeding.
+
+Preserve all existing QuestionBankItem identity, ContentVersion ownership, ordered Claim provenance, ordered options, same-item correct answer, approval metadata, and PostgreSQL constraints unchanged.
+
+## API contract
+
+Add exactly one endpoint:
+
+`GET /api/v1/question-bank-items/approved`
+
+Response:
+
+- a list of the existing `QuestionBankItemResponse` objects;
+- include only rows where the QuestionBankItem's own `approval_status` is exactly `APPROVED`;
+- order results by ascending QuestionBankItem ID;
+- retain each stored question, explanation, difficulty, ContentVersion ID, created time, ordered Claim IDs, ordered options, correct-option position, and approval metadata;
+- return `[]` with HTTP 200 when no approved candidates exist.
+
+Register the static `/question-bank-items/approved` route before `/question-bank-items/{question_bank_item_id}` so `approved` is never interpreted as an ID.
+
+## Invariants and behavior
+
+- Use route → Pydantic schema → service → repository → PostgreSQL layering and keep the route thin.
+- Filter on the QuestionBankItem's own explicit approval state. Claim approval, NoteDraft approval, and Verification state must not substitute for it.
+- Eagerly load ordered Claim links and ordered options for all returned items; avoid N+1 queries.
+- Return the stored snapshot. Do not regenerate content, recalculate the correct answer, re-evaluate current Claim approval, or mutate database state.
+- DRAFT and REJECTED candidates must be excluded.
+- Preserve stable ascending item order and each item's persisted Claim/option position order.
+- Preserve backward compatibility for all existing create, retrieve, and approval routes.
+- No new error response is expected for the collection endpoint; an empty eligible set is a successful empty list.
+
+## Affected components
+
+Inspect and update only where necessary:
+
+- `app/api/v1/routes/knowledge.py`;
+- `app/repositories/knowledge.py`;
+- `app/services/knowledge.py`;
+- focused QuestionBankItem API/PostgreSQL tests;
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append-only `docs/task_log.md`;
+- append-only `docs/next_task.md`.
+
+Inspect model and schema definitions to confirm reuse, but do not change them unless a demonstrated requirement makes it necessary. Inspect `pyproject.toml`, `uv.lock`, `.env.example`, `app/core/config.py`, `docker-compose.yml`, `AGENTS.md`, and `README.md`; leave each unchanged unless a genuine T-024 requirement is found, and report the review outcome for each.
+
+## Required tests
+
+Add focused API/PostgreSQL coverage proving:
+
+- an empty database or a database with no approved candidates returns `[]`;
+- DRAFT and REJECTED QuestionBankItems are excluded;
+- multiple APPROVED QuestionBankItems are included in stable ascending ID order;
+- each returned item retains its stored ordered Claim IDs, ordered options, correct-option position, and approval metadata;
+- changing a linked Claim's approval state after candidate creation/review does not change the returned stored candidate snapshot or eligibility;
+- unrelated Topic, ContentVersion, Claim, NoteDraft, and Verification state cannot make an unapproved QuestionBankItem eligible;
+- the endpoint performs no database mutation;
+- existing T-021, T-022, and T-023 QuestionBankItem tests continue to pass.
+
+Use the cleanest test level consistent with the existing PostgreSQL-backed setup. Do not weaken or delete existing tests.
+
+## Exclusions
+
+Do not add:
+
+- QuestionBankItem release, publication, superseding, or version-history behavior;
+- public or learner-facing endpoints;
+- users, authentication, authorization, attempts, analytics, mock assembly, or learner personalization;
+- AI/LLM providers, prompts, generation, ingestion, RAG, embeddings, or source scraping;
+- list/search/filter/pagination endpoints other than the single exact approved collection required here;
+- review history, reviewer identity, assignment, or edit/delete endpoints;
+- NoteDraft binding or PreviousQuestion conversion;
+- dependencies, secrets, environment variables, Docker services, deployment, payments, or PDFs.
+
+QuestionBankItem approval remains separate from Claim approval, NoteDraft approval, Verification, release, and publication. `PreviousQuestion` remains sourced historical evidence and must not be merged with QuestionBankItem.
+
+## Documentation and validation
+
+Update `docs/architecture.md` and `docs/workflow.md` only for confirmed implemented behavior. Append—never rewrite or delete history—the T-024 task and implementation records in `docs/task_log.md` and an implementation note under this prompt in `docs/next_task.md`. Do not mark T-024 approved.
+
+Run and report exact results for:
+
+- focused T-024 QuestionBankItem tests;
+- the full test suite;
+- Ruff on every changed Python file;
+- migration checks only if a genuine model/schema change was required;
+- `uv run alembic check`;
+- `git diff --check`;
+- `git status --short`.
+
+## Final report
+
+Report:
+
+1. files changed;
+2. endpoint and exact response/filter/order behavior;
+3. eager-loading and stored-snapshot behavior;
+4. error and empty-result behavior;
+5. focused and full test results;
+6. Ruff, Alembic, migration, and diff-check results;
+7. dependency/configuration/Docker/AGENTS/README review outcomes;
+8. retained trust, provenance, approval, Generate Once/Personalize Later, and scope boundaries;
+9. final git status;
+10. explicit confirmation that no commit, push, PR, self-approval, T-025 work, release, publication, generation, or learner-personalization work occurred.
+
+Leave T-024 uncommitted and unpushed in the working tree for independent review.
