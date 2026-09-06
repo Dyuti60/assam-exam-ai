@@ -251,4 +251,4 @@ T-020 is approved at commit `c5d2010da24731387162020accc9030d6fcca01e`. The plat
 
 T-021 is approved at commit `3b1c425158ca0932b6c8ea9fb80dbf9efd9b8278`. It established internal QuestionBankItem candidates with exact ordered approved-Claim provenance under a ContentVersion; T-022 extends that stored candidate structure with options and an answer without changing its unreviewed status.
 
-T-022 is ready for review. New QuestionBankItems now include ordered options and exactly one same-item correct answer while preserving T-021 provenance and atomicity. This completes only the internal MCQ structure; it adds no review, release, generation, or learner boundary.
+T-022 is approved at commit `4dc87a82a1d8695a6316debad03d7f3af43e28e2`. New QuestionBankItems now retain ordered options and exactly one same-item correct answer while preserving Claim provenance and atomicity. This completes only the internal MCQ structure; it adds no release, generation, or learner boundary. Independent candidate review is the next planned increment.
