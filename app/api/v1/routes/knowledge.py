@@ -15,6 +15,7 @@ from app.schemas.knowledge import (
     ExamCreate,
     ExamResponse,
     NoteDraftApprovalCreate,
+    NoteDraftCreate,
     NoteDraftPreviewResponse,
     NoteDraftResponse,
     PreviousPaperCreate,
@@ -293,10 +294,11 @@ def create_note_draft_preview(
 )
 def create_note_draft(
     topic_id: int,
+    request: NoteDraftCreate,
     db: DatabaseSession,
 ) -> NoteDraftResponse:
     try:
-        return KnowledgeService(db).create_note_draft(topic_id)
+        return KnowledgeService(db).create_note_draft(topic_id, request)
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
     except ResourceConflictError as error:

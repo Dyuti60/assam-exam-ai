@@ -5,6 +5,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     String,
     Text,
@@ -26,6 +27,12 @@ class NoteDraft(Base):
             "approval_status IN ('DRAFT', 'APPROVED', 'REJECTED')",
             name="ck_note_drafts_approval_status",
         ),
+        ForeignKeyConstraint(
+            ["content_version_id", "topic_id"],
+            ["content_versions.id", "content_versions.topic_id"],
+            name="fk_note_drafts_content_version_topic",
+            ondelete="RESTRICT",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -33,6 +40,7 @@ class NoteDraft(Base):
         ForeignKey("topics.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    content_version_id: Mapped[int | None] = mapped_column(Integer)
     markdown: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

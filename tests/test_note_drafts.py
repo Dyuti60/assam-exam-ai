@@ -1,15 +1,16 @@
 from collections.abc import Generator
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import engine, get_db
 from app.main import app
-from app.models import Claim, NoteDraft, NoteDraftClaim
+from app.models import Claim, ContentVersion, NoteDraft, NoteDraftClaim
 
 
 @pytest.fixture
@@ -51,6 +52,49 @@ def _create_topic(client: TestClient, name: str) -> int:
     return response.json()["id"]
 
 
+def _create_content_version(
+    client: TestClient,
+    topic_id: int,
+    suffix: str,
+) -> int:
+    exam_response = client.post(
+        "/api/v1/exams",
+        json={"code": f"ND-{suffix}", "name": f"Note Draft Exam {suffix}"},
+    )
+    assert exam_response.status_code == 201
+    source_response = client.post(
+        "/api/v1/sources",
+        json={
+            "title": f"Note Draft Syllabus {suffix}",
+            "source_type": "official",
+            "authority_tier": 1,
+            "location": f"https://example.gov/note-draft-{suffix}",
+            "license_status": "UNKNOWN",
+        },
+    )
+    assert source_response.status_code == 201
+    syllabus_response = client.post(
+        "/api/v1/syllabus-versions",
+        json={
+            "exam_id": exam_response.json()["id"],
+            "source_id": source_response.json()["id"],
+            "label": "Version 1",
+            "topic_ids": [topic_id],
+        },
+    )
+    assert syllabus_response.status_code == 201
+    content_version_response = client.post(
+        "/api/v1/content-versions",
+        json={
+            "syllabus_version_id": syllabus_response.json()["id"],
+            "topic_id": topic_id,
+            "version": 1,
+        },
+    )
+    assert content_version_response.status_code == 201
+    return content_version_response.json()["id"]
+
+
 def _create_claim(
     client: TestClient,
     topic_id: int,
@@ -77,6 +121,7 @@ def test_create_note_draft_persists_exact_ordered_provenance(
     db_connection: Connection,
 ) -> None:
     topic_id = _create_topic(client, "Stored Draft Topic")
+    content_version_id = _create_content_version(client, topic_id, "stored")
     other_topic_id = _create_topic(client, "Other Draft Topic")
     claim_specs = [
         (topic_id, "APPROVED", "First stored fact."),
@@ -90,13 +135,17 @@ def test_create_note_draft_persists_exact_ordered_provenance(
         for selected_topic_id, status, statement in claim_specs
     ]
 
-    response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    response = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
 
     assert response.status_code == 201
     body = response.json()
     assert body == {
         "id": body["id"],
         "topic_id": topic_id,
+        "content_version_id": content_version_id,
         "topic_name": "Stored Draft Topic",
         "created_at": body["created_at"],
         "claim_ids": [claim_ids[0], claim_ids[3]],
@@ -106,11 +155,17 @@ def test_create_note_draft_persists_exact_ordered_provenance(
         "reviewer_note": None,
     }
     stored_draft = db_connection.execute(
-        select(NoteDraft.id, NoteDraft.topic_id, NoteDraft.markdown).where(
+        select(
+            NoteDraft.id,
+            NoteDraft.topic_id,
+            NoteDraft.content_version_id,
+            NoteDraft.markdown,
+        ).where(
             NoteDraft.id == body["id"]
         )
     ).one()
     assert stored_draft.topic_id == topic_id
+    assert stored_draft.content_version_id == content_version_id
     assert stored_draft.markdown == body["markdown"]
     stored_links = db_connection.execute(
         select(NoteDraftClaim.claim_id, NoteDraftClaim.position)
@@ -124,11 +179,15 @@ def test_get_note_draft_returns_stored_snapshot_after_claim_state_changes(
     client: TestClient,
 ) -> None:
     topic_id = _create_topic(client, "Retrieved Draft Topic")
+    content_version_id = _create_content_version(client, topic_id, "retrieved")
     claim_ids = [
         _create_claim(client, topic_id, statement, "APPROVED")
         for statement in ["First snapshot fact.", "Second snapshot fact."]
     ]
-    create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    create_response = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
     assert create_response.status_code == 201
     stored_response = create_response.json()
 
@@ -174,13 +233,17 @@ def test_get_approved_note_drafts_filters_orders_and_preserves_snapshots(
     client: TestClient,
 ) -> None:
     topic_id = _create_topic(client, "Approved Drafts Topic")
+    content_version_id = _create_content_version(client, topic_id, "approved-list")
     claim_ids = [
         _create_claim(client, topic_id, statement, "APPROVED")
         for statement in ["First approved snapshot.", "Second approved snapshot."]
     ]
     draft_ids = []
     for status in ["APPROVED", "DRAFT", "REJECTED", "APPROVED"]:
-        create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+        create_response = client.post(
+            f"/api/v1/topics/{topic_id}/note-drafts",
+            json={"content_version_id": content_version_id},
+        )
         assert create_response.status_code == 201
         draft_id = create_response.json()["id"]
         draft_ids.append(draft_id)
@@ -202,6 +265,9 @@ def test_get_approved_note_drafts_filters_orders_and_preserves_snapshots(
     assert response.status_code == 200
     body = response.json()
     assert [draft["id"] for draft in body] == [draft_ids[0], draft_ids[3]]
+    assert all(
+        draft["content_version_id"] == content_version_id for draft in body
+    )
     assert all(draft["approval_status"] == "APPROVED" for draft in body)
     assert all(draft["claim_ids"] == claim_ids for draft in body)
     assert all(
@@ -222,13 +288,21 @@ def test_record_note_draft_approval_preserves_snapshot_and_claim_state(
     approval_status: str,
 ) -> None:
     topic_id = _create_topic(client, f"Draft {approval_status} Topic")
+    content_version_id = _create_content_version(
+        client,
+        topic_id,
+        f"approval-{approval_status.lower()}",
+    )
     claim_id = _create_claim(
         client,
         topic_id,
         f"Fact for {approval_status.lower()} draft.",
         "APPROVED",
     )
-    create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    create_response = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
     assert create_response.status_code == 201
     draft_before = create_response.json()
     claim_before = db_connection.execute(
@@ -252,6 +326,7 @@ def test_record_note_draft_approval_preserves_snapshot_and_claim_state(
 
     assert response.status_code == 200
     decided_draft = response.json()
+    assert decided_draft["content_version_id"] == content_version_id
     assert decided_draft["approval_status"] == approval_status
     assert decided_draft["approval_decided_at"] is not None
     assert decided_draft["reviewer_note"] == (
@@ -276,8 +351,12 @@ def test_returning_note_draft_approval_to_draft_clears_decision(
     client: TestClient,
 ) -> None:
     topic_id = _create_topic(client, "Draft Reset Topic")
+    content_version_id = _create_content_version(client, topic_id, "reset")
     _create_claim(client, topic_id, "Fact for reset.", "APPROVED")
-    create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    create_response = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
     assert create_response.status_code == 201
     draft_id = create_response.json()["id"]
     approved_response = client.post(
@@ -329,8 +408,16 @@ def test_database_rejects_invalid_note_draft_approval_status(
     db_connection: Connection,
 ) -> None:
     topic_id = _create_topic(client, "Draft Approval Constraint Topic")
+    content_version_id = _create_content_version(
+        client,
+        topic_id,
+        "approval-constraint",
+    )
     _create_claim(client, topic_id, "Constraint approval fact.", "APPROVED")
-    create_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    create_response = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
     assert create_response.status_code == 201
 
     savepoint = db_connection.begin_nested()
@@ -347,7 +434,10 @@ def test_create_note_draft_returns_404_without_persistence(
     client: TestClient,
     db_connection: Connection,
 ) -> None:
-    response = client.post("/api/v1/topics/999999/note-drafts")
+    response = client.post(
+        "/api/v1/topics/999999/note-drafts",
+        json={"content_version_id": 999999},
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Topic 999999 not found"}
@@ -362,10 +452,14 @@ def test_create_note_draft_returns_409_without_approved_claims_atomically(
     db_connection: Connection,
 ) -> None:
     topic_id = _create_topic(client, "No Approved Draft Topic")
+    content_version_id = _create_content_version(client, topic_id, "no-approved")
     _create_claim(client, topic_id, "Still awaiting approval.", "DRAFT")
     _create_claim(client, topic_id, "Explicitly rejected.", "REJECTED")
 
-    response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    response = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
 
     assert response.status_code == 409
     assert response.json() == {
@@ -382,9 +476,13 @@ def test_note_draft_claim_constraints_are_enforced(
     db_connection: Connection,
 ) -> None:
     topic_id = _create_topic(client, "Draft Constraint Topic")
+    content_version_id = _create_content_version(client, topic_id, "constraint")
     claim_id = _create_claim(client, topic_id, "Constraint fact.", "APPROVED")
     other_claim_id = _create_claim(client, topic_id, "Other constraint fact.", "DRAFT")
-    draft_response = client.post(f"/api/v1/topics/{topic_id}/note-drafts")
+    draft_response = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
     assert draft_response.status_code == 201
 
     savepoint = db_connection.begin_nested()
@@ -419,3 +517,165 @@ def test_note_draft_claim_constraints_are_enforced(
             )
         )
     duplicate_claim.rollback()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"content_version_id": 0},
+        {"content_version_id": -1},
+        {"content_version_id": "not-an-integer"},
+        {"content_version_id": 1.5},
+    ],
+)
+def test_create_note_draft_rejects_invalid_content_version_input_without_rows(
+    client: TestClient,
+    db_connection: Connection,
+    payload: dict,
+) -> None:
+    topic_id = _create_topic(client, f"Invalid ContentVersion {payload}")
+
+    response = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert db_connection.scalar(select(func.count()).select_from(NoteDraft)) == 0
+    assert (
+        db_connection.scalar(select(func.count()).select_from(NoteDraftClaim)) == 0
+    )
+
+
+def test_create_note_draft_validates_content_version_reference_and_topic_order(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    topic_id = _create_topic(client, "ContentVersion Validation Topic")
+    other_topic_id = _create_topic(client, "Other ContentVersion Topic")
+    other_content_version_id = _create_content_version(
+        client,
+        other_topic_id,
+        "mismatch",
+    )
+    _create_claim(client, topic_id, "Approved validation fact.", "APPROVED")
+
+    missing_topic = client.post(
+        "/api/v1/topics/999999/note-drafts",
+        json={"content_version_id": other_content_version_id},
+    )
+    missing_content_version = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": 999999},
+    )
+    mismatched = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": other_content_version_id},
+    )
+
+    assert missing_topic.status_code == 404
+    assert missing_topic.json() == {"detail": "Topic 999999 not found"}
+    assert missing_content_version.status_code == 404
+    assert missing_content_version.json() == {
+        "detail": "ContentVersion 999999 not found"
+    }
+    assert mismatched.status_code == 409
+    assert mismatched.json() == {
+        "detail": (
+            f"ContentVersion {other_content_version_id} "
+            f"does not belong to Topic {topic_id}"
+        )
+    }
+    assert db_connection.scalar(select(func.count()).select_from(NoteDraft)) == 0
+    assert (
+        db_connection.scalar(select(func.count()).select_from(NoteDraftClaim)) == 0
+    )
+
+
+def test_database_enforces_same_topic_ownership_and_restricts_content_deletion(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    topic_id = _create_topic(client, "Owned Draft Topic")
+    other_topic_id = _create_topic(client, "Mismatched Draft Topic")
+    content_version_id = _create_content_version(client, topic_id, "owned")
+    claim_id = _create_claim(client, topic_id, "Owned draft fact.", "APPROVED")
+
+    mismatch_savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(
+            NoteDraft.__table__.insert().values(
+                topic_id=other_topic_id,
+                content_version_id=content_version_id,
+                markdown="# Invalid ownership",
+            )
+        )
+    mismatch_savepoint.rollback()
+
+    created = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
+    assert created.status_code == 201
+    assert created.json()["content_version_id"] == content_version_id
+    assert created.json()["claim_ids"] == [claim_id]
+
+    deletion_savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(
+            delete(ContentVersion).where(ContentVersion.id == content_version_id)
+        )
+    deletion_savepoint.rollback()
+
+    retrieved = client.get(f"/api/v1/note-drafts/{created.json()['id']}")
+    assert retrieved.status_code == 200
+    assert retrieved.json() == created.json()
+
+
+def test_legacy_null_content_version_draft_remains_retrievable_and_reviewable(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    topic_id = _create_topic(client, "Legacy Draft Topic")
+    claim_id = _create_claim(client, topic_id, "Legacy stored fact.", "APPROVED")
+    decided_at = datetime.now(UTC)
+    legacy_id = db_connection.scalar(
+        NoteDraft.__table__.insert()
+        .values(
+            topic_id=topic_id,
+            content_version_id=None,
+            markdown="# Legacy Draft Topic\n\n- Legacy stored fact.",
+            approval_status="APPROVED",
+            approval_decided_at=decided_at,
+            reviewer_note="Legacy approval",
+        )
+        .returning(NoteDraft.id)
+    )
+    assert legacy_id is not None
+    db_connection.execute(
+        NoteDraftClaim.__table__.insert().values(
+            note_draft_id=legacy_id,
+            claim_id=claim_id,
+            position=0,
+        )
+    )
+
+    retrieved = client.get(f"/api/v1/note-drafts/{legacy_id}")
+    approved = client.get("/api/v1/note-drafts/approved")
+
+    assert retrieved.status_code == 200
+    assert retrieved.json()["content_version_id"] is None
+    assert retrieved.json()["claim_ids"] == [claim_id]
+    assert retrieved.json()["reviewer_note"] == "Legacy approval"
+    assert [draft["id"] for draft in approved.json()] == [legacy_id]
+    assert approved.json()[0]["content_version_id"] is None
+
+    rejected = client.post(
+        f"/api/v1/note-drafts/{legacy_id}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "Legacy rejected"},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["content_version_id"] is None
+    assert rejected.json()["approval_status"] == "REJECTED"
+    assert rejected.json()["reviewer_note"] == "Legacy rejected"

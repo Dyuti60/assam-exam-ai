@@ -252,8 +252,13 @@ class NoteDraftPreviewResponse(BaseModel):
     markdown: str
 
 
+class NoteDraftCreate(BaseModel):
+    content_version_id: int = Field(gt=0)
+
+
 class NoteDraftResponse(NoteDraftPreviewResponse):
     id: int
+    content_version_id: int | None
     created_at: datetime
     approval_status: ClaimApprovalStatus
     approval_decided_at: datetime | None

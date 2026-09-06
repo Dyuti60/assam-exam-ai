@@ -272,7 +272,11 @@ def test_get_released_items_filters_orders_and_preserves_stored_snapshots(
             ],
         },
     )
-    note_draft = _post(client, f"/api/v1/topics/{topic_id}/note-drafts", {})
+    note_draft = _post(
+        client,
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        {"content_version_id": content_version_id},
+    )
     note_approved = client.post(
         f"/api/v1/note-drafts/{note_draft['id']}/approval",
         json={"approval_status": "APPROVED"},

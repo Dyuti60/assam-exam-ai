@@ -710,3 +710,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Versioned Note Foundation |
 | Scope | ContentVersion ownership and migration-safe compatibility only; no NoteDraft release, publication, learner delivery, AI generation, or personalization |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-027 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Bind every newly persisted NoteDraft to one exact same-Topic ContentVersion while preserving legacy drafts with null ownership |
+| Tests | `uv run pytest tests/test_note_drafts.py -q`: 22 passed, 1 warning in 1.93s. `uv run pytest tests/test_content_versions_api.py -q`: 12 passed, 1 warning in 0.96s. `uv run pytest -q`: 164 passed, 1 warning in 7.88s. |
+| Ruff | Changed-file Ruff passed (`All checks passed!`). |
+| Migration checks | Fresh upgrade through `c7a4e9d2f816`, downgrade to `b3e7f1a9c462`, and re-upgrade passed. A seeded legacy draft retained Markdown, Topic, approval metadata, and ordered Claim provenance with null ContentVersion ownership. `uv run alembic heads` reported `c7a4e9d2f816 (head)` and `uv run alembic check` reported no new upgrade operations. |
+| Notes | Creation validates Topic, ContentVersion, same-Topic ownership, then approved Claims before atomically writing the draft and Claim links. PostgreSQL independently enforces the same-Topic composite reference and restricts deletion of referenced ContentVersions. Preview, legacy reads/review, QuestionBankItems, dependencies, configuration, Docker, AGENTS, README, release, delivery, AI, personalization, and T-028 behavior remain unchanged. |

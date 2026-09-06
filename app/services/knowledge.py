@@ -34,6 +34,7 @@ from app.schemas.knowledge import (
     ExamCreate,
     ExamResponse,
     NoteDraftApprovalCreate,
+    NoteDraftCreate,
     NoteDraftPreviewResponse,
     NoteDraftResponse,
     PreviousPaperCreate,
@@ -528,10 +529,26 @@ class KnowledgeService:
             markdown=self._render_note_markdown(topic.name, claims),
         )
 
-    def create_note_draft(self, topic_id: int) -> NoteDraftResponse:
+    def create_note_draft(
+        self,
+        topic_id: int,
+        request: NoteDraftCreate,
+    ) -> NoteDraftResponse:
         topic = self.repository.get_topic(topic_id)
         if topic is None:
             raise ResourceNotFoundError("Topic", topic_id)
+        content_version = self.repository.get_content_version(
+            request.content_version_id
+        )
+        if content_version is None:
+            raise ResourceNotFoundError(
+                "ContentVersion",
+                request.content_version_id,
+            )
+        if content_version.topic_id != topic_id:
+            raise ResourceConflictError(
+                f"ContentVersion {content_version.id} does not belong to Topic {topic_id}"
+            )
         claims = self.repository.get_approved_claims_by_topic(topic_id)
         if not claims:
             raise ResourceConflictError(
@@ -539,6 +556,7 @@ class KnowledgeService:
             )
         note_draft = NoteDraft(
             topic_id=topic.id,
+            content_version_id=content_version.id,
             markdown=self._render_note_markdown(topic.name, claims),
             claim_links=[
                 NoteDraftClaim(claim=claim, position=position)
@@ -549,6 +567,7 @@ class KnowledgeService:
         return NoteDraftResponse(
             id=note_draft.id,
             topic_id=topic.id,
+            content_version_id=note_draft.content_version_id,
             topic_name=topic.name,
             created_at=note_draft.created_at,
             claim_ids=[link.claim_id for link in note_draft.claim_links],
@@ -747,6 +766,7 @@ class KnowledgeService:
         return NoteDraftResponse(
             id=note_draft.id,
             topic_id=note_draft.topic_id,
+            content_version_id=note_draft.content_version_id,
             topic_name=note_draft.topic.name,
             created_at=note_draft.created_at,
             claim_ids=[link.claim_id for link in note_draft.claim_links],

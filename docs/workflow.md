@@ -85,7 +85,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/topics` | `create_topic()` | `app/api/v1/routes/knowledge.py` | Validates and creates a uniquely named Topic |
 | `GET /api/v1/topics/{topic_id}/claims/approved` | `get_approved_claims_by_topic()` | `app/api/v1/routes/knowledge.py` | Returns approved Claims for one existing Topic in stable ID order |
 | `POST /api/v1/topics/{topic_id}/note-draft-preview` | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Returns deterministic Markdown from one Topic's approved Claims without persistence |
-| `POST /api/v1/topics/{topic_id}/note-drafts` | `create_note_draft()` | `app/api/v1/routes/knowledge.py` | Atomically stores deterministic Markdown and ordered Claim provenance as an internal draft |
+| `POST /api/v1/topics/{topic_id}/note-drafts` | `create_note_draft()` | `app/api/v1/routes/knowledge.py` | Requires a positive ContentVersion ID and atomically stores a same-Topic draft with ordered Claim provenance |
 | `GET /api/v1/note-drafts/approved` | `get_approved_note_drafts()` | `app/api/v1/routes/knowledge.py` | Returns only approved stored NoteDraft snapshots in ascending ID order |
 | `GET /api/v1/note-drafts/{note_draft_id}` | `get_note_draft()` | `app/api/v1/routes/knowledge.py` | Returns one stored internal draft snapshot with position-ordered Claim IDs |
 | `POST /api/v1/note-drafts/{note_draft_id}/approval` | `record_note_draft_approval()` | `app/api/v1/routes/knowledge.py` | Records or resets a NoteDraft human-review decision without publishing it |
@@ -148,7 +148,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `Exam` | `app/models/exam.py` | Stores a unique short exam code, unique name, and creation time |
 | `SyllabusVersion` | `app/models/syllabus_version.py` | Stores one Exam's labeled syllabus version with its documenting Source |
 | `SyllabusVersionTopic` | `app/models/syllabus_version_topic.py` | Stores one protected Topic mapping per version in constrained position order |
-| `ContentVersion` | `app/models/content_version.py` | Stores retained version identity for exactly one syllabus/Topic mapping; the API has no update endpoint |
+| `ContentVersion` | `app/models/content_version.py` | Stores retained version identity for exactly one syllabus/Topic mapping and exposes the composite key used by same-Topic NoteDraft ownership |
 | `QuestionBankItem` | `app/models/question_bank_item.py` | Stores one internal MCQ candidate and its nullable backward-compatible same-item correct-option reference |
 | `QuestionBankItemClaim` | `app/models/question_bank_item_claim.py` | Stores exact Claim grounding in constrained persisted position order |
 | `QuestionBankOption` | `app/models/question_bank_option.py` | Stores one non-blank option at a unique non-negative position within an item |
@@ -160,7 +160,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `Verification` | `app/models/verification.py` | Stores one verdict, confidence, reasoning, and timestamp for a claim |
 | `VerificationEvidence` | `app/models/verification_evidence.py` | Records evidence used by a verification, its role, and its non-negative ordered position; referenced evidence is deletion-restricted |
 | `claim_evidence` | `app/models/claim_evidence.py` | Associates claims and evidence with a composite primary key |
-| `NoteDraft` | `app/models/note_draft.py` | Stores one Topic's deterministic internal Markdown draft, creation time, and separate constrained human-review state |
+| `NoteDraft` | `app/models/note_draft.py` | Stores one Topic's deterministic internal Markdown, nullable legacy-safe ContentVersion ownership, creation time, and separate review state |
 | `NoteDraftClaim` | `app/models/note_draft_claim.py` | Records the exact Claims used by a draft in constrained position order |
 
 ## T-003 schemas
@@ -193,7 +193,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `VerificationEvidenceResponse` | `app/schemas/knowledge.py` | Serializes evidence content with its audit role and position |
 | `VerificationResponse` | `app/schemas/knowledge.py` | Serializes Verification details, Claim details, and ordered provenance |
 | `NoteDraftPreviewResponse` | `app/schemas/knowledge.py` | Serializes Topic identity, ordered approved Claim IDs, and deterministic Markdown |
-| `NoteDraftResponse` | `app/schemas/knowledge.py` | Adds persisted draft identity and creation time to the deterministic draft contract |
+| `NoteDraftCreate` | `app/schemas/knowledge.py` | Requires one positive ContentVersion ID for persisted draft creation |
+| `NoteDraftResponse` | `app/schemas/knowledge.py` | Adds persisted draft identity, nullable ContentVersion ownership, and creation time to the deterministic draft contract |
 | `NoteDraftApprovalCreate` | `app/schemas/knowledge.py` | Validates a draft decision as DRAFT, APPROVED, or REJECTED with an optional reviewer note |
 
 ## T-003 repository and service
@@ -255,10 +256,10 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `get_approved_claims()` | `app/services/knowledge.py` | Serializes the repository's ordered approved Claims with the existing `ClaimResponse` builder |
 | `get_approved_claims_by_topic()` | `app/services/knowledge.py` | Distinguishes a missing Topic from an empty approved result, then serializes matching Claims |
 | `create_note_draft_preview()` | `app/services/knowledge.py` | Confirms the Topic, reads ordered approved Claims, and renders their statements unchanged as non-persistent Markdown |
-| `create_note_draft()` | `app/services/knowledge.py` | Confirms approved knowledge, builds the draft and ordered provenance links, and commits them atomically |
-| `get_note_draft()` | `app/services/knowledge.py` | Serializes only stored draft fields and position-ordered link IDs without regeneration or mutation |
+| `create_note_draft()` | `app/services/knowledge.py` | Resolves Topic then ContentVersion, enforces same-Topic ownership, confirms approved knowledge, and commits the draft and links atomically |
+| `get_note_draft()` | `app/services/knowledge.py` | Serializes stored ContentVersion ownership, draft fields, and position-ordered link IDs without inference or mutation |
 | `get_approved_note_drafts()` | `app/services/knowledge.py` | Serializes the repository's ordered approved drafts as stored snapshots |
-| `_note_draft_response()` | `app/services/knowledge.py` | Builds the shared stored NoteDraft response without regenerating or re-evaluating Claims |
+| `_note_draft_response()` | `app/services/knowledge.py` | Builds the shared stored NoteDraft response, including nullable ownership, without regenerating or re-evaluating Claims |
 | `record_note_draft_approval()` | `app/services/knowledge.py` | Records APPROVED/REJECTED with UTC time and note, or clears decision metadata for DRAFT |
 | `get_claim()` | `app/services/knowledge.py` | Retrieves a Claim through the repository or raises a missing-resource error |
 | `link_claim_evidence()` | `app/services/knowledge.py` | Validates both resources, performs the conflict-safe insert, commits, freshly reloads the Claim, and returns its response |
@@ -303,6 +304,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `downgrade()` | `migrations/versions/a6d1e8c3f247_add_question_bank_item_approval.py` | Removes only candidate-review fields and their status constraint |
 | `upgrade()` | `migrations/versions/b3e7f1a9c462_add_question_bank_item_release.py` | Adds constrained release state and null default metadata without inferring release |
 | `downgrade()` | `migrations/versions/b3e7f1a9c462_add_question_bank_item_release.py` | Removes only release constraints and fields, retaining candidate records |
+| `upgrade()` | `migrations/versions/c7a4e9d2f816_bind_note_drafts_to_content_versions.py` | Adds nullable legacy-safe ownership plus a restricted same-Topic composite foreign key |
+| `downgrade()` | `migrations/versions/c7a4e9d2f816_bind_note_drafts_to_content_versions.py` | Removes only the composite foreign key, ownership column, and supporting ContentVersion uniqueness |
 
 ## Tests
 
@@ -340,6 +343,10 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_record_note_draft_approval_rejects_invalid_status()` | `tests/test_note_drafts.py` | Confirms invalid draft approval input returns standard 422 validation | Passed for T-015 |
 | `test_database_rejects_invalid_note_draft_approval_status()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects draft approval values outside the constrained set | Passed for T-015 |
 | `test_get_approved_note_drafts_returns_empty_list()` | `tests/test_note_drafts.py` | Confirms the approved-draft boundary returns an empty list when none qualify | Passed for T-016 |
+| `test_create_note_draft_rejects_invalid_content_version_input_without_rows()` | `tests/test_note_drafts.py` | Confirms missing, non-positive, non-integer, and fractional ownership input returns 422 without rows | Passed five times for T-027 |
+| `test_create_note_draft_validates_content_version_reference_and_topic_order()` | `tests/test_note_drafts.py` | Confirms ordered Topic/ContentVersion/same-Topic validation with exact 404/409 responses and no persistence | Passed for T-027 |
+| `test_database_enforces_same_topic_ownership_and_restricts_content_deletion()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects mismatched ownership and restricts deletion of a referenced ContentVersion | Passed for T-027 |
+| `test_legacy_null_content_version_draft_remains_retrievable_and_reviewable()` | `tests/test_note_drafts.py` | Confirms legacy null ownership remains readable, reviewable, and compatible with the approved collection | Passed for T-027 |
 | `test_get_approved_note_drafts_filters_orders_and_preserves_snapshots()` | `tests/test_note_drafts.py` | Confirms DRAFT/REJECTED exclusion, ascending approved-draft order, and stored snapshot stability after Claim approval changes | Passed for T-016 |
 | `test_create_syllabus_version_persists_topics_in_request_order()` | `tests/test_syllabus_api.py` | Confirms API persistence and response order match the supplied Topic order | Passed for T-017 |
 | `test_create_syllabus_version_rejects_missing_reference_without_partial_rows()` | `tests/test_syllabus_api.py` | Confirms missing Exam, Source, or Topic returns 404 without version or mapping rows | Passed three times for T-017 |
@@ -1034,3 +1041,26 @@ flowchart TD
 - The endpoint performs no write, lock, transition, regeneration, or current Claim/NoteDraft/Verification evaluation. Existing T-021 through T-025 behavior remains intact.
 - Developer-recorded validation: `54 passed, 1 warning` combined focused tests; `52 passed, 1 warning` existing QuestionBankItem tests; `156 passed, 1 warning` full suite; changed-file Ruff and Alembic checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - No model, schema, migration, dependency, configuration, Docker, public/learner delivery, publication transport, mock assembly, AI, personalization, or T-027 implementation was included.
+
+
+### T-027 NoteDraft ContentVersion ownership
+
+```mermaid
+flowchart LR
+    REQUEST["POST /topics/{topic_id}/note-drafts\ncontent_version_id"] --> TOPIC["Resolve path Topic"]
+    TOPIC --> VERSION["Resolve ContentVersion"]
+    VERSION --> MATCH["Require matching topic_id"]
+    MATCH --> CLAIMS["Load ordered APPROVED Claims"]
+    CLAIMS --> STORE["Atomically store NoteDraft + ordered Claim links"]
+    STORE --> FK["PostgreSQL composite same-Topic FK"]
+```
+
+- New persisted drafts require a positive ContentVersion ID; preview remains request-body-free and non-persistent.
+- Service validation is ordered as Topic 404, ContentVersion 404, same-Topic 409, then existing no-approved-Claims 409, before persistence begins.
+- PostgreSQL enforces `(content_version_id, topic_id)` membership against `(content_versions.id, content_versions.topic_id)` and restricts deletion of a referenced ContentVersion.
+- The database column remains nullable only for migration-safe legacy compatibility. Existing drafts retain null ownership without inference and remain retrievable, reviewable, and eligible for the approval-only collection.
+- Fresh migration upgrade, downgrade to `b3e7f1a9c462`, and re-upgrade to `c7a4e9d2f816` preserved a seeded legacy draft, its Markdown, Topic, approval metadata, and ordered Claim link with null ContentVersion ownership.
+- `uv run pytest tests/test_note_drafts.py -q`: 22 passed, 1 warning in 1.93s.
+- `uv run pytest tests/test_content_versions_api.py -q`: 12 passed, 1 warning in 0.96s.
+- `uv run pytest -q`: 164 passed, 1 warning in 7.88s.
+- Changed-file Ruff passed; `uv run alembic heads` reports `c7a4e9d2f816 (head)` and `uv run alembic check` reports no new upgrade operations.

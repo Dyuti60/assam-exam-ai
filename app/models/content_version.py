@@ -23,6 +23,11 @@ class ContentVersion(Base):
             "version",
             name="uq_content_versions_mapping_version",
         ),
+        UniqueConstraint(
+            "id",
+            "topic_id",
+            name="uq_content_versions_id_topic",
+        ),
         ForeignKeyConstraint(
             ["syllabus_version_id", "topic_id"],
             [

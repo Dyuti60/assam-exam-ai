@@ -2218,3 +2218,5 @@ Do not self-approve.
 Do not implement T-028.
 
 Leave T-027 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-07 Asia/Kolkata, UTC+05:30): added nullable legacy-safe `NoteDraft.content_version_id` and migration `c7a4e9d2f816`, plus a required positive ContentVersion request for persisted draft creation. The service validates Topic, ContentVersion, same-Topic ownership, then approved Claims; PostgreSQL independently enforces the same-Topic composite reference and restricts deletion of referenced ContentVersions. Existing drafts retain null ownership without inference and remain retrievable, reviewable, and approval-list eligible. Preview, QuestionBankItem behavior, NoteDraft release, delivery, publication, AI, personalization, and T-028 were not added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

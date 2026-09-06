@@ -30,7 +30,7 @@ The Content Factory is being built incrementally. The Learning Engine, user prof
 
 ## Current confirmed implementation
 
-This section describes only the repository inspected on 2026-09-06 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
+This section describes only the repository inspected on 2026-09-07 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
 
 | Area | Confirmed state |
 | --- | --- |
@@ -40,10 +40,10 @@ This section describes only the repository inspected on 2026-09-06 in Asia/Kolka
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; thirteen migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, complete internal MCQ candidates, independent candidate review, and controlled candidate release |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; fourteen migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, versioned NoteDraft ownership, complete internal MCQ candidates, independent candidate review, and controlled candidate release |
 | Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, ordered `QuestionBankOption` records, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | One hundred fifty-six tests cover the foundation, ContentVersion and complete internal MCQ-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, independent approval boundaries, stored snapshots, and failure atomicity |
+| Tests | One hundred sixty-four tests cover the foundation, ContentVersion ownership and complete internal MCQ-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, independent approval boundaries, stored snapshots, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -75,6 +75,7 @@ erDiagram
     TOPIC ||--o{ SYLLABUS_VERSION_TOPIC : "mapped coverage"
     SYLLABUS_VERSION_TOPIC ||--o{ CONTENT_VERSION : "owns versions"
     CONTENT_VERSION ||--o{ QUESTION_BANK_ITEM : "owns candidates"
+    CONTENT_VERSION o|--o{ NOTE_DRAFT : "owns new drafts"
     QUESTION_BANK_ITEM ||--|{ QUESTION_BANK_ITEM_CLAIM : "grounded in position order"
     CLAIM ||--o{ QUESTION_BANK_ITEM_CLAIM : "grounds candidate"
     QUESTION_BANK_ITEM ||--o{ QUESTION_BANK_OPTION : "owns in position order"
@@ -168,9 +169,9 @@ Topic names are protected by the PostgreSQL unique constraint as the concurrency
 
 `POST /api/v1/topics/{topic_id}/note-draft-preview` is a deterministic, non-persistent internal preview. It reads the existing Topic-scoped approved-Claim boundary in ascending Claim ID order and renders only a Topic heading plus the Claims' unchanged statements as Markdown bullets. It returns 409 when the Topic has no approved Claims and does not mutate knowledge, create note storage, publish content, or use an LLM.
 
-`POST /api/v1/topics/{topic_id}/note-drafts` persists that same deterministic Markdown contract as an internal draft together with the exact ordered approved Claims used. The draft and its links commit atomically. PostgreSQL requires non-negative, unique per-draft positions and one link per draft/Claim pair; deleting a referenced Topic or Claim is restricted, while deleting a draft may remove only its association rows. A stored draft has DRAFT meaning only: it has no approval or publication state and is not learner-ready content.
+`POST /api/v1/topics/{topic_id}/note-drafts` requires one positive ContentVersion ID and persists that same deterministic Markdown contract as an internal draft together with the exact ordered approved Claims used. The service confirms the ContentVersion exists and belongs to the path Topic before loading approved Claims. PostgreSQL independently enforces the same-Topic pair and restricts deletion of a referenced ContentVersion. The draft and its links commit atomically. Legacy drafts retain null ContentVersion ownership rather than receiving an inferred version. PostgreSQL also requires non-negative, unique per-draft Claim positions and one link per draft/Claim pair; deleting a referenced Topic or Claim is restricted, while deleting a draft may remove only its association rows.
 
-`GET /api/v1/note-drafts/{note_draft_id}` returns the stored Markdown and Claim IDs from the persisted position-ordered links. It eagerly loads the Topic and all links, does not query current approval eligibility or regenerate Markdown, and therefore remains an immutable snapshot when a linked Claim's approval state later changes.
+`GET /api/v1/note-drafts/{note_draft_id}` returns the stored ContentVersion ID, Markdown, and Claim IDs from the persisted position-ordered links. It eagerly loads the Topic and all links, does not infer ownership, query current approval eligibility, or regenerate Markdown, and therefore remains a stored snapshot when a linked Claim's approval state later changes. Legacy snapshots return a null ContentVersion ID.
 
 Every NoteDraft begins in review state `DRAFT`. `APPROVED` or `REJECTED` records the current UTC decision time and optional reviewer note; resetting to `DRAFT` clears both. This decision is independent of its Claims and changes neither stored Markdown nor provenance. NoteDraft approval is not publication, and reviewer identity/history are not implemented.
 
@@ -182,7 +183,7 @@ A PreviousPaper belongs to one Exam, cites one Source, records a positive year, 
 
 `GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority` combines one selected syllabus version with stored occurrences from that Exam only. The repository eagerly loads syllabus Topic links and uses one outer-join occurrence query, so counts do not use per-paper queries. The service counts question rows separately from distinct papers, returns sorted unique matched years, applies the fixed `topic-priority-v1` rule, and performs no writes. The result is an explainable priority aid, never an appearance probability. Configurable rules, calibration, percentages, likelihood prediction, and reviewer overrides remain planned.
 
-A ContentVersion is retained version identity for one exact SyllabusVersion/Topic mapping and an explicitly supplied positive version number. The current API supports creation and retrieval only; it has no update endpoint. PostgreSQL enforces positive versions, unique mapping/version identity, composite membership through `syllabus_version_topics`, and restricted deletion of the referenced syllabus-topic mapping. Database-level prevention of direct ContentVersion updates or deletion is not implemented. Historical versions can coexist, and the service does not calculate the next number. ContentVersion has no content body, approval, publication, NoteDraft binding, AI behavior, or learner personalization; it can now own internal QuestionBankItem candidates.
+A ContentVersion is retained version identity for one exact SyllabusVersion/Topic mapping and an explicitly supplied positive version number. The current API supports creation and retrieval only; it has no update endpoint. PostgreSQL enforces positive versions, unique mapping/version identity, composite membership through `syllabus_version_topics`, and restricted deletion of the referenced syllabus-topic mapping. Database-level prevention of direct ContentVersion updates or deletion is not implemented. Historical versions can coexist, and the service does not calculate the next number. ContentVersion has no content body, approval, publication, AI behavior, or learner personalization; it can own internal QuestionBankItem candidates and newly created same-Topic NoteDraft snapshots.
 
 A QuestionBankItem is a manually supplied internal MCQ candidate owned by one ContentVersion. It stores non-blank question and explanation text, constrained difficulty, the exact approved same-Topic Claims used at creation, at least two ordered options for new API-created items, and one correct-option position. PostgreSQL enforces non-blank option text, unique non-negative option positions, a composite same-item correct-option reference, and independent review and release states. Existing T-021 rows migrate to DRAFT review and UNRELEASED status with null metadata; release is never inferred from approval. Only a complete, currently APPROVED stored candidate can move from UNRELEASED to RELEASED. RELEASED preserves its original release time until a one-way withdrawal; WITHDRAWN cannot be re-released in place. The database constrains every release status/timestamp combination and requires RELEASED rows to remain APPROVED. The approval endpoint therefore blocks DRAFT/REJECTED changes while RELEASED, but permits review changes after withdrawal. Release never re-evaluates current Claim, NoteDraft, or Verification state and changes no stored content or provenance. The approved-candidate read boundary remains based only on the QuestionBankItem's own APPROVED review state, including approved UNRELEASED or WITHDRAWN items. A separate released-candidate read boundary filters exactly on current RELEASED state and returns stored snapshots with ordered provenance; it excludes UNRELEASED and WITHDRAWN candidates. Release is not publication transport or learner access.
 
@@ -261,4 +262,4 @@ T-025 is approved at commit `84e0b20fd81d9bf7b241a93686811db0ccd3e8dc`. Question
 
 T-026 is approved at commit `d5c3b484b8268ae745da491617c56c02a1be3853`. The read-only internal boundary returns only currently RELEASED QuestionBankItem snapshots in stable ID order, with ordered Claim and option provenance eagerly loaded. It performs no writes or regeneration and adds no public or learner-facing delivery.
 
-T-027 is issued to bind every newly created NoteDraft to an exact ContentVersion while preserving existing legacy drafts without inferred version ownership. This establishes versioned canonical-note identity before any NoteDraft release or learner boundary.
+T-027 is ready for review. Every newly persisted NoteDraft now records one exact same-Topic ContentVersion; legacy drafts remain readable and reviewable with null ownership rather than inferred data. No NoteDraft release or learner boundary was added.
