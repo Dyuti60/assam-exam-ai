@@ -549,3 +549,20 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Migration checks | Fresh upgrade through `a6d1e8c3f247`, downgrade to `f2c8d4a6e915`, and re-upgrade passed. A seeded complete T-022 row remained present and became DRAFT with null decision metadata on each upgrade. `uv run alembic check` reported no new upgrade operations. |
 | Diff check | `git diff --check` passed. |
 | Notes | Candidate review is independent from Claim and NoteDraft approval. APPROVED/REJECTED record UTC decision metadata; DRAFT clears it. Incomplete legacy candidates cannot be approved and return stable 409 without mutation. No release, publication, learner, AI, dependency, configuration, Docker, AGENTS, or README behavior changed. |
+
+
+---
+
+## T-023 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-023` |
+| Implementation commit | `1e84907906579c08d7218771669730b9855778d6` |
+| Review state | **APPROVED** |
+| Base commit | `2f889fed9302c483c9065102953d4c1ca1fe2fe2` (approved T-022 documentation head) |
+| Approved capability | Independent DRAFT/APPROVED/REJECTED human review for QuestionBankItem candidates, including DRAFT reset semantics and an incomplete-candidate approval guard |
+| Migration | `a6d1e8c3f247_add_question_bank_item_approval.py`; prior migrations unchanged |
+| Validation evidence | Developer-recorded: `34 passed` focused; `136 passed` full suite; changed-file Ruff; upgrade/downgrade/re-upgrade with seeded-row preservation; Alembic check; `git diff --check`. GitHub exposes no status contexts or check runs for this commit, so no CI pass is claimed. |
+| Review findings | The implementation preserves stored content, ordered Claim/option provenance, correct answer, ContentVersion, and linked Claim state. It does not re-evaluate later Claim approval. Incomplete legacy candidates remain DRAFT or may be REJECTED, but APPROVED returns stable 409 without mutation. |
+| Boundaries | Candidate approval remains separate from Claim approval, NoteDraft approval, verification, release, and publication. No T-024 capability is present. |
