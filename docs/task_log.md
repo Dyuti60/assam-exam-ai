@@ -667,3 +667,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Controlled Release Foundation |
 | Scope | Released canonical-question selection boundary only; no public/learner delivery, publication transport, generation, personalization, or mock assembly |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-026 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/question-bank-items/released` as a read-only internal boundary for current RELEASED stored snapshots |
+| Tests | `uv run pytest tests/test_released_question_bank_items_api.py tests/test_question_bank_items_api.py -q`: 54 passed, 1 warning in 4.11s. Required existing focused file: 52 passed, 1 warning in 3.97s. `uv run pytest -q`: 156 passed, 1 warning in 6.91s. |
+| Ruff | Changed-file Ruff passed (`All checks passed!`). |
+| Migration checks | No model/schema migration required. `uv run alembic heads` reported `b3e7f1a9c462 (head)` and `uv run alembic check` reported `No new upgrade operations detected.` |
+| Notes | The repository filters exactly on current RELEASED state, orders by ascending item ID, and select-in loads ordered Claim links and options. The service returns stored `QuestionBankItemResponse` snapshots without writes or re-evaluation. UNRELEASED and WITHDRAWN candidates are excluded; the existing approved-items boundary remains approval-only. No delivery, publication transport, generation, personalization, dependency, configuration, Docker, AGENTS, README, migration, or T-027 behavior was added. |

@@ -75,6 +75,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `GET /api/v1/content-versions/{content_version_id}` | `get_content_version()` | `app/api/v1/routes/knowledge.py` | Retrieves stored ContentVersion identity only |
 | `POST /api/v1/question-bank-items` | `create_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Atomically stores a complete internal MCQ candidate with ordered Claim provenance and options |
 | `GET /api/v1/question-bank-items/approved` | `get_approved_question_bank_items()` | `app/api/v1/routes/knowledge.py` | Returns explicitly approved stored candidates in stable ID order; registered before the dynamic item route |
+| `GET /api/v1/question-bank-items/released` | `get_released_question_bank_items()` | `app/api/v1/routes/knowledge.py` | Returns currently RELEASED stored candidates in stable ID order; registered before the dynamic item route |
 | `GET /api/v1/question-bank-items/{question_bank_item_id}` | `get_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Retrieves one stored candidate snapshot with Claim order, options, and answer |
 | `POST /api/v1/question-bank-items/{question_bank_item_id}/approval` | `record_question_bank_item_approval()` | `app/api/v1/routes/knowledge.py` | Records an independent candidate decision and maps missing/conflict errors |
 | `POST /api/v1/question-bank-items/{question_bank_item_id}/release` | `record_question_bank_item_release()` | `app/api/v1/routes/knowledge.py` | Applies a controlled release or withdrawal decision with established 404/409 mapping |
@@ -209,6 +210,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `add_question_bank_item()` / `get_question_bank_item()` | `app/repositories/knowledge.py` | Flush a candidate with dependencies or eagerly retrieve ordered Claims and options |
 | `get_question_bank_item_for_update()` | `app/repositories/knowledge.py` | Locks one candidate row while eagerly loading its completeness data for serialized decisions |
 | `get_approved_question_bank_items()` | `app/repositories/knowledge.py` | Filters exactly on QuestionBankItem APPROVED state, orders by item ID, and select-in loads Claim links and options |
+| `get_released_question_bank_items()` | `app/repositories/knowledge.py` | Filters exactly on QuestionBankItem RELEASED state, orders by item ID, and select-in loads Claim links and options |
 | `get_claims_for_question_bank_item()` | `app/repositories/knowledge.py` | Loads all requested Claims in one locking query so eligibility stays stable through creation |
 | `update_question_bank_item_approval()` | `app/repositories/knowledge.py` | Assigns candidate review status, decision time, and reviewer note in the caller's transaction |
 | `update_question_bank_item_release()` | `app/repositories/knowledge.py` | Assigns release state and metadata inside the caller's atomic transaction |
@@ -241,6 +243,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `_commit_question_bank_item()` | `app/services/knowledge.py` | Flushes item/options, assigns the selected option ID, and commits all candidate rows atomically |
 | `_question_bank_item_response()` | `app/services/knowledge.py` | Serializes persisted Claim and option order plus correct position without re-evaluation |
 | `record_question_bank_item_approval()` | `app/services/knowledge.py` | Applies review/reset semantics and blocks approval of incomplete stored candidates |
+| `get_released_question_bank_items()` | `app/services/knowledge.py` | Serializes the repository's released stored snapshots without writes or eligibility re-evaluation |
 | `record_question_bank_item_release()` | `app/services/knowledge.py` | Enforces one-way eligibility/transitions and atomically records release or withdrawal |
 | `_is_complete_question_bank_item()` | `app/services/knowledge.py` | Requires at least two options and a correct option belonging to the stored item |
 | `create_previous_paper()` | `app/services/knowledge.py` | Validates Exam/Source, commits a paper, and translates its named uniqueness conflict |
@@ -402,6 +405,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_release_returns_404_and_invalid_decisions_return_422()` | `tests/test_question_bank_items_api.py` | Confirms established missing-item 404 and schema-driven invalid/UNRELEASED 422 | Passed for T-025 |
 | `test_database_rejects_invalid_release_state_combinations()` | `tests/test_question_bank_items_api.py` | Confirms PostgreSQL rejects invalid status and metadata combinations | Passed six times for T-025 |
 | `test_database_rejects_released_item_without_approved_review()` | `tests/test_question_bank_items_api.py` | Confirms PostgreSQL requires released candidates to remain approved | Passed for T-025 |
+| `test_get_released_items_returns_empty_for_empty_and_ineligible_sets()` | `tests/test_released_question_bank_items_api.py` | Confirms empty and no-current-release data sets return HTTP 200 with `[]` | Passed for T-026 |
+| `test_get_released_items_filters_orders_and_preserves_stored_snapshots()` | `tests/test_released_question_bank_items_api.py` | Confirms exact release filtering, stable nested ordering, approval-boundary separation, Claim-state independence, and no mutation | Passed for T-026 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -862,6 +867,25 @@ flowchart LR
 - `uv run pytest tests/test_question_bank_items_api.py -q`: 52 passed, 1 warning in 3.45s.
 - `uv run pytest -q`: 154 passed, 1 warning in 6.11s.
 - Fresh upgrade, downgrade to `a6d1e8c3f247`, re-upgrade to `b3e7f1a9c462`, seeded-row preservation, changed-file Ruff, and Alembic metadata checks passed.
+
+### T-026 Released QuestionBankItem read boundary
+
+```mermaid
+flowchart LR
+    REQUEST["GET /question-bank-items/released"] --> QUERY["Filter current release_status = RELEASED; order by ID"]
+    QUERY --> EAGER["Select-in load ordered Claim links and options"]
+    EAGER --> SNAPSHOT["Serialize stored QuestionBankItem snapshots"]
+    SNAPSHOT --> RESPONSE["200 list; empty list when none"]
+```
+
+- Eligibility depends only on each QuestionBankItem's current persisted RELEASED state; approved UNRELEASED and approved WITHDRAWN candidates are excluded.
+- The existing approved-items endpoint remains approval-only and continues to include approved candidates regardless of UNRELEASED or WITHDRAWN state.
+- Repository filtering, ascending item order, and select-in loading avoid per-item Claim/option queries; relationship order preserves stored positions.
+- Responses reuse `QuestionBankItemResponse` and do not regenerate content, re-evaluate Claim/NoteDraft/Verification state, lock rows, or write data.
+- `uv run pytest tests/test_released_question_bank_items_api.py tests/test_question_bank_items_api.py -q`: 54 passed, 1 warning in 4.11s.
+- `uv run pytest tests/test_question_bank_items_api.py -q`: 52 passed, 1 warning in 3.97s.
+- `uv run pytest -q`: 156 passed, 1 warning in 6.91s.
+- Changed-file Ruff passed. No model, schema, or migration changed; Alembic head remains `b3e7f1a9c462`, and `uv run alembic check` reported no new upgrade operations.
 
 ## Template for future pushed changes
 

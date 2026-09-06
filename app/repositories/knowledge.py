@@ -161,6 +161,18 @@ class KnowledgeRepository:
         )
         return list(self.session.scalars(statement))
 
+    def get_released_question_bank_items(self) -> list[QuestionBankItem]:
+        statement = (
+            select(QuestionBankItem)
+            .options(
+                selectinload(QuestionBankItem.claim_links),
+                selectinload(QuestionBankItem.options),
+            )
+            .where(QuestionBankItem.release_status == "RELEASED")
+            .order_by(QuestionBankItem.id)
+        )
+        return list(self.session.scalars(statement))
+
     def get_claims_for_question_bank_item(self, claim_ids: list[int]) -> list[Claim]:
         statement = select(Claim).where(Claim.id.in_(claim_ids)).with_for_update()
         return list(self.session.scalars(statement))

@@ -154,6 +154,16 @@ def get_approved_question_bank_items(
 
 
 @router.get(
+    "/question-bank-items/released",
+    response_model=list[QuestionBankItemResponse],
+)
+def get_released_question_bank_items(
+    db: DatabaseSession,
+) -> list[QuestionBankItemResponse]:
+    return KnowledgeService(db).get_released_question_bank_items()
+
+
+@router.get(
     "/question-bank-items/{question_bank_item_id}",
     response_model=QuestionBankItemResponse,
 )

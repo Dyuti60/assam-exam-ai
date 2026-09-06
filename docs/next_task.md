@@ -1891,3 +1891,5 @@ Do not implement T-027.
 
 Leave T-026 uncommitted and unpushed in the working tree for independent review.
 
+Implementation note (2026-09-07 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/question-bank-items/released` through the existing route, service, repository, and `QuestionBankItemResponse` flow. It filters exactly on current RELEASED state, returns stored snapshots in ascending item ID order with ordered Claim and option provenance eagerly loaded, and returns `[]` when none qualify. UNRELEASED and WITHDRAWN candidates are excluded, while the existing approved-items endpoint remains approval-only. No model, schema, migration, write, regeneration, public/learner delivery, publication transport, mock assembly, AI, personalization, or T-027 work was added; exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
