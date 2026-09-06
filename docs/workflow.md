@@ -938,3 +938,14 @@ flowchart TD
 - Approved: the migration safely defaults existing candidates to DRAFT without inferred approval; the API records or clears independent decision metadata while preserving stored content and provenance; incomplete legacy candidates cannot be approved.
 - The implementation preserves route to schema to service to repository to PostgreSQL layering and adds no approved-item list, release, publication, learner, AI, dependency, configuration, or infrastructure behavior.
 - GitHub reported no status contexts and no check runs for the implementation commit. The recorded `34 passed` focused and `136 passed` full-suite results, Ruff, migration-cycle, Alembic, and diff checks are developer-provided validation evidence, not independently verified GitHub CI.
+
+
+---
+
+## T-024 independent review outcome
+
+- **APPROVED** after inspection of implementation commit `6dc8e9497fe55870173c584717e3ab78563baf3f` against the issued T-024 prompt and its parent `e2c62be92006061b77ef2c260489ad5e0821f17b`.
+- The static approved-candidate route precedes the dynamic ID route; repository filtering uses only the QuestionBankItem's own `APPROVED` state, orders by item ID, and select-in loads ordered Claim links and options.
+- Responses reuse stored `QuestionBankItemResponse` snapshots, return `[]` when no item qualifies, do not re-evaluate Claim, NoteDraft, or Verification state, and perform no writes.
+- Developer-recorded validation: `36 passed, 1 warning` focused; `138 passed, 1 warning` full suite; changed-file Ruff, fresh database upgrade, Alembic check, and diff check passed. GitHub exposes no status contexts or workflow runs for the commit, so no CI pass is claimed.
+- No model, schema, migration, dependency, configuration, Docker, release, publication, learner, generation, personalization, mock, or T-025 implementation was included.
