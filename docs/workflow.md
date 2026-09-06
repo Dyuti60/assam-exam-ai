@@ -74,6 +74,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/content-versions` | `create_content_version()` | `app/api/v1/routes/knowledge.py` | Creates explicit canonical identity for one mapped SyllabusVersion/Topic |
 | `GET /api/v1/content-versions/{content_version_id}` | `get_content_version()` | `app/api/v1/routes/knowledge.py` | Retrieves stored ContentVersion identity only |
 | `POST /api/v1/question-bank-items` | `create_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Atomically stores a complete internal MCQ candidate with ordered Claim provenance and options |
+| `GET /api/v1/question-bank-items/approved` | `get_approved_question_bank_items()` | `app/api/v1/routes/knowledge.py` | Returns explicitly approved stored candidates in stable ID order; registered before the dynamic item route |
 | `GET /api/v1/question-bank-items/{question_bank_item_id}` | `get_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Retrieves one stored candidate snapshot with Claim order, options, and answer |
 | `POST /api/v1/question-bank-items/{question_bank_item_id}/approval` | `record_question_bank_item_approval()` | `app/api/v1/routes/knowledge.py` | Records an independent candidate decision and maps missing/conflict errors |
 | `GET /api/v1/syllabus-versions/{syllabus_version_id}/topics/{topic_id}/priority` | `get_topic_priority()` | `app/api/v1/routes/knowledge.py` | Returns the read-only deterministic v1 Topic priority assessment |
@@ -115,6 +116,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_syllabus_version()` | `app/api/v1/routes/knowledge.py` | Delegates syllabus creation and maps missing references/conflicts to 404/409 |
 | `create_content_version()` / `get_content_version()` | `app/api/v1/routes/knowledge.py` | Delegate identity creation/retrieval and map established 404/409 errors |
 | `create_question_bank_item()` / `get_question_bank_item()` | `app/api/v1/routes/knowledge.py` | Delegate candidate creation/retrieval and map established 404/409 errors |
+| `get_approved_question_bank_items()` | `app/api/v1/routes/knowledge.py` | Delegates the static approved-candidate read boundary before the dynamic item route |
 | `get_topic_priority()` | `app/api/v1/routes/knowledge.py` | Delegates assessment and maps a missing SyllabusVersion or Topic to 404 |
 | `create_previous_paper()` | `app/api/v1/routes/knowledge.py` | Delegates previous-paper creation and maps missing references/conflicts to 404/409 |
 | `create_previous_question()` | `app/api/v1/routes/knowledge.py` | Delegates question-occurrence creation and maps missing references/conflicts to 404/409 |
@@ -202,6 +204,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `get_topic_occurrence_stats()` | `app/repositories/knowledge.py` | Uses one Exam-scoped outer join to count papers, questions, matched papers, and years |
 | `add_content_version()` / `get_content_version()` | `app/repositories/knowledge.py` | Persist or retrieve a ContentVersion identity |
 | `add_question_bank_item()` / `get_question_bank_item()` | `app/repositories/knowledge.py` | Flush a candidate with dependencies or eagerly retrieve ordered Claims and options |
+| `get_approved_question_bank_items()` | `app/repositories/knowledge.py` | Filters exactly on QuestionBankItem APPROVED state, orders by item ID, and select-in loads Claim links and options |
 | `get_claims_for_question_bank_item()` | `app/repositories/knowledge.py` | Loads all requested Claims in one locking query so eligibility stays stable through creation |
 | `update_question_bank_item_approval()` | `app/repositories/knowledge.py` | Assigns candidate review status, decision time, and reviewer note in the caller's transaction |
 | `add_previous_paper()` / `get_previous_paper()` | `app/repositories/knowledge.py` | Persist or retrieve sourced previous papers |
@@ -229,6 +232,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `get_topic_priority()` | `app/services/knowledge.py` | Applies the exact read-only `topic-priority-v1` band and reason rules |
 | `create_content_version()` / `get_content_version()` | `app/services/knowledge.py` | Enforce reference/membership behavior, translate named constraints, and return identity |
 | `create_question_bank_item()` / `get_question_bank_item()` | `app/services/knowledge.py` | Enforce approved same-Topic grounding, own atomic creation, and return stored snapshots |
+| `get_approved_question_bank_items()` | `app/services/knowledge.py` | Serializes the repository's ordered approved candidates without re-evaluating current Claim state |
 | `_commit_question_bank_item()` | `app/services/knowledge.py` | Flushes item/options, assigns the selected option ID, and commits all candidate rows atomically |
 | `_question_bank_item_response()` | `app/services/knowledge.py` | Serializes persisted Claim and option order plus correct position without re-evaluation |
 | `record_question_bank_item_approval()` | `app/services/knowledge.py` | Applies review/reset semantics and blocks approval of incomplete stored candidates |
@@ -379,6 +383,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_incomplete_legacy_item_cannot_be_approved_and_is_unchanged()` | `tests/test_question_bank_items_api.py` | Confirms stable 409 and no mutation for incomplete-candidate approval | Passed for T-023 |
 | `test_incomplete_legacy_item_can_be_rejected()` | `tests/test_question_bank_items_api.py` | Confirms incomplete legacy candidates may be rejected | Passed for T-023 |
 | `test_database_rejects_invalid_item_approval_status()` | `tests/test_question_bank_items_api.py` | Confirms PostgreSQL restricts candidate review status | Passed for T-023 |
+| `test_get_approved_items_returns_empty_list()` | `tests/test_question_bank_items_api.py` | Confirms the approved-candidate collection returns HTTP 200 with an empty list when none qualify | Passed for T-024 |
+| `test_get_approved_items_filters_orders_and_preserves_stored_snapshots()` | `tests/test_question_bank_items_api.py` | Confirms exact approval filtering, stable item/order provenance, Claim-state independence, and no row-count mutation | Passed for T-024 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -802,6 +808,23 @@ flowchart LR
 - `uv run pytest -q`: 136 passed in 6.13s with the same warning.
 - A seeded complete T-022 row survived downgrade/re-upgrade and received DRAFT with null decision metadata on each upgrade; `uv run alembic check` reported no new upgrade operations.
 - Changed-file Ruff and `git diff --check` passed.
+
+### T-024 Approved QuestionBankItem read boundary
+
+```mermaid
+flowchart LR
+    REQUEST["GET /question-bank-items/approved"] --> QUERY["Filter own status = APPROVED; order by ID"]
+    QUERY --> EAGER["Select-in load ordered Claim links and options"]
+    EAGER --> SNAPSHOT["Serialize stored QuestionBankItem snapshots"]
+    SNAPSHOT --> RESPONSE["200 list; empty list when none"]
+```
+
+- The static route is registered before the dynamic QuestionBankItem ID route.
+- Eligibility depends only on each QuestionBankItem's explicit APPROVED status; current Claim, NoteDraft, and Verification states are not consulted.
+- Retrieval returns stored text, explanation, difficulty, ContentVersion, ordered Claim IDs, ordered options, correct answer, and approval metadata without writes or regeneration.
+- `uv run pytest tests/test_question_bank_items_api.py -q`: 36 passed, 1 warning in 2.30s.
+- `uv run pytest -q`: 138 passed, 1 warning in 5.51s.
+- Changed-file Ruff passed, and `uv run alembic check` reported no new upgrade operations. No schema migration was required.
 
 ## Template for future pushed changes
 

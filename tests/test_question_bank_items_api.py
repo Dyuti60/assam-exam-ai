@@ -12,9 +12,11 @@ from app.main import app
 from app.models import (
     Claim,
     ContentVersion,
+    NoteDraft,
     QuestionBankItem,
     QuestionBankItemClaim,
     QuestionBankOption,
+    Verification,
 )
 
 
@@ -703,3 +705,151 @@ def test_database_rejects_invalid_item_approval_status(
             .values(approval_status="INVALID")
         )
     savepoint.rollback()
+
+
+def test_get_approved_items_returns_empty_list(client: TestClient) -> None:
+    response = client.get("/api/v1/question-bank-items/approved")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_approved_items_filters_orders_and_preserves_stored_snapshots(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, topic_id = _foundation(client, "approved-list")
+    first_claim_id = _claim(client, topic_id, "approved-list-first")
+    second_claim_id = _claim(client, topic_id, "approved-list-second")
+
+    first = _post(
+        client,
+        "/api/v1/question-bank-items",
+        {
+            **_item_payload(
+                content_version_id,
+                [second_claim_id, first_claim_id],
+            ),
+            "question_text": "First approved candidate",
+            "options": ["First A", "First B", "First C"],
+            "correct_option_position": 2,
+        },
+    )
+    draft = _post(
+        client,
+        "/api/v1/question-bank-items",
+        {
+            **_item_payload(content_version_id, [first_claim_id]),
+            "question_text": "Draft candidate",
+        },
+    )
+    rejected = _post(
+        client,
+        "/api/v1/question-bank-items",
+        {
+            **_item_payload(content_version_id, [first_claim_id]),
+            "question_text": "Rejected candidate",
+        },
+    )
+    second = _post(
+        client,
+        "/api/v1/question-bank-items",
+        {
+            **_item_payload(content_version_id, [first_claim_id]),
+            "question_text": "Second approved candidate",
+        },
+    )
+
+    first_approved = client.post(
+        f"/api/v1/question-bank-items/{first['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "First review"},
+    )
+    rejected_response = client.post(
+        f"/api/v1/question-bank-items/{rejected['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "Rejected"},
+    )
+    second_approved = client.post(
+        f"/api/v1/question-bank-items/{second['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Second review"},
+    )
+    source = _post(
+        client,
+        "/api/v1/sources",
+        {
+            "title": "Approved-list verification source",
+            "source_type": "official",
+            "authority_tier": 1,
+            "location": "https://example.gov/approved-list-verification",
+            "license_status": "UNKNOWN",
+        },
+    )
+    evidence = _post(
+        client,
+        "/api/v1/evidence",
+        {"source_id": source["id"], "content": "Stored verification evidence"},
+    )
+    verification = _post(
+        client,
+        "/api/v1/verifications",
+        {
+            "claim_id": first_claim_id,
+            "verdict": "SUPPORTED",
+            "confidence": 0.9,
+            "evidence": [
+                {
+                    "evidence_id": evidence["id"],
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    note_draft = _post(
+        client,
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        {},
+    )
+    note_approved = client.post(
+        f"/api/v1/note-drafts/{note_draft['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    claim_reset = client.post(
+        f"/api/v1/claims/{second_claim_id}/approval",
+        json={"approval_status": "DRAFT"},
+    )
+    assert first_approved.status_code == 200
+    assert rejected_response.status_code == 200
+    assert second_approved.status_code == 200
+    assert verification["claim"]["id"] == first_claim_id
+    assert note_approved.status_code == 200
+    assert claim_reset.status_code == 200
+
+    counts_before = (
+        db_connection.scalar(select(func.count()).select_from(QuestionBankItem)),
+        db_connection.scalar(select(func.count()).select_from(QuestionBankItemClaim)),
+        db_connection.scalar(select(func.count()).select_from(QuestionBankOption)),
+        db_connection.scalar(select(func.count()).select_from(Claim)),
+        db_connection.scalar(select(func.count()).select_from(NoteDraft)),
+        db_connection.scalar(select(func.count()).select_from(Verification)),
+    )
+    response = client.get("/api/v1/question-bank-items/approved")
+    counts_after = (
+        db_connection.scalar(select(func.count()).select_from(QuestionBankItem)),
+        db_connection.scalar(select(func.count()).select_from(QuestionBankItemClaim)),
+        db_connection.scalar(select(func.count()).select_from(QuestionBankOption)),
+        db_connection.scalar(select(func.count()).select_from(Claim)),
+        db_connection.scalar(select(func.count()).select_from(NoteDraft)),
+        db_connection.scalar(select(func.count()).select_from(Verification)),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [first_approved.json(), second_approved.json()]
+    assert [item["id"] for item in response.json()] == sorted(
+        [first["id"], second["id"]]
+    )
+    assert response.json()[0]["claim_ids"] == [second_claim_id, first_claim_id]
+    assert response.json()[0]["options"] == ["First A", "First B", "First C"]
+    assert response.json()[0]["correct_option_position"] == 2
+    assert draft["id"] not in {item["id"] for item in response.json()}
+    assert rejected["id"] not in {item["id"] for item in response.json()}
+    assert counts_after == counts_before

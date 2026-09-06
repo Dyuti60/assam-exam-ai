@@ -583,3 +583,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Question Foundation |
 | Scope | Read only explicitly approved stored QuestionBankItem snapshots in stable ID order; no release, publication, learner delivery, generation, or personalization |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-024 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/question-bank-items/approved` as a read-only internal boundary for explicitly approved stored candidate snapshots |
+| Tests | `uv run pytest tests/test_question_bank_items_api.py -q`: 36 passed, 1 warning in 2.30s. `uv run pytest -q`: 138 passed, 1 warning in 5.51s. |
+| Ruff | `uv run ruff check app/api/v1/routes/knowledge.py app/repositories/knowledge.py app/services/knowledge.py tests/test_question_bank_items_api.py`: passed (`All checks passed!`). |
+| Migration checks | No model or database schema change was required. Existing migrations upgraded a fresh dedicated test database through `a6d1e8c3f247`; `uv run alembic check` reported `No new upgrade operations detected.` |
+| Diff check | `git diff --check` passed; only line-ending normalization warnings were emitted. |
+| Notes | The query filters exactly on QuestionBankItem APPROVED state, orders by ascending item ID, and select-in loads ordered Claim links and options. It returns stored snapshots without re-evaluating Claim approval or writing data. No release, publication, generation, learner, personalization, dependency, configuration, Docker, AGENTS, README, migration, or T-025 behavior was added. |

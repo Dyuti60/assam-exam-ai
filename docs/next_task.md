@@ -1139,3 +1139,5 @@ Report:
 10. explicit confirmation that no commit, push, PR, self-approval, T-025 work, release, publication, generation, or learner-personalization work occurred.
 
 Leave T-024 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-06 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/question-bank-items/approved` through the existing route, service, repository, and `QuestionBankItemResponse` flow. It filters exactly on each candidate's own APPROVED state, returns stored snapshots in ascending ID order with ordered Claim and option provenance eagerly loaded, and returns `[]` when none qualify. It performs no writes, regeneration, Claim re-evaluation, release, publication, generation, or personalization. No migration or dependency/configuration/infrastructure change was required; exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

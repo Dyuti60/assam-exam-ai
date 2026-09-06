@@ -355,6 +355,12 @@ class KnowledgeService:
             )
         return self._question_bank_item_response(question_bank_item)
 
+    def get_approved_question_bank_items(self) -> list[QuestionBankItemResponse]:
+        return [
+            self._question_bank_item_response(question_bank_item)
+            for question_bank_item in self.repository.get_approved_question_bank_items()
+        ]
+
     def record_question_bank_item_approval(
         self,
         question_bank_item_id: int,
