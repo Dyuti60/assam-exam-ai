@@ -500,3 +500,15 @@ The candidate remains unreviewed, unreleased, and not learner-facing. It has no 
 - **Goal:** Add ordered answer options and exactly one same-item correct answer to new internal QuestionBankItem candidates while retaining all T-021 provenance and atomicity boundaries.
 - **Architectural phase:** Question / Mock Foundation.
 - **Full implementation prompt:** appended in `docs/next_task.md`.
+
+### T-022 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add ordered options and one same-item correct answer to newly created internal QuestionBankItem candidates |
+| Tests | `uv run pytest tests/test_question_bank_items_api.py -q`: 26 passed in 1.42s with one Starlette deprecation warning. `uv run pytest -q`: 128 passed in 4.88s with the same warning. |
+| Ruff | Changed-file Ruff check passed. |
+| Migration checks | Fresh upgrade through `f2c8d4a6e915`, downgrade to `e9a4c2f7b163`, re-upgrade, and `uv run alembic check` passed; no new upgrade operations were detected. |
+| Diff check | `git diff --check` passed. |
+| Notes | New API-created items require at least two non-blank ordered options and one in-range correct position. PostgreSQL enforces option text/order and same-item answer integrity while nullable migration state keeps T-021 rows readable. Item creation remains atomic and retrieval remains a stored snapshot. No dependency, configuration, Docker, AGENTS, README, review, release, AI, NoteDraft binding, previous-paper conversion, or learner behavior changed. |

@@ -117,6 +117,8 @@ class QuestionBankItemCreate(BaseModel):
     explanation: str = Field(min_length=1)
     difficulty: QuestionDifficulty
     claim_ids: list[int] = Field(min_length=1)
+    options: list[str] = Field(min_length=2)
+    correct_option_position: int = Field(ge=0)
 
     @field_validator("question_text", "explanation")
     @classmethod
@@ -131,12 +133,23 @@ class QuestionBankItemCreate(BaseModel):
             raise ValueError("claim_id values must be positive")
         if len(self.claim_ids) != len(set(self.claim_ids)):
             raise ValueError("claim_id values must be unique")
+        if any(not option.strip() for option in self.options):
+            raise ValueError("option values must not be blank")
+        if self.correct_option_position >= len(self.options):
+            raise ValueError("correct_option_position must reference an option")
         return self
 
 
-class QuestionBankItemResponse(QuestionBankItemCreate):
+class QuestionBankItemResponse(BaseModel):
     id: int
+    content_version_id: int
+    question_text: str
+    explanation: str
+    difficulty: QuestionDifficulty
     created_at: datetime
+    claim_ids: list[int]
+    options: list[str]
+    correct_option_position: int | None
 
 
 class PreviousPaperCreate(BaseModel):

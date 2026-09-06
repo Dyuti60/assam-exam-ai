@@ -40,10 +40,10 @@ This section describes only the repository inspected on 2026-09-05 in Asia/Kolka
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; ten migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, and grounded question candidates |
-| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; eleven migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, and complete internal MCQ candidates |
+| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, ordered `QuestionBankOption` records, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | One hundred nineteen tests cover the foundation, ContentVersion and grounded question-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, approval boundaries, stored snapshots, and failure atomicity |
+| Tests | One hundred twenty-eight tests cover the foundation, ContentVersion and complete internal MCQ-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, approval boundaries, stored snapshots, and failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -77,6 +77,8 @@ erDiagram
     CONTENT_VERSION ||--o{ QUESTION_BANK_ITEM : "owns candidates"
     QUESTION_BANK_ITEM ||--|{ QUESTION_BANK_ITEM_CLAIM : "grounded in position order"
     CLAIM ||--o{ QUESTION_BANK_ITEM_CLAIM : "grounds candidate"
+    QUESTION_BANK_ITEM ||--o{ QUESTION_BANK_OPTION : "owns in position order"
+    QUESTION_BANK_ITEM ||--o| QUESTION_BANK_OPTION : "selects correct option"
     EXAM ||--o{ PREVIOUS_PAPER : "has papers"
     SOURCE ||--o{ PREVIOUS_PAPER : "documents"
     PREVIOUS_PAPER ||--o{ PREVIOUS_QUESTION : "contains"
@@ -182,7 +184,7 @@ A PreviousPaper belongs to one Exam, cites one Source, records a positive year, 
 
 A ContentVersion is retained version identity for one exact SyllabusVersion/Topic mapping and an explicitly supplied positive version number. The current API supports creation and retrieval only; it has no update endpoint. PostgreSQL enforces positive versions, unique mapping/version identity, composite membership through `syllabus_version_topics`, and restricted deletion of the referenced syllabus-topic mapping. Database-level prevention of direct ContentVersion updates or deletion is not implemented. Historical versions can coexist, and the service does not calculate the next number. ContentVersion has no content body, approval, publication, NoteDraft binding, AI behavior, or learner personalization; it can now own internal QuestionBankItem candidates.
 
-A QuestionBankItem is a manually supplied internal question candidate owned by one ContentVersion. It stores non-blank question and explanation text, constrained difficulty, and the exact approved same-Topic Claims used at creation in persisted position order. PostgreSQL restricts deletion of its ContentVersion and referenced Claims and enforces one Claim per item plus unique non-negative positions. Retrieval returns the stored snapshot without re-evaluating later Claim approval. It is not a complete MCQ, approved canonical content, or learner-ready material; options, answers, review, release, and AI generation are not implemented.
+A QuestionBankItem is a manually supplied internal MCQ candidate owned by one ContentVersion. It stores non-blank question and explanation text, constrained difficulty, the exact approved same-Topic Claims used at creation, at least two ordered options for new API-created items, and one correct-option position. PostgreSQL enforces non-blank option text, unique non-negative option positions, and a composite same-item correct-option reference; deleting the selected option is restricted, while deleting the parent item removes only its dependent options and Claim links. Existing T-021 rows remain readable with no options and a null correct-option position. Retrieval returns the stored option, answer, and provenance snapshot without re-evaluating later Claim approval. The item remains unreviewed, unreleased, and not learner-ready; review, publication, AI generation, attempts, and analytics are not implemented.
 
 ## Architectural decisions recorded by repository instructions
 
@@ -247,4 +249,6 @@ T-019 is approved at commit `ff326dc5334dfc41ec298d10551f8c5801ae21b1`. The read
 
 T-020 is approved at commit `c5d2010da24731387162020accc9030d6fcca01e`. The platform now has create/read-only ContentVersion identity for an exact SyllabusVersion/Topic mapping, with database-enforced membership, positive explicit versions, scoped uniqueness, and mapping-deletion restriction. It contains no educational asset or review state. T-021 will add the first manually created, Claim-grounded QuestionBankItem candidate under a ContentVersion.
 
-T-021 is ready for review. The platform can now create and retrieve one internal QuestionBankItem candidate with exact ordered approved-Claim provenance under a ContentVersion. The stored snapshot remains unreviewed and has no options, answer, release state, AI generation, or learner-facing behavior.
+T-021 is approved at commit `3b1c425158ca0932b6c8ea9fb80dbf9efd9b8278`. It established internal QuestionBankItem candidates with exact ordered approved-Claim provenance under a ContentVersion; T-022 extends that stored candidate structure with options and an answer without changing its unreviewed status.
+
+T-022 is ready for review. New QuestionBankItems now include ordered options and exactly one same-item correct answer while preserving T-021 provenance and atomicity. This completes only the internal MCQ structure; it adds no review, release, generation, or learner boundary.

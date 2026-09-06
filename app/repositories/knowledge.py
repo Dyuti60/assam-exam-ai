@@ -126,7 +126,10 @@ class KnowledgeRepository:
     ) -> QuestionBankItem | None:
         statement = (
             select(QuestionBankItem)
-            .options(selectinload(QuestionBankItem.claim_links))
+            .options(
+                selectinload(QuestionBankItem.claim_links),
+                selectinload(QuestionBankItem.options),
+            )
             .where(QuestionBankItem.id == question_bank_item_id)
         )
         return self.session.scalar(statement)

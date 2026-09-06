@@ -2,14 +2,20 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import engine, get_db
 from app.main import app
-from app.models import Claim, ContentVersion, QuestionBankItem, QuestionBankItemClaim
+from app.models import (
+    Claim,
+    ContentVersion,
+    QuestionBankItem,
+    QuestionBankItemClaim,
+    QuestionBankOption,
+)
 
 
 @pytest.fixture
@@ -117,6 +123,8 @@ def _item_payload(content_version_id: int, claim_ids: list[int]) -> dict:
         "explanation": "The approved Claims provide the grounding.",
         "difficulty": "MEDIUM",
         "claim_ids": claim_ids,
+        "options": ["First option", "Second option"],
+        "correct_option_position": 1,
     }
 
 
@@ -178,6 +186,10 @@ def test_missing_claim_returns_404_atomically(
         )
         == 0
     )
+    assert (
+        db_connection.scalar(select(func.count()).select_from(QuestionBankOption))
+        == 0
+    )
 
 
 def test_get_missing_item_returns_established_404(client: TestClient) -> None:
@@ -190,6 +202,7 @@ def test_get_missing_item_returns_established_404(client: TestClient) -> None:
 @pytest.mark.parametrize("approval_status", ["DRAFT", "REJECTED"])
 def test_unapproved_claim_returns_stable_conflict(
     client: TestClient,
+    db_connection: Connection,
     approval_status: str,
 ) -> None:
     content_version_id, topic_id = _foundation(client, approval_status)
@@ -202,9 +215,13 @@ def test_unapproved_claim_returns_stable_conflict(
 
     assert response.status_code == 409
     assert response.json() == {"detail": f"Claim {claim_id} is not approved"}
+    assert db_connection.scalar(select(func.count()).select_from(QuestionBankItem)) == 0
 
 
-def test_wrong_topic_claim_returns_stable_conflict(client: TestClient) -> None:
+def test_wrong_topic_claim_returns_stable_conflict(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
     content_version_id, content_topic_id = _foundation(client, "main")
     _, other_topic_id = _foundation(client, "other")
     claim_id = _claim(client, other_topic_id, "wrong-topic")
@@ -221,6 +238,7 @@ def test_wrong_topic_claim_returns_stable_conflict(client: TestClient) -> None:
             f"Topic {content_topic_id}"
         )
     }
+    assert db_connection.scalar(select(func.count()).select_from(QuestionBankItem)) == 0
 
 
 @pytest.mark.parametrize(
@@ -233,6 +251,11 @@ def test_wrong_topic_claim_returns_stable_conflict(client: TestClient) -> None:
         ("question_text", "   "),
         ("explanation", "\t"),
         ("difficulty", "EXPERT"),
+        ("options", []),
+        ("options", ["Only one"]),
+        ("options", ["Valid", "  "]),
+        ("correct_option_position", -1),
+        ("correct_option_position", 2),
     ],
 )
 def test_invalid_item_input_returns_422(
@@ -242,6 +265,15 @@ def test_invalid_item_input_returns_422(
 ) -> None:
     payload = _item_payload(1, [1])
     payload[field] = value
+
+    response = client.post("/api/v1/question-bank-items", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_missing_correct_option_position_returns_422(client: TestClient) -> None:
+    payload = _item_payload(1, [1])
+    payload.pop("correct_option_position")
 
     response = client.post("/api/v1/question-bank-items", json=payload)
 
@@ -346,3 +378,122 @@ def test_retrieval_is_stored_snapshot_after_claim_approval_changes(
     assert reset.json()["approval_status"] == "DRAFT"
     assert retrieved.status_code == 200
     assert retrieved.json() == created
+
+
+def test_option_database_constraints_and_same_item_answer_integrity(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, topic_id = _foundation(client)
+    claim_id = _claim(client, topic_id, "option-constraints")
+    first = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+    second = _post(
+        client,
+        "/api/v1/question-bank-items",
+        {
+            **_item_payload(content_version_id, [claim_id]),
+            "question_text": "A second candidate?",
+        },
+    )
+    first_options = db_connection.execute(
+        select(QuestionBankOption.id, QuestionBankOption.position).where(
+            QuestionBankOption.question_bank_item_id == first["id"]
+        )
+    ).all()
+    second_option_id = db_connection.scalar(
+        select(QuestionBankOption.id).where(
+            QuestionBankOption.question_bank_item_id == second["id"],
+            QuestionBankOption.position == 0,
+        )
+    )
+    assert second_option_id is not None
+    invalid_statements = [
+        QuestionBankOption.__table__.insert().values(
+            question_bank_item_id=first["id"],
+            position=-1,
+            option_text="Valid",
+        ),
+        QuestionBankOption.__table__.insert().values(
+            question_bank_item_id=first["id"],
+            position=0,
+            option_text="Duplicate position",
+        ),
+        QuestionBankOption.__table__.insert().values(
+            question_bank_item_id=first["id"],
+            position=2,
+            option_text="\t",
+        ),
+        update(QuestionBankItem)
+        .where(QuestionBankItem.id == first["id"])
+        .values(correct_option_id=second_option_id),
+        delete(QuestionBankOption).where(
+            QuestionBankOption.id
+            == next(
+                option.id
+                for option in first_options
+                if option.position == first["correct_option_position"]
+            )
+        ),
+    ]
+
+    for statement in invalid_statements:
+        savepoint = db_connection.begin_nested()
+        with pytest.raises(IntegrityError):
+            db_connection.execute(statement)
+        savepoint.rollback()
+
+
+def test_deleting_item_cascades_only_its_dependent_rows(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, topic_id = _foundation(client)
+    claim_id = _claim(client, topic_id, "cascade")
+    item = _post(
+        client,
+        "/api/v1/question-bank-items",
+        _item_payload(content_version_id, [claim_id]),
+    )
+
+    db_connection.execute(
+        delete(QuestionBankItem).where(QuestionBankItem.id == item["id"])
+    )
+
+    assert db_connection.scalar(
+        select(func.count()).select_from(QuestionBankOption)
+    ) == 0
+    assert db_connection.scalar(
+        select(func.count()).select_from(QuestionBankItemClaim)
+    ) == 0
+    assert db_connection.scalar(select(func.count()).select_from(Claim)) == 1
+    assert (
+        db_connection.scalar(select(func.count()).select_from(ContentVersion)) == 1
+    )
+
+
+def test_legacy_item_without_options_remains_retrievable(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    content_version_id, _ = _foundation(client)
+    legacy_id = db_connection.scalar(
+        QuestionBankItem.__table__.insert()
+        .values(
+            content_version_id=content_version_id,
+            question_text="Legacy candidate",
+            explanation="Created before complete MCQ options.",
+            difficulty="EASY",
+        )
+        .returning(QuestionBankItem.id)
+    )
+    assert legacy_id is not None
+
+    response = client.get(f"/api/v1/question-bank-items/{legacy_id}")
+
+    assert response.status_code == 200
+    assert response.json()["options"] == []
+    assert response.json()["correct_option_position"] is None

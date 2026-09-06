@@ -867,3 +867,5 @@ Report:
 8. known boundaries retained;
 9. git status;
 10. explicit confirmation: no commit, push, PR, self-approval, or T-023 work.
+
+Implementation note (2026-09-06 Asia/Kolkata, UTC+05:30): extended only the existing QuestionBankItem create/read contract with at least two ordered non-blank `options` and one `correct_option_position`. Migration `f2c8d4a6e915` adds ordered `QuestionBankOption` rows plus a nullable backward-compatible composite same-item correct-option reference. New item, Claim links, options, and answer commit atomically; retrieval returns the stored snapshot, while legacy T-021 rows remain readable with empty options and a null answer position. No review, release, AI, previous-paper conversion, NoteDraft binding, dependency, configuration, Docker, or learner-facing feature was added. Exact results are recorded in `docs/task_log.md` and `docs/workflow.md`.

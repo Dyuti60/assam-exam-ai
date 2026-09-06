@@ -14,6 +14,7 @@ from app.models import (
     PreviousQuestion,
     QuestionBankItem,
     QuestionBankItemClaim,
+    QuestionBankOption,
     Source,
     SyllabusVersion,
     SyllabusVersionTopic,
@@ -328,9 +329,16 @@ class KnowledgeService:
                 QuestionBankItemClaim(claim=claim, position=position)
                 for position, claim in enumerate(claims)
             ],
+            options=[
+                QuestionBankOption(option_text=text, position=position)
+                for position, text in enumerate(request.options)
+            ],
         )
-        self._commit_question_bank_item(question_bank_item)
-        return self._question_bank_item_response(question_bank_item)
+        self._commit_question_bank_item(
+            question_bank_item,
+            request.correct_option_position,
+        )
+        return self.get_question_bank_item(question_bank_item.id)
 
     def get_question_bank_item(
         self,
@@ -593,9 +601,13 @@ class KnowledgeService:
     def _commit_question_bank_item(
         self,
         question_bank_item: QuestionBankItem,
+        correct_option_position: int,
     ) -> None:
         try:
             self.repository.add_question_bank_item(question_bank_item)
+            question_bank_item.correct_option_id = question_bank_item.options[
+                correct_option_position
+            ].id
             self.session.commit()
         except Exception:
             self.session.rollback()
@@ -640,6 +652,14 @@ class KnowledgeService:
     def _question_bank_item_response(
         question_bank_item: QuestionBankItem,
     ) -> QuestionBankItemResponse:
+        correct_option_position = next(
+            (
+                option.position
+                for option in question_bank_item.options
+                if option.id == question_bank_item.correct_option_id
+            ),
+            None,
+        )
         return QuestionBankItemResponse(
             id=question_bank_item.id,
             content_version_id=question_bank_item.content_version_id,
@@ -648,6 +668,8 @@ class KnowledgeService:
             difficulty=question_bank_item.difficulty,
             created_at=question_bank_item.created_at,
             claim_ids=[link.claim_id for link in question_bank_item.claim_links],
+            options=[option.option_text for option in question_bank_item.options],
+            correct_option_position=correct_option_position,
         )
 
     def _commit_verification(

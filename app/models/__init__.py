@@ -10,6 +10,7 @@ from app.models.previous_paper import PreviousPaper
 from app.models.previous_question import PreviousQuestion
 from app.models.question_bank_item import QuestionBankItem
 from app.models.question_bank_item_claim import QuestionBankItemClaim
+from app.models.question_bank_option import QuestionBankOption
 from app.models.source import Source
 from app.models.syllabus_version import SyllabusVersion
 from app.models.syllabus_version_topic import SyllabusVersionTopic
@@ -29,6 +30,7 @@ __all__ = [
     "PreviousQuestion",
     "QuestionBankItem",
     "QuestionBankItemClaim",
+    "QuestionBankOption",
     "Source",
     "SyllabusVersion",
     "SyllabusVersionTopic",
