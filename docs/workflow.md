@@ -1142,3 +1142,13 @@ flowchart LR
 - `uv run pytest tests/test_note_drafts.py -q`: 41 passed, 1 warning in 3.55s.
 - `uv run pytest -q`: 185 passed, 1 warning in 10.29s.
 - Changed-file Ruff passed. No model, schema, or migration changed; Alembic head remains `d9e5b2a7c418`.
+
+
+### T-029 post-push review
+
+- **APPROVED** at implementation commit `ee755cfc3a88700abababf2473bd8d615c16c871`, whose parent is the T-029 issuance head `a351673bc242261640faa1468a33e395fe740e4b`.
+- The immutable commit adds only `GET /api/v1/note-drafts/released` through the existing route, service, repository, and `NoteDraftResponse` layers.
+- Eligibility is exactly current persisted RELEASED state. Results are ordered by ascending draft ID; Topic is joined-loaded and ordered Claim links are select-in loaded, avoiding obvious per-draft N+1 behavior.
+- Stored ContentVersion ownership, Markdown, Claim provenance, review metadata, and release metadata are returned without locks, writes, regeneration, or current-state re-evaluation. The approved-drafts collection remains approval-only.
+- Developer-recorded evidence is 2 focused released-draft tests, 41 focused NoteDraft tests, and 185 full-suite tests, each with one existing warning, plus successful Ruff, Alembic-head/check, and diff checks. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
+- No model, schema, migration, dependency, configuration, Docker, publication transport, public/learner delivery, PDF, content package, mock assembly, AI, personalization, or T-030 implementation was included.
