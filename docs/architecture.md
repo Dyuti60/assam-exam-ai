@@ -264,4 +264,6 @@ T-026 is approved at commit `d5c3b484b8268ae745da491617c56c02a1be3853`. The read
 
 T-027 is approved at commit `bcff4c54a04f6ec3cdcb094f71d64241e87a3622`. Every newly persisted NoteDraft records one exact same-Topic ContentVersion; legacy drafts remain readable and reviewable with null ownership rather than inferred data. This establishes versioned canonical-note identity without adding release or learner delivery.
 
-T-028 is issued to add a controlled NoteDraft release lifecycle. Release must remain independent from approval, require both the NoteDraft's own APPROVED state and non-null ContentVersion ownership, preserve stored Markdown and ordered Claim provenance, and add no released collection, publication transport, or learner access.
+T-028 is approved at commit `4974d87f90c08a5e39b3fe31a5cd1f7e1f9a4470`. NoteDrafts now have a constrained UNRELEASED/RELEASED/WITHDRAWN lifecycle requiring their own APPROVED review and non-null ContentVersion ownership before release. Release and approval decisions lock the stored draft, withdrawal retains release provenance, and legacy null-owned drafts remain reviewable but unreleasable.
+
+T-029 is issued to add only a read-only internal boundary for currently RELEASED NoteDraft snapshots. It must preserve stored ContentVersion and ordered Claim provenance, keep the approved-draft boundary distinct, perform no writes or regeneration, and add no publication transport or learner access.
