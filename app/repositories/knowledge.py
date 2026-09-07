@@ -308,6 +308,18 @@ class KnowledgeRepository:
         )
         return list(self.session.scalars(statement))
 
+    def get_released_note_drafts(self) -> list[NoteDraft]:
+        statement = (
+            select(NoteDraft)
+            .options(
+                joinedload(NoteDraft.topic),
+                selectinload(NoteDraft.claim_links),
+            )
+            .where(NoteDraft.release_status == "RELEASED")
+            .order_by(NoteDraft.id)
+        )
+        return list(self.session.scalars(statement))
+
     def update_note_draft_approval(
         self,
         note_draft: NoteDraft,

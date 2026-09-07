@@ -791,3 +791,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Released Note Read Boundary |
 | Scope | Exact release-state filtering and stored-snapshot retrieval only; no publication transport, public/learner delivery, PDF, AI generation, or personalization |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-029 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/note-drafts/released` as the read-only boundary for currently RELEASED stored NoteDraft snapshots |
+| Migration | None; model and schema unchanged, with Alembic head retained at `d9e5b2a7c418` |
+| Tests | `uv run pytest tests/test_released_note_drafts_api.py -q`: 2 passed, 1 warning in 1.47s. `uv run pytest tests/test_note_drafts.py -q`: 41 passed, 1 warning in 3.55s. `uv run pytest -q`: 185 passed, 1 warning in 10.29s. |
+| Ruff | Changed-file Ruff passed (`All checks passed!`). |
+| Notes | The repository filters exactly on RELEASED state, orders by draft ID, and eagerly loads Topic and ordered Claim links. Responses reuse stored NoteDraft serialization and perform no lock, write, regeneration, or current-state re-evaluation. The approved boundary remains approval-only. No publication, learner delivery, PDF, content package, mock assembly, AI, personalization, dependency, configuration, Docker, AGENTS, README, migration, or T-030 behavior was added. |

@@ -87,6 +87,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `POST /api/v1/topics/{topic_id}/note-draft-preview` | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Returns deterministic Markdown from one Topic's approved Claims without persistence |
 | `POST /api/v1/topics/{topic_id}/note-drafts` | `create_note_draft()` | `app/api/v1/routes/knowledge.py` | Requires a positive ContentVersion ID and atomically stores a same-Topic draft with ordered Claim provenance |
 | `GET /api/v1/note-drafts/approved` | `get_approved_note_drafts()` | `app/api/v1/routes/knowledge.py` | Returns only approved stored NoteDraft snapshots in ascending ID order |
+| `GET /api/v1/note-drafts/released` | `get_released_note_drafts()` | `app/api/v1/routes/knowledge.py` | Returns only currently released stored NoteDraft snapshots in ascending ID order |
 | `GET /api/v1/note-drafts/{note_draft_id}` | `get_note_draft()` | `app/api/v1/routes/knowledge.py` | Returns one stored internal draft snapshot with position-ordered Claim IDs |
 | `POST /api/v1/note-drafts/{note_draft_id}/approval` | `record_note_draft_approval()` | `app/api/v1/routes/knowledge.py` | Records or resets a NoteDraft human-review decision without publishing it |
 | `POST /api/v1/note-drafts/{note_draft_id}/release` | `record_note_draft_release()` | `app/api/v1/routes/knowledge.py` | Applies the one-way controlled NoteDraft release or withdrawal decision with stable 404/409 mapping |
@@ -128,6 +129,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_note_draft_preview()` | `app/api/v1/routes/knowledge.py` | Delegates deterministic preview creation and maps missing/empty approved knowledge to 404/409 |
 | `create_note_draft()` | `app/api/v1/routes/knowledge.py` | Delegates persisted draft creation and maps missing/empty approved knowledge to 404/409 |
 | `get_approved_note_drafts()` | `app/api/v1/routes/knowledge.py` | Delegates the static approved-draft read boundary before the dynamic draft-ID route |
+| `get_released_note_drafts()` | `app/api/v1/routes/knowledge.py` | Delegates the static released-draft read boundary before the dynamic draft-ID route |
 | `get_note_draft()` | `app/api/v1/routes/knowledge.py` | Delegates stored snapshot retrieval and maps a missing NoteDraft to 404 |
 | `record_note_draft_approval()` | `app/api/v1/routes/knowledge.py` | Delegates the draft decision and maps a missing NoteDraft to 404 |
 | `record_note_draft_release()` | `app/api/v1/routes/knowledge.py` | Delegates release/withdrawal and maps missing/conflict outcomes to 404/409 |
@@ -229,6 +231,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `add_note_draft()` | `app/repositories/knowledge.py` | Adds and flushes a NoteDraft with its ordered Claim links |
 | `get_note_draft()` | `app/repositories/knowledge.py` | Retrieves one NoteDraft with its Topic and all ordered Claim links eagerly loaded |
 | `get_approved_note_drafts()` | `app/repositories/knowledge.py` | Filters exactly on NoteDraft APPROVED state, orders by ID, and eagerly loads Topic and Claim links |
+| `get_released_note_drafts()` | `app/repositories/knowledge.py` | Filters exactly on NoteDraft RELEASED state, orders by ID, and eagerly loads Topic and Claim links |
 | `update_note_draft_approval()` | `app/repositories/knowledge.py` | Updates only the draft's review state, decision timestamp, and reviewer note |
 | `link_claim_evidence()` | `app/repositories/knowledge.py` | Uses PostgreSQL `INSERT ... ON CONFLICT DO NOTHING` against the composite key for concurrency-safe idempotency |
 | `update_claim_approval()` | `app/repositories/knowledge.py` | Updates only the Claim's approval state and its nullable decision timestamp and reviewer note |
@@ -263,6 +266,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `create_note_draft()` | `app/services/knowledge.py` | Resolves Topic then ContentVersion, enforces same-Topic ownership, confirms approved knowledge, and commits the draft and links atomically |
 | `get_note_draft()` | `app/services/knowledge.py` | Serializes stored ContentVersion ownership, draft fields, and position-ordered link IDs without inference or mutation |
 | `get_approved_note_drafts()` | `app/services/knowledge.py` | Serializes the repository's ordered approved drafts as stored snapshots |
+| `get_released_note_drafts()` | `app/services/knowledge.py` | Serializes the repository's ordered released drafts as stored snapshots without writes or re-evaluation |
 | `_note_draft_response()` | `app/services/knowledge.py` | Builds the shared stored NoteDraft response, including nullable ownership, without regenerating or re-evaluating Claims |
 | `record_note_draft_approval()` | `app/services/knowledge.py` | Records APPROVED/REJECTED with UTC time and note, or clears decision metadata for DRAFT |
 | `get_claim()` | `app/services/knowledge.py` | Retrieves a Claim through the repository or raises a missing-resource error |
@@ -427,6 +431,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_released_note_draft_blocks_review_change_until_withdrawn()` | `tests/test_note_drafts.py` | Confirms row-locked review changes are blocked while released and resume after withdrawal | Passed for T-028 |
 | `test_note_draft_release_missing_and_invalid_requests()` | `tests/test_note_drafts.py` | Confirms established missing-draft 404 and schema-driven invalid/UNRELEASED 422 responses | Passed for T-028 |
 | `test_approved_note_draft_collection_remains_approval_only_with_release_metadata()` | `tests/test_note_drafts.py` | Confirms the approved collection retains independent eligibility and returns stored release metadata | Passed for T-028 |
+| `test_get_released_note_drafts_returns_empty_for_empty_and_ineligible_sets()` | `tests/test_released_note_drafts_api.py` | Confirms empty and no-current-release sets return HTTP 200 with `[]` | Passed for T-029 |
+| `test_get_released_note_drafts_filters_orders_and_preserves_snapshots()` | `tests/test_released_note_drafts_api.py` | Confirms exact release filtering, stable ordering, stored provenance/metadata, boundary separation, independence, and no mutation | Passed for T-029 |
 | `test_other_state_cannot_substitute_for_target_note_draft_approval()` | `tests/test_note_drafts.py` | Confirms Claim, Verification, QuestionBankItem, and another draft cannot substitute for the target draft's own approval | Passed for T-028 |
 | `test_database_rejects_invalid_note_draft_release_states()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects invalid status, timestamp, note, and approval combinations | Passed eight times for T-028 |
 | `test_database_rejects_released_state_without_content_version()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects RELEASED and WITHDRAWN state without version ownership | Passed twice for T-028 |
@@ -1116,3 +1122,23 @@ flowchart LR
 - PostgreSQL independently constrains lifecycle status, metadata, approval, and ownership. The approved-drafts collection remains approval-only, and no released-draft collection or publication boundary was added.
 - Developer-recorded evidence is 41 focused NoteDraft tests and 183 full-suite tests, each with one existing warning, plus successful Ruff, fresh migration, seeded downgrade/re-upgrade, PostgreSQL constraint, Alembic, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - No dependency, configuration, Docker, public/learner delivery, publication transport, PDF, AI, personalization, or T-029 implementation was included.
+
+
+### T-029 Released NoteDraft read boundary
+
+```mermaid
+flowchart LR
+    REQUEST["GET /note-drafts/released"] --> QUERY["Filter release_status = RELEASED; order by ID"]
+    QUERY --> EAGER["Joined-load Topic + select-in load ordered Claim links"]
+    EAGER --> SNAPSHOT["Serialize stored NoteDraftResponse snapshots"]
+    SNAPSHOT --> RESPONSE["200 list; empty list when none"]
+```
+
+- The static released route precedes the dynamic NoteDraft-ID route and delegates through the existing service and repository layers.
+- Eligibility depends only on current persisted RELEASED state; UNRELEASED and WITHDRAWN drafts are excluded even when approved.
+- The repository performs exact filtering, ascending ordering, and eager loading. The service reuses the stored response serializer without locks, writes, regeneration, or current Claim/Verification/QuestionBankItem/priority evaluation.
+- The approved-drafts endpoint remains approval-only and continues to include approved UNRELEASED and approved WITHDRAWN drafts.
+- `uv run pytest tests/test_released_note_drafts_api.py -q`: 2 passed, 1 warning in 1.47s.
+- `uv run pytest tests/test_note_drafts.py -q`: 41 passed, 1 warning in 3.55s.
+- `uv run pytest -q`: 185 passed, 1 warning in 10.29s.
+- Changed-file Ruff passed. No model, schema, or migration changed; Alembic head remains `d9e5b2a7c418`.

@@ -311,6 +311,11 @@ def get_approved_note_drafts(db: DatabaseSession) -> list[NoteDraftResponse]:
     return KnowledgeService(db).get_approved_note_drafts()
 
 
+@router.get("/note-drafts/released", response_model=list[NoteDraftResponse])
+def get_released_note_drafts(db: DatabaseSession) -> list[NoteDraftResponse]:
+    return KnowledgeService(db).get_released_note_drafts()
+
+
 @router.get("/note-drafts/{note_draft_id}", response_model=NoteDraftResponse)
 def get_note_draft(
     note_draft_id: int,

@@ -2903,3 +2903,5 @@ Do not self-approve.
 Do not implement T-030.
 
 Leave T-029 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-07 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/note-drafts/released` through the existing route, service, repository, and `NoteDraftResponse` flow. It filters exactly on current RELEASED state, returns stored snapshots in ascending ID order with Topic and ordered Claim provenance eagerly loaded, and returns `[]` when none qualify. The approved-drafts boundary remains approval-only. No model, schema, migration, lock, write, regeneration, publication, learner delivery, PDF, content package, mock assembly, AI, personalization, or T-030 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

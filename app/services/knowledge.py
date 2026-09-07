@@ -595,6 +595,12 @@ class KnowledgeService:
             for note_draft in self.repository.get_approved_note_drafts()
         ]
 
+    def get_released_note_drafts(self) -> list[NoteDraftResponse]:
+        return [
+            self._note_draft_response(note_draft)
+            for note_draft in self.repository.get_released_note_drafts()
+        ]
+
     def record_note_draft_approval(
         self,
         note_draft_id: int,
