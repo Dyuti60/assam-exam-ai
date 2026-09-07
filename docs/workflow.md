@@ -1108,3 +1108,11 @@ flowchart LR
 - `uv run pytest tests/test_note_drafts.py -q`: 41 passed, 1 warning in 3.56s.
 - `uv run pytest -q`: 183 passed, 1 warning in 10.37s.
 - Fresh upgrade, downgrade to `c7a4e9d2f816`, re-upgrade to `d9e5b2a7c418`, seeded owned/legacy-row preservation, PostgreSQL constraint probes, and Alembic metadata checks passed.
+### T-028 post-push review
+
+- **APPROVED** at implementation commit `4974d87f90c08a5e39b3fe31a5cd1f7e1f9a4470`, whose parent is the T-028 issuance head `ac5f19c54c637dba27c5e396641c9d6cc34896dd`.
+- The immutable commit adds only the controlled NoteDraft UNRELEASED/RELEASED/WITHDRAWN lifecycle, migration `d9e5b2a7c418`, response metadata, row-locked approval/release decisions, and one release-decision endpoint.
+- Release requires the target draft's own APPROVED review and stored ContentVersion ownership. Withdrawal preserves the original release time; legacy null-owned drafts remain readable and reviewable but cannot be released.
+- PostgreSQL independently constrains lifecycle status, metadata, approval, and ownership. The approved-drafts collection remains approval-only, and no released-draft collection or publication boundary was added.
+- Developer-recorded evidence is 41 focused NoteDraft tests and 183 full-suite tests, each with one existing warning, plus successful Ruff, fresh migration, seeded downgrade/re-upgrade, PostgreSQL constraint, Alembic, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No dependency, configuration, Docker, public/learner delivery, publication transport, PDF, AI, personalization, or T-029 implementation was included.
