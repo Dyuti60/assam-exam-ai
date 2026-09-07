@@ -2905,3 +2905,341 @@ Do not implement T-030.
 Leave T-029 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-07 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/note-drafts/released` through the existing route, service, repository, and `NoteDraftResponse` flow. It filters exactly on current RELEASED state, returns stored snapshots in ascending ID order with Topic and ordered Claim provenance eagerly loaded, and returns `[]` when none qualify. The approved-drafts boundary remains approval-only. No model, schema, migration, lock, write, regeneration, publication, learner delivery, PDF, content package, mock assembly, AI, personalization, or T-030 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## T-029 independent review outcome
+
+T-029 is **APPROVED** at implementation commit `ee755cfc3a88700abababf2473bd8d615c16c871`, whose parent is the T-029 task-issuance commit `a351673bc242261640faa1468a33e395fe740e4b`.
+
+The immutable commit adds only `GET /api/v1/note-drafts/released` through the existing route, service, repository, response schema, focused tests, and documentation. It filters exactly on current RELEASED state, orders by ascending NoteDraft ID, eagerly loads Topic and ordered Claim links, preserves stored ContentVersion and review/release metadata, performs no writes or regeneration, and leaves the approved-draft boundary approval-only.
+
+Developer-recorded validation reported 2 focused released-draft tests, 41 focused NoteDraft tests, and 185 full-suite tests, each with one existing warning, plus successful Ruff, Alembic-head/check, and diff checks. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
+
+No blocking finding was identified. No model, schema, migration, dependency, configuration, Docker, publication transport, public/learner delivery, PDF, content package, mock assembly, AI, personalization, or T-030 implementation was included.
+
+---
+
+# T-030 — Add ContentVersion released-assets manifest
+
+## Role
+
+You are the implementation engineer for `Dyuti60/assam-exam-ai`.
+
+Implement only T-030. Follow `AGENTS.md`, the approved architecture, and the established route → schema → service → repository → PostgreSQL layering.
+
+Start from the synchronized current `origin/main` containing the approved T-029 implementation commit `ee755cfc3a88700abababf2473bd8d615c16c871` and this T-030 issuance. Before editing, fetch, fast-forward, record `git rev-parse HEAD`, and confirm the working tree is clean. If the tree is not clean or the required history is absent, stop without changing files.
+
+Do not rely on prior conversation summaries. Read the live repository and the complete task below.
+
+## Current context
+
+The approved system now has:
+
+- immutable ContentVersion identity for one exact SyllabusVersion/Topic mapping;
+- version-owned stored NoteDraft snapshots;
+- version-owned stored QuestionBankItem snapshots;
+- independent approval and controlled UNRELEASED/RELEASED/WITHDRAWN lifecycles for both asset types;
+- read-only global collections for currently RELEASED NoteDrafts and QuestionBankItems;
+- stored ordered Claim provenance for both asset types and stored ordered options/correct answer for QuestionBankItems.
+
+The system still has no exact-ContentVersion view that assembles both kinds of currently released canonical assets. It also has no persisted package, edition, publication, PDF, transport, public delivery, learner delivery, AI generation, or personalization.
+
+## Exact bounded goal
+
+Add exactly one read-only internal endpoint:
+
+`GET /api/v1/content-versions/{content_version_id}/released-assets`
+
+It must return one manifest for the requested existing ContentVersion containing:
+
+- the exact stored ContentVersion identity;
+- all and only currently RELEASED NoteDraft snapshots owned by that ContentVersion;
+- all and only currently RELEASED QuestionBankItem snapshots owned by that ContentVersion.
+
+This is a computed read response only. Do not persist a manifest or introduce any package/publication entity.
+
+## API contract
+
+Add a response schema named `ContentVersionReleasedAssetsResponse` with exactly:
+
+```json
+{
+  "content_version": {
+    "id": 1,
+    "syllabus_version_id": 1,
+    "topic_id": 1,
+    "version": 1,
+    "created_at": "stored timestamp"
+  },
+  "note_drafts": [],
+  "question_bank_items": []
+}
+```
+
+Schema types:
+
+- `content_version: ContentVersionResponse`
+- `note_drafts: list[NoteDraftResponse]`
+- `question_bank_items: list[QuestionBankItemResponse]`
+
+Return HTTP 200 for an existing ContentVersion, including when one or both asset lists are empty.
+
+If the ContentVersion does not exist, return the established resource error exactly:
+
+- HTTP 404
+- `{"detail": "ContentVersion <id> not found"}`
+
+Path validation and all unrelated error behavior must remain consistent with the current API.
+
+## Eligibility and ownership invariants
+
+A NoteDraft is eligible only when both are true:
+
+- `NoteDraft.content_version_id == content_version_id`
+- `NoteDraft.release_status == "RELEASED"`
+
+A QuestionBankItem is eligible only when both are true:
+
+- `QuestionBankItem.content_version_id == content_version_id`
+- `QuestionBankItem.release_status == "RELEASED"`
+
+Therefore:
+
+- UNRELEASED assets are excluded even when APPROVED;
+- WITHDRAWN assets are excluded even when APPROVED;
+- RELEASED assets belonging to another ContentVersion are excluded;
+- no asset may be inferred from shared Topic, SyllabusVersion, Claims, approval, or any other state;
+- current Claim, Verification, Evidence, Source, NoteDraft, QuestionBankItem, PreviousQuestion, or Topic-priority state must not substitute for exact stored ownership and RELEASED state.
+
+Return each asset list in ascending asset-ID order. Preserve each NoteDraft's persisted Claim-link position order and each QuestionBankItem's persisted Claim-link and option position order.
+
+## Stored-snapshot behavior
+
+Return existing stored response snapshots without modification.
+
+For NoteDrafts preserve:
+
+- ID, Topic identity/name, ContentVersion ID, Markdown, creation timestamp;
+- ordered Claim IDs;
+- approval metadata;
+- release metadata.
+
+For QuestionBankItems preserve:
+
+- ID, ContentVersion ID, question text, explanation, difficulty, creation timestamp;
+- ordered Claim IDs;
+- ordered options and correct-option position;
+- approval metadata;
+- release metadata.
+
+Do not regenerate Markdown or questions, rebuild provenance, reorder stored nested data, infer ownership, or re-evaluate current Claim approval or verification state.
+
+## Repository and query requirements
+
+Keep ContentVersion existence lookup and release/ownership filtering in the repository.
+
+Use fixed-query eager loading appropriate to the existing relationships:
+
+- NoteDraft Topic must be eagerly loaded;
+- NoteDraft Claim links must be eagerly loaded;
+- QuestionBankItem Claim links and options must be eagerly loaded.
+
+Avoid per-asset relationship queries and obvious N+1 behavior. Filtering must occur in PostgreSQL, not by loading the global released collections and filtering them in Python.
+
+Reuse the existing stored serializers for `ContentVersionResponse`, `NoteDraftResponse`, and `QuestionBankItemResponse`. Do not duplicate response construction unnecessarily.
+
+## Transaction, atomicity, and read-only requirements
+
+This endpoint is read-only.
+
+It must not:
+
+- acquire `FOR UPDATE` or any row lock;
+- add, update, or delete ORM objects;
+- flush or commit;
+- invoke approval, release, or withdrawal transitions;
+- create a NoteDraft, QuestionBankItem, ContentVersion, package, or audit row;
+- regenerate or personalize content.
+
+A normal request must leave all relevant row counts and stored snapshots unchanged. No new write transaction or rollback-specific domain behavior is needed.
+
+## Data model and migration requirements
+
+No model or database schema change is expected or authorized.
+
+Do not:
+
+- add a model, table, column, index, constraint, relationship, enum, trigger, or extension;
+- edit historical migrations;
+- create a new Alembic revision.
+
+Alembic head must remain exactly `d9e5b2a7c418`, and `uv run alembic check` must report no new upgrade operations.
+
+A new response schema is expected because the manifest has a new composite response shape; request schemas and persisted schemas remain unchanged.
+
+## Route ordering and compatibility
+
+Register the endpoint in the ContentVersion route area so it remains compatible with the existing `GET /api/v1/content-versions/{content_version_id}` route.
+
+Do not change the behavior or contract of:
+
+- ContentVersion creation or individual retrieval;
+- global approved/released NoteDraft collections;
+- global approved/released QuestionBankItem collections;
+- any approval, release, withdrawal, preview, creation, or retrieval transition.
+
+The new endpoint is an internal assembly/read boundary, not publication and not learner delivery.
+
+## Affected components
+
+Inspect and update only where required:
+
+- `app/schemas/knowledge.py`;
+- `app/api/v1/routes/knowledge.py`;
+- `app/repositories/knowledge.py`;
+- `app/services/knowledge.py`;
+- focused API/PostgreSQL tests for the manifest;
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append-only `docs/task_log.md`;
+- append-only `docs/next_task.md`.
+
+Inspect but leave unchanged unless a genuine T-030 requirement proves otherwise:
+
+- all model files and model registration;
+- every Alembic migration;
+- ContentVersion, NoteDraft, and QuestionBankItem persistence definitions;
+- existing transition behavior;
+- PreviousPaper, PreviousQuestion, Topic-priority, Claim, Evidence, Verification, and Source components;
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+Report the inspection outcome for all unchanged model, migration, dependency, configuration, infrastructure, and governance files.
+
+## Required tests
+
+Add focused PostgreSQL-backed API tests proving:
+
+- a missing ContentVersion returns the exact established 404;
+- an existing ContentVersion with no assets returns HTTP 200 with the exact ContentVersion response and two empty lists;
+- an existing ContentVersion with only ineligible assets returns empty lists;
+- APPROVED UNRELEASED NoteDrafts and QuestionBankItems are excluded;
+- APPROVED WITHDRAWN NoteDrafts and QuestionBankItems are excluded;
+- RELEASED assets belonging to another ContentVersion are excluded, including another version for the same Topic/Syllabus mapping where possible;
+- multiple eligible NoteDrafts are returned in ascending NoteDraft-ID order;
+- multiple eligible QuestionBankItems are returned in ascending QuestionBankItem-ID order;
+- NoteDraft Topic identity/name, ContentVersion ownership, Markdown, creation time, ordered Claim IDs, approval metadata, and release metadata are preserved;
+- QuestionBankItem ContentVersion ownership, question/explanation/difficulty, creation time, ordered Claim IDs, ordered options, correct answer, approval metadata, and release metadata are preserved;
+- later Claim approval changes do not alter eligibility or stored snapshots;
+- Verification, Evidence, Source, other released assets, PreviousQuestion, and Topic-priority state cannot substitute for exact ContentVersion ownership plus RELEASED state;
+- the endpoint performs no database mutation and leaves relevant stored snapshots and row counts unchanged;
+- existing individual ContentVersion retrieval remains compatible;
+- existing global released and approved NoteDraft/QuestionBankItem boundaries retain their current independent semantics;
+- all existing T-017 through T-029 regression tests continue to pass.
+
+Use the cleanest focused test file consistent with repository conventions. Do not weaken, delete, or silently skip existing tests.
+
+## Error behavior
+
+Only the established missing-ContentVersion 404 is newly relevant.
+
+Do not introduce a 404 for an existing ContentVersion with no eligible assets. Do not create new 409 behavior. Do not catch generic database exceptions and relabel them as domain conflicts.
+
+## Documentation requirements
+
+Update `docs/architecture.md` and `docs/workflow.md` only for behavior actually implemented.
+
+Append—never rewrite, reorder, consolidate, or delete history:
+
+- a T-030 implementation record in `docs/task_log.md` with status `Ready for review`;
+- an implementation note beneath this T-030 prompt in `docs/next_task.md`.
+
+Do not mark T-030 approved. Do not define or implement T-031.
+
+## Dependency, configuration, and Docker review
+
+Explicitly inspect `pyproject.toml`, `uv.lock`, `.env.example`, `app/core/config.py`, and `docker-compose.yml`.
+
+No new dependency, secret, environment variable, configuration setting, Docker service, storage backend, or infrastructure change is expected. If any appears necessary, stop and report why instead of expanding scope.
+
+## Required validation
+
+Use a dedicated PostgreSQL test database whose name ends with `_test`.
+
+Run and report exact output summaries for:
+
+- focused T-030 manifest tests;
+- existing ContentVersion tests;
+- existing released NoteDraft tests;
+- existing released QuestionBankItem tests;
+- the full test suite;
+- Ruff on every changed Python file;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- `git diff --check`;
+- `git status --short`.
+
+Confirm:
+
+- Alembic head remains `d9e5b2a7c418`;
+- no migration or schema drift exists;
+- no dependency, configuration, environment, Docker, model, or persistence change occurred.
+
+No migration upgrade/downgrade cycle is required because T-030 must not change persistence, but the dedicated database must be upgraded to the current head before tests.
+
+## Exclusions and retained boundaries
+
+Do not add:
+
+- a persisted manifest, content package, bundle, edition, publication, or release aggregate;
+- publication status or publication transport;
+- PDF, HTML export, download, object storage, CDN, email, or delivery behavior;
+- public or learner-facing endpoints;
+- users, authentication, authorization, reviewer/releaser identity, or decision history;
+- learner copies, practice sessions, attempts, scoring, analytics, recommendations, or personalization;
+- AI/LLM providers, prompts, generation, ingestion, RAG, embeddings, vector columns, or scraping;
+- automatic ContentVersion selection, latest-version inference, or next-version calculation;
+- content edits, deletion, supersession, retrofit, backfill, or copying between versions;
+- new release or approval transitions;
+- QuestionBankItem or NoteDraft model changes;
+- PreviousQuestion conversion, prediction, probability, likelihood, or guarantee semantics;
+- dependencies, secrets, configuration, Docker services, payments, or unrelated infrastructure.
+
+A PreviousQuestion remains a sourced historical occurrence and must never be converted into generated content or represented as a prediction.
+
+Preserve trust, source provenance, explicit human review, controlled release, immutable stored snapshots, exact ContentVersion ownership, and Generate Once/Personalize Later.
+
+## Final report
+
+Report:
+
+1. exact starting HEAD;
+2. files changed;
+3. endpoint and response contract;
+4. exact ContentVersion ownership and RELEASED eligibility behavior;
+5. ordering and eager-loading behavior;
+6. stored NoteDraft and QuestionBankItem snapshot preservation;
+7. empty-result and 404 behavior;
+8. no-mutation and transaction behavior;
+9. compatibility with all existing approved/released boundaries and transitions;
+10. focused and full-suite test results;
+11. Ruff, Alembic-head, Alembic-check, and diff-check results;
+12. model, migration, dependency, configuration, Docker, AGENTS, and README inspection outcomes;
+13. retained architecture boundaries;
+14. final `git status --short`;
+15. explicit confirmation that no commit, push, PR, self-approval, T-031, package persistence, publication transport, public/learner delivery, PDF, AI generation, or personalization work occurred.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-031.
+
+Leave T-030 uncommitted and unpushed in the working tree for independent review.
