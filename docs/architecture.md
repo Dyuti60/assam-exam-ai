@@ -272,4 +272,6 @@ T-028 is approved at commit `4974d87f90c08a5e39b3fe31a5cd1f7e1f9a4470`. NoteDraf
 
 T-029 is approved at commit `ee755cfc3a88700abababf2473bd8d615c16c871`. The read-only internal boundary returns only currently RELEASED NoteDraft snapshots in stable ID order with stored ContentVersion and ordered Claim provenance, while keeping approval eligibility separate and performing no writes or regeneration.
 
-T-030 is issued to add only a read-only released-assets manifest for one exact ContentVersion. It must assemble currently RELEASED NoteDraft and QuestionBankItem snapshots owned by that ContentVersion, preserve each asset's stored provenance and ordering, and add no package persistence, publication transport, PDF generation, or learner access.
+T-030 is approved at implementation commit `3a81ce6cefdcc3bd0abd7a17ecc1472d5bb1d4d4`; empty corrective commit `265f683b5180cde585d366fce17ffe53c11c1955` clarifies that the implementation is T-030, not T-031. The computed manifest returns one exact ContentVersion with only its currently RELEASED NoteDraft and QuestionBankItem snapshots in stable order, without persistence, writes, regeneration, or learner delivery.
+
+T-031 is issued to persist only an immutable internal ContentPackage membership snapshot for one exact ContentVersion. Creation must atomically capture the currently RELEASED NoteDraft and QuestionBankItem IDs in stable order with database-enforced same-ContentVersion provenance; it adds no package publication, PDF generation, download, or learner access.
