@@ -1176,3 +1176,14 @@ flowchart LR
 - `uv run pytest tests/test_released_question_bank_items_api.py -q`: 2 passed, 1 warning in 1.21s.
 - `uv run pytest -q`: 188 passed, 1 warning in 11.12s. Changed-file Ruff passed. Fresh upgrade reached `d9e5b2a7c418`; Alembic reported one head and no new upgrade operations.
 - No model, migration, dependency, configuration, environment, Docker, package persistence, publication transport, public/learner delivery, PDF, AI, personalization, or T-031 work was added.
+
+
+### T-030 post-push review
+
+- **APPROVED** at implementation commit `3a81ce6cefdcc3bd0abd7a17ecc1472d5bb1d4d4`, whose parent is the T-030 issuance head `f25c633b86648bf9958cdf317b72336a38dd5ca6`.
+- The implementation commit was originally titled `T-031 implemented`; empty follow-up commit `265f683b5180cde585d366fce17ffe53c11c1955` corrects task traceability without changing the tree or rewriting history.
+- The immutable implementation adds only the exact-ContentVersion released-assets manifest through the route, composite response schema, service, repository queries, focused tests, and accurate documentation.
+- PostgreSQL filters each asset type by exact stored ContentVersion ownership and RELEASED state. Results use independent ascending-ID order and eager loading for NoteDraft Topic/Claims and QuestionBankItem Claims/options.
+- Stored ContentVersion, NoteDraft, and QuestionBankItem serializers are reused. Missing versions retain the established 404; existing versions may return two empty lists; requests perform no locks, writes, transitions, inference, regeneration, or current-state re-evaluation.
+- Developer-recorded evidence is 3 focused manifest tests, 12 ContentVersion tests, 2 released-NoteDraft tests, 2 released-QuestionBankItem tests, and 188 full-suite tests, each with one existing warning, plus successful Ruff, fresh database upgrade, Alembic-head/check, and diff checks. GitHub exposes no status contexts or workflow runs for either pushed commit, so no CI pass is claimed.
+- No model, migration, dependency, configuration, Docker, persisted package, publication transport, public/learner delivery, PDF, AI, personalization, or actual T-031 implementation was included.
