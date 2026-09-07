@@ -765,3 +765,29 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Ruff | Changed-file Ruff passed (`All checks passed!`). |
 | Migration checks | Fresh upgrade through `d9e5b2a7c418`, downgrade to `c7a4e9d2f816`, and re-upgrade passed. Seeded version-owned and legacy-null drafts retained Topic, ownership, Markdown, approval metadata, creation time, and ordered Claim links; both became UNRELEASED with null release metadata without inference. Direct PostgreSQL probes rejected invalid status, non-approved release, and ownerless release. |
 | Notes | Release requires the draft's own APPROVED state and non-null stored ContentVersion. Withdrawal is one-way and preserves the original release time. PostgreSQL enforces lifecycle metadata, approval, and ownership. Release and approval decisions lock the draft row. The existing approved-drafts endpoint remains approval-only. No released-draft list, delivery, publication transport, PDF, AI, personalization, dependency, configuration, Docker, AGENTS, README, or T-029 behavior was added. |
+---
+
+## T-028 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-028` |
+| Implementation commit | `4974d87f90c08a5e39b3fe31a5cd1f7e1f9a4470` |
+| Base/task-issuance commit | `ac5f19c54c637dba27c5e396641c9d6cc34896dd` |
+| Review state | **APPROVED** |
+| Approved capability | Controlled one-way UNRELEASED/RELEASED/WITHDRAWN lifecycle for stored, version-owned NoteDraft snapshots |
+| Validation evidence | Developer-recorded: 41 focused NoteDraft tests and 183 full-suite tests, each with one existing warning; changed-file Ruff; fresh upgrade; seeded downgrade/re-upgrade; PostgreSQL lifecycle probes; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The immutable commit is exactly one commit over the issued base. It preserves route/schema/service/repository/PostgreSQL layering, uses row locks for conflicting decisions, enforces approval and ContentVersion eligibility, retains release provenance, protects legacy null-owned drafts, and keeps approval separate from release. |
+| Boundaries | No released-draft collection, publication transport, public/learner delivery, PDF, AI, personalization, dependency, configuration, Docker, or T-029 implementation was included. |
+
+---
+
+## T-029 issued — Add released NoteDraft read boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one read-only internal endpoint returning only currently RELEASED stored NoteDraft snapshots in stable ID order |
+| Architectural phase | Canonical Content / Released Note Read Boundary |
+| Scope | Exact release-state filtering and stored-snapshot retrieval only; no publication transport, public/learner delivery, PDF, AI generation, or personalization |
+| Full implementation prompt | Appended to `docs/next_task.md` |
