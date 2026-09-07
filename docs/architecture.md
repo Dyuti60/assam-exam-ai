@@ -268,4 +268,6 @@ T-027 is approved at commit `bcff4c54a04f6ec3cdcb094f71d64241e87a3622`. Every ne
 
 T-028 is approved at commit `4974d87f90c08a5e39b3fe31a5cd1f7e1f9a4470`. NoteDrafts now have a constrained UNRELEASED/RELEASED/WITHDRAWN lifecycle requiring their own APPROVED review and non-null ContentVersion ownership before release. Release and approval decisions lock the stored draft, withdrawal retains release provenance, and legacy null-owned drafts remain reviewable but unreleasable.
 
-T-029 is issued to add only a read-only internal boundary for currently RELEASED NoteDraft snapshots. It must preserve stored ContentVersion and ordered Claim provenance, keep the approved-draft boundary distinct, perform no writes or regeneration, and add no publication transport or learner access.
+T-029 is approved at commit `ee755cfc3a88700abababf2473bd8d615c16c871`. The read-only internal boundary returns only currently RELEASED NoteDraft snapshots in stable ID order with stored ContentVersion and ordered Claim provenance, while keeping approval eligibility separate and performing no writes or regeneration.
+
+T-030 is issued to add only a read-only released-assets manifest for one exact ContentVersion. It must assemble currently RELEASED NoteDraft and QuestionBankItem snapshots owned by that ContentVersion, preserve each asset's stored provenance and ordering, and add no package persistence, publication transport, PDF generation, or learner access.
