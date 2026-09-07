@@ -848,3 +848,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Ruff | Changed-file Ruff passed (`All checks passed!`). |
 | Alembic | Fresh dedicated test database upgrade passed through `d9e5b2a7c418`; `uv run alembic heads` reported that single head and `uv run alembic check` reported no new upgrade operations. |
 | Notes | Repository queries filter exact stored ContentVersion ownership plus RELEASED state, order each asset type by ID, and eagerly load stored nested provenance. The service reuses existing serializers. Missing versions retain the established 404; existing versions may return empty lists. The endpoint performs no locks, writes, transitions, regeneration, inference, or current-state re-evaluation. No package persistence, publication transport, public/learner delivery, PDF, AI, personalization, dependency, configuration, Docker, AGENTS, README, or T-031 work was added. |
+
+
+---
+
+## T-030 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-030` |
+| Implementation commit | `3a81ce6cefdcc3bd0abd7a17ecc1472d5bb1d4d4` |
+| Base/task-issuance commit | `f25c633b86648bf9958cdf317b72336a38dd5ca6` |
+| Traceability correction | Empty commit `265f683b5180cde585d366fce17ffe53c11c1955` clarifies that `3a81ce6` implements T-030, not T-031; no tree change or history rewrite occurred. |
+| Review state | **APPROVED** |
+| Approved capability | Read-only exact-ContentVersion manifest of currently RELEASED stored NoteDraft and QuestionBankItem snapshots |
+| Validation evidence | Developer-recorded: 3 focused manifest tests, 12 ContentVersion tests, 2 released-NoteDraft tests, 2 released-QuestionBankItem tests, and 188 full-suite tests, each with one existing warning; changed-file Ruff; fresh database upgrade; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The immutable implementation is exactly one commit over the issued base and changes only the expected route, schema, repository, service, focused tests, and documentation. It applies exact ownership plus RELEASED filtering in PostgreSQL, preserves ordering and stored snapshots, eagerly loads required relationships, and performs no writes. |
+| Boundaries | No model, migration, dependency, configuration, Docker, package persistence, publication transport, public/learner delivery, PDF, AI, personalization, or actual T-031 implementation was included. |
+
+---
+
+## T-031 issued — Persist immutable ContentPackage membership snapshot
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add atomic creation of one immutable internal ContentPackage that captures the currently RELEASED NoteDraft and QuestionBankItem memberships for one exact ContentVersion |
+| Architectural phase | Canonical Content / Immutable Package Snapshot |
+| Scope | Package identity and ordered same-ContentVersion membership only; no package publication/release lifecycle, retrieval collection, PDF, export, download, public/learner delivery, AI generation, or personalization |
+| Full implementation prompt | Appended to `docs/next_task.md` |
