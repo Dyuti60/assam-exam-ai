@@ -89,6 +89,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `GET /api/v1/note-drafts/approved` | `get_approved_note_drafts()` | `app/api/v1/routes/knowledge.py` | Returns only approved stored NoteDraft snapshots in ascending ID order |
 | `GET /api/v1/note-drafts/{note_draft_id}` | `get_note_draft()` | `app/api/v1/routes/knowledge.py` | Returns one stored internal draft snapshot with position-ordered Claim IDs |
 | `POST /api/v1/note-drafts/{note_draft_id}/approval` | `record_note_draft_approval()` | `app/api/v1/routes/knowledge.py` | Records or resets a NoteDraft human-review decision without publishing it |
+| `POST /api/v1/note-drafts/{note_draft_id}/release` | `record_note_draft_release()` | `app/api/v1/routes/knowledge.py` | Applies the one-way controlled NoteDraft release or withdrawal decision with stable 404/409 mapping |
 | `POST /api/v1/evidence` | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Validates and creates Evidence for an existing Source |
 | `GET /api/v1/evidence/{evidence_id}` | `get_evidence()` | `app/api/v1/routes/knowledge.py` | Returns one Evidence record or a clear 404 |
 | `POST /api/v1/claims` | `create_claim()` | `app/api/v1/routes/knowledge.py` | Validates and creates a Claim |
@@ -129,6 +130,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `get_approved_note_drafts()` | `app/api/v1/routes/knowledge.py` | Delegates the static approved-draft read boundary before the dynamic draft-ID route |
 | `get_note_draft()` | `app/api/v1/routes/knowledge.py` | Delegates stored snapshot retrieval and maps a missing NoteDraft to 404 |
 | `record_note_draft_approval()` | `app/api/v1/routes/knowledge.py` | Delegates the draft decision and maps a missing NoteDraft to 404 |
+| `record_note_draft_release()` | `app/api/v1/routes/knowledge.py` | Delegates release/withdrawal and maps missing/conflict outcomes to 404/409 |
 | `create_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence creation and maps a missing Source to 404 |
 | `get_evidence()` | `app/api/v1/routes/knowledge.py` | Delegates Evidence retrieval and maps missing Evidence to 404 |
 | `create_claim()` | `app/api/v1/routes/knowledge.py` | Delegates Claim creation to `KnowledgeService` |
@@ -160,7 +162,7 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `Verification` | `app/models/verification.py` | Stores one verdict, confidence, reasoning, and timestamp for a claim |
 | `VerificationEvidence` | `app/models/verification_evidence.py` | Records evidence used by a verification, its role, and its non-negative ordered position; referenced evidence is deletion-restricted |
 | `claim_evidence` | `app/models/claim_evidence.py` | Associates claims and evidence with a composite primary key |
-| `NoteDraft` | `app/models/note_draft.py` | Stores one Topic's deterministic internal Markdown, nullable legacy-safe ContentVersion ownership, creation time, and separate review state |
+| `NoteDraft` | `app/models/note_draft.py` | Stores deterministic Markdown, nullable legacy-safe ContentVersion ownership, separate review state, and constrained release/withdrawal state |
 | `NoteDraftClaim` | `app/models/note_draft_claim.py` | Records the exact Claims used by a draft in constrained position order |
 
 ## T-003 schemas
@@ -181,6 +183,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `QuestionBankItemApprovalCreate` | `app/schemas/knowledge.py` | Restricts candidate decisions to DRAFT, APPROVED, or REJECTED with an optional note |
 | `QuestionBankItemReleaseStatus` | `app/schemas/knowledge.py` | Represents persisted UNRELEASED, RELEASED, or WITHDRAWN lifecycle state |
 | `QuestionBankItemReleaseDecision` / `QuestionBankItemReleaseCreate` | `app/schemas/knowledge.py` | Accept only RELEASED or WITHDRAWN decisions with an optional release note |
+| `NoteDraftReleaseStatus` | `app/schemas/knowledge.py` | Represents persisted UNRELEASED, RELEASED, or WITHDRAWN draft state |
+| `NoteDraftReleaseDecision` / `NoteDraftReleaseCreate` | `app/schemas/knowledge.py` | Accept only RELEASED or WITHDRAWN draft decisions with an optional release note |
 | `TopicPriorityBand` / `TopicPriorityReason` / `TopicPriorityResponse` | `app/schemas/knowledge.py` | Define the fixed bands, deterministic reason codes, and assessment response |
 | `PreviousPaperCreate` / `PreviousPaperResponse` | `app/schemas/knowledge.py` | Validate and serialize sourced previous-paper identity |
 | `PreviousQuestionCreate` / `PreviousQuestionResponse` | `app/schemas/knowledge.py` | Validate and serialize one Topic-linked historical question occurrence |
@@ -306,6 +310,8 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `downgrade()` | `migrations/versions/b3e7f1a9c462_add_question_bank_item_release.py` | Removes only release constraints and fields, retaining candidate records |
 | `upgrade()` | `migrations/versions/c7a4e9d2f816_bind_note_drafts_to_content_versions.py` | Adds nullable legacy-safe ownership plus a restricted same-Topic composite foreign key |
 | `downgrade()` | `migrations/versions/c7a4e9d2f816_bind_note_drafts_to_content_versions.py` | Removes only the composite foreign key, ownership column, and supporting ContentVersion uniqueness |
+| `upgrade()` | `migrations/versions/d9e5b2a7c418_add_note_draft_release.py` | Adds constrained draft release state with a temporary migration default and no inferred release |
+| `downgrade()` | `migrations/versions/d9e5b2a7c418_add_note_draft_release.py` | Removes only draft release constraints and fields while retaining T-027 ownership and earlier data |
 
 ## Tests
 
@@ -414,6 +420,16 @@ The register reports current responsibility based on the inspected tree. T-002 w
 | `test_database_rejects_released_item_without_approved_review()` | `tests/test_question_bank_items_api.py` | Confirms PostgreSQL requires released candidates to remain approved | Passed for T-025 |
 | `test_get_released_items_returns_empty_for_empty_and_ineligible_sets()` | `tests/test_released_question_bank_items_api.py` | Confirms empty and no-current-release data sets return HTTP 200 with `[]` | Passed for T-026 |
 | `test_get_released_items_filters_orders_and_preserves_stored_snapshots()` | `tests/test_released_question_bank_items_api.py` | Confirms exact release filtering, stable nested ordering, approval-boundary separation, Claim-state independence, and no mutation | Passed for T-026 |
+| `test_approved_version_owned_note_draft_can_be_released_without_re_evaluation()` | `tests/test_note_drafts.py` | Confirms approved owned-draft release, UTC metadata, stored snapshot preservation, and Claim-state independence | Passed for T-028 |
+| `test_unapproved_note_draft_cannot_be_released_without_mutation()` | `tests/test_note_drafts.py` | Confirms DRAFT and REJECTED drafts return the stable eligibility conflict without mutation | Passed twice for T-028 |
+| `test_approved_legacy_note_draft_cannot_be_released_without_mutation()` | `tests/test_note_drafts.py` | Confirms approved legacy null-owned drafts remain compatible but cannot be released | Passed for T-028 |
+| `test_note_draft_release_transition_rules_and_withdrawal_snapshot()` | `tests/test_note_drafts.py` | Confirms one-way transitions, stable conflicts, retained release time, and withdrawal metadata | Passed for T-028 |
+| `test_released_note_draft_blocks_review_change_until_withdrawn()` | `tests/test_note_drafts.py` | Confirms row-locked review changes are blocked while released and resume after withdrawal | Passed for T-028 |
+| `test_note_draft_release_missing_and_invalid_requests()` | `tests/test_note_drafts.py` | Confirms established missing-draft 404 and schema-driven invalid/UNRELEASED 422 responses | Passed for T-028 |
+| `test_approved_note_draft_collection_remains_approval_only_with_release_metadata()` | `tests/test_note_drafts.py` | Confirms the approved collection retains independent eligibility and returns stored release metadata | Passed for T-028 |
+| `test_other_state_cannot_substitute_for_target_note_draft_approval()` | `tests/test_note_drafts.py` | Confirms Claim, Verification, QuestionBankItem, and another draft cannot substitute for the target draft's own approval | Passed for T-028 |
+| `test_database_rejects_invalid_note_draft_release_states()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects invalid status, timestamp, note, and approval combinations | Passed eight times for T-028 |
+| `test_database_rejects_released_state_without_content_version()` | `tests/test_note_drafts.py` | Confirms PostgreSQL rejects RELEASED and WITHDRAWN state without version ownership | Passed twice for T-028 |
 | `test_get_evidence_returns_created_evidence()` | `tests/test_knowledge_api.py` | Confirms Evidence retrieval returns the existing response fields including location reference | Passed for T-007 |
 | `test_get_evidence_returns_404_for_missing_evidence()` | `tests/test_knowledge_api.py` | Confirms retrieving missing Evidence returns the clear 404 format | Passed for T-007 |
 | `test_claim_defaults_to_draft_approval()` | `tests/test_knowledge_api.py` | Confirms a new Claim defaults to `DRAFT` without a decision timestamp or note | Passed for T-008 |
@@ -1072,3 +1088,23 @@ flowchart LR
 - Individual retrieval, approval responses, and the approved-drafts collection preserve stored ownership; explicit tests cover non-null new ownership and null legacy compatibility.
 - Developer-recorded evidence is 22 focused NoteDraft tests, 12 focused ContentVersion tests, and 164 full-suite tests, each with one existing warning, plus successful Ruff, migration-cycle, Alembic, and diff checks. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
 - No NoteDraft release, released collection, publication transport, public/learner delivery, PDF, AI, personalization, dependency, configuration, Docker, or T-028 implementation was included.
+
+
+### T-028 Controlled NoteDraft release lifecycle
+
+```mermaid
+flowchart LR
+    UNRELEASED -->|"own APPROVED + ContentVersion"| RELEASED
+    RELEASED -->|"explicit withdrawal"| WITHDRAWN
+    RELEASED --> LOCK["Block DRAFT/REJECTED review changes"]
+    WITHDRAWN --> REVIEW["Review changes allowed; no re-release"]
+```
+
+- New and migrated drafts default to UNRELEASED with null release metadata; neither approval nor version ownership infers release.
+- Release and approval decisions use `SELECT ... FOR UPDATE OF note_drafts`; conflicts occur before field mutation, and successful decisions commit once through the rollback-safe service boundary.
+- Release requires the draft's own APPROVED review and non-null stored ContentVersion, without re-evaluating Claims or other review/release concepts.
+- Withdrawal retains the initial release time, records the UTC withdrawal time, replaces the optional decision note, and prevents in-place re-release.
+- The approved-drafts collection remains approval-only and returns stored release metadata for approved UNRELEASED, RELEASED, and WITHDRAWN snapshots.
+- `uv run pytest tests/test_note_drafts.py -q`: 41 passed, 1 warning in 3.56s.
+- `uv run pytest -q`: 183 passed, 1 warning in 10.37s.
+- Fresh upgrade, downgrade to `c7a4e9d2f816`, re-upgrade to `d9e5b2a7c418`, seeded owned/legacy-row preservation, PostgreSQL constraint probes, and Alembic metadata checks passed.

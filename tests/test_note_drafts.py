@@ -153,6 +153,10 @@ def test_create_note_draft_persists_exact_ordered_provenance(
         "approval_status": "DRAFT",
         "approval_decided_at": None,
         "reviewer_note": None,
+        "release_status": "UNRELEASED",
+        "released_at": None,
+        "withdrawn_at": None,
+        "release_note": None,
     }
     stored_draft = db_connection.execute(
         select(
@@ -332,6 +336,10 @@ def test_record_note_draft_approval_preserves_snapshot_and_claim_state(
     assert decided_draft["reviewer_note"] == (
         f"Human draft decision: {approval_status}"
     )
+    assert decided_draft["release_status"] == "UNRELEASED"
+    assert decided_draft["released_at"] is None
+    assert decided_draft["withdrawn_at"] is None
+    assert decided_draft["release_note"] is None
     assert decided_draft["markdown"] == draft_before["markdown"]
     assert decided_draft["claim_ids"] == draft_before["claim_ids"]
     claim_after = db_connection.execute(
@@ -679,3 +687,517 @@ def test_legacy_null_content_version_draft_remains_retrievable_and_reviewable(
     assert rejected.json()["content_version_id"] is None
     assert rejected.json()["approval_status"] == "REJECTED"
     assert rejected.json()["reviewer_note"] == "Legacy rejected"
+
+
+def test_approved_version_owned_note_draft_can_be_released_without_re_evaluation(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    topic_id = _create_topic(client, "Released Draft Topic")
+    content_version_id = _create_content_version(client, topic_id, "released")
+    claim_id = _create_claim(
+        client,
+        topic_id,
+        "Released draft snapshot fact.",
+        "APPROVED",
+    )
+    created = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
+    assert created.status_code == 201
+    approved = client.post(
+        f"/api/v1/note-drafts/{created.json()['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Reviewed"},
+    )
+    assert approved.status_code == 200
+    approved_snapshot = approved.json()
+
+    claim_rejection = client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    )
+    assert claim_rejection.status_code == 200
+    unrelated_draft = db_connection.scalar(
+        NoteDraft.__table__.insert()
+        .values(
+            topic_id=topic_id,
+            content_version_id=None,
+            markdown="# Unrelated",
+            approval_status="APPROVED",
+            approval_decided_at=datetime.now(UTC),
+        )
+        .returning(NoteDraft.id)
+    )
+    assert unrelated_draft is not None
+
+    released = client.post(
+        f"/api/v1/note-drafts/{created.json()['id']}/release",
+        json={"release_status": "RELEASED", "release_note": "Internal release"},
+    )
+
+    assert released.status_code == 200
+    released_body = released.json()
+    assert released_body["release_status"] == "RELEASED"
+    assert released_body["released_at"] is not None
+    assert datetime.fromisoformat(
+        released_body["released_at"]
+    ).utcoffset() == UTC.utcoffset(None)
+    assert released_body["withdrawn_at"] is None
+    assert released_body["release_note"] == "Internal release"
+    for field in (
+        "topic_id",
+        "content_version_id",
+        "topic_name",
+        "created_at",
+        "claim_ids",
+        "markdown",
+        "approval_status",
+        "approval_decided_at",
+        "reviewer_note",
+    ):
+        assert released_body[field] == approved_snapshot[field]
+
+
+@pytest.mark.parametrize("approval_status", ["DRAFT", "REJECTED"])
+def test_unapproved_note_draft_cannot_be_released_without_mutation(
+    client: TestClient,
+    approval_status: str,
+) -> None:
+    topic_id = _create_topic(client, f"Unapproved Release {approval_status}")
+    content_version_id = _create_content_version(
+        client,
+        topic_id,
+        f"unapproved-{approval_status.lower()}",
+    )
+    _create_claim(client, topic_id, "Approved source fact.", "APPROVED")
+    created = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
+    assert created.status_code == 201
+    if approval_status == "REJECTED":
+        decision = client.post(
+            f"/api/v1/note-drafts/{created.json()['id']}/approval",
+            json={"approval_status": "REJECTED", "reviewer_note": "Rejected"},
+        )
+        assert decision.status_code == 200
+    before = client.get(f"/api/v1/note-drafts/{created.json()['id']}").json()
+
+    response = client.post(
+        f"/api/v1/note-drafts/{created.json()['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"NoteDraft {created.json()['id']} must be approved before release"
+    }
+    after = client.get(f"/api/v1/note-drafts/{created.json()['id']}").json()
+    assert after == before
+
+
+def test_approved_legacy_note_draft_cannot_be_released_without_mutation(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    topic_id = _create_topic(client, "Legacy Release Topic")
+    legacy_id = db_connection.scalar(
+        NoteDraft.__table__.insert()
+        .values(
+            topic_id=topic_id,
+            content_version_id=None,
+            markdown="# Legacy Release Topic",
+            approval_status="APPROVED",
+            approval_decided_at=datetime.now(UTC),
+        )
+        .returning(NoteDraft.id)
+    )
+    assert legacy_id is not None
+    before = client.get(f"/api/v1/note-drafts/{legacy_id}").json()
+
+    response = client.post(
+        f"/api/v1/note-drafts/{legacy_id}/release",
+        json={"release_status": "RELEASED"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"NoteDraft {legacy_id} must have a ContentVersion before release"
+    }
+    assert client.get(f"/api/v1/note-drafts/{legacy_id}").json() == before
+
+
+def test_note_draft_release_transition_rules_and_withdrawal_snapshot(
+    client: TestClient,
+) -> None:
+    topic_id = _create_topic(client, "Withdrawal Topic")
+    content_version_id = _create_content_version(client, topic_id, "withdrawal")
+    _create_claim(client, topic_id, "Withdrawal snapshot fact.", "APPROVED")
+    created = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
+    draft_id = created.json()["id"]
+    approved = client.post(
+        f"/api/v1/note-drafts/{draft_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Approved"},
+    )
+    assert approved.status_code == 200
+
+    premature_withdrawal = client.post(
+        f"/api/v1/note-drafts/{draft_id}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert premature_withdrawal.status_code == 409
+    assert premature_withdrawal.json() == {
+        "detail": (
+            f"NoteDraft {draft_id} cannot transition from UNRELEASED to WITHDRAWN"
+        )
+    }
+    assert client.get(f"/api/v1/note-drafts/{draft_id}").json() == approved.json()
+
+    released = client.post(
+        f"/api/v1/note-drafts/{draft_id}/release",
+        json={"release_status": "RELEASED", "release_note": "Release note"},
+    )
+    assert released.status_code == 200
+    released_snapshot = released.json()
+
+    duplicate_release = client.post(
+        f"/api/v1/note-drafts/{draft_id}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert duplicate_release.status_code == 409
+    assert duplicate_release.json() == {
+        "detail": f"NoteDraft {draft_id} cannot transition from RELEASED to RELEASED"
+    }
+    assert client.get(f"/api/v1/note-drafts/{draft_id}").json() == released_snapshot
+
+    withdrawn = client.post(
+        f"/api/v1/note-drafts/{draft_id}/release",
+        json={"release_status": "WITHDRAWN", "release_note": "Withdrawn note"},
+    )
+    assert withdrawn.status_code == 200
+    withdrawn_snapshot = withdrawn.json()
+    assert withdrawn_snapshot["release_status"] == "WITHDRAWN"
+    assert withdrawn_snapshot["released_at"] == released_snapshot["released_at"]
+    assert withdrawn_snapshot["withdrawn_at"] is not None
+    assert datetime.fromisoformat(
+        withdrawn_snapshot["withdrawn_at"]
+    ).utcoffset() == UTC.utcoffset(None)
+    assert withdrawn_snapshot["release_note"] == "Withdrawn note"
+
+    for requested_status in ("WITHDRAWN", "RELEASED"):
+        conflict = client.post(
+            f"/api/v1/note-drafts/{draft_id}/release",
+            json={"release_status": requested_status},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {
+            "detail": (
+                f"NoteDraft {draft_id} cannot transition "
+                f"from WITHDRAWN to {requested_status}"
+            )
+        }
+        assert client.get(f"/api/v1/note-drafts/{draft_id}").json() == (
+            withdrawn_snapshot
+        )
+
+
+def test_released_note_draft_blocks_review_change_until_withdrawn(
+    client: TestClient,
+) -> None:
+    topic_id = _create_topic(client, "Release Review Lock Topic")
+    content_version_id = _create_content_version(client, topic_id, "review-lock")
+    _create_claim(client, topic_id, "Release lock fact.", "APPROVED")
+    created = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
+    draft_id = created.json()["id"]
+    approved = client.post(
+        f"/api/v1/note-drafts/{draft_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Review retained"},
+    )
+    assert approved.status_code == 200
+    released = client.post(
+        f"/api/v1/note-drafts/{draft_id}/release",
+        json={"release_status": "RELEASED", "release_note": "Release retained"},
+    )
+    assert released.status_code == 200
+
+    for approval_status in ("DRAFT", "REJECTED"):
+        conflict = client.post(
+            f"/api/v1/note-drafts/{draft_id}/approval",
+            json={"approval_status": approval_status},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {
+            "detail": (
+                f"NoteDraft {draft_id} must be withdrawn before changing approval"
+            )
+        }
+        assert client.get(f"/api/v1/note-drafts/{draft_id}").json() == released.json()
+
+    withdrawn = client.post(
+        f"/api/v1/note-drafts/{draft_id}/release",
+        json={"release_status": "WITHDRAWN", "release_note": "Withdraw first"},
+    )
+    assert withdrawn.status_code == 200
+    rejected = client.post(
+        f"/api/v1/note-drafts/{draft_id}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "Post-withdrawal"},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["approval_status"] == "REJECTED"
+    assert rejected.json()["release_status"] == "WITHDRAWN"
+    assert rejected.json()["released_at"] == withdrawn.json()["released_at"]
+    assert rejected.json()["withdrawn_at"] == withdrawn.json()["withdrawn_at"]
+    assert rejected.json()["release_note"] == "Withdraw first"
+
+
+def test_note_draft_release_missing_and_invalid_requests(client: TestClient) -> None:
+    missing = client.post(
+        "/api/v1/note-drafts/999999/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "NoteDraft 999999 not found"}
+
+    for payload in ({}, {"release_status": "UNRELEASED"}, {"release_status": "INVALID"}):
+        response = client.post("/api/v1/note-drafts/1/release", json=payload)
+        assert response.status_code == 422
+
+
+def test_approved_note_draft_collection_remains_approval_only_with_release_metadata(
+    client: TestClient,
+) -> None:
+    topic_id = _create_topic(client, "Approval Boundary Release Topic")
+    content_version_id = _create_content_version(client, topic_id, "approval-boundary")
+    _create_claim(client, topic_id, "Approval boundary fact.", "APPROVED")
+    draft_ids = []
+    for _ in range(3):
+        created = client.post(
+            f"/api/v1/topics/{topic_id}/note-drafts",
+            json={"content_version_id": content_version_id},
+        )
+        draft_ids.append(created.json()["id"])
+        approved = client.post(
+            f"/api/v1/note-drafts/{created.json()['id']}/approval",
+            json={"approval_status": "APPROVED"},
+        )
+        assert approved.status_code == 200
+
+    released = client.post(
+        f"/api/v1/note-drafts/{draft_ids[1]}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert released.status_code == 200
+    released_then_withdrawn = client.post(
+        f"/api/v1/note-drafts/{draft_ids[2]}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert released_then_withdrawn.status_code == 200
+    withdrawn = client.post(
+        f"/api/v1/note-drafts/{draft_ids[2]}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawn.status_code == 200
+
+    response = client.get("/api/v1/note-drafts/approved")
+
+    assert response.status_code == 200
+    assert [draft["id"] for draft in response.json()] == draft_ids
+    assert [draft["release_status"] for draft in response.json()] == [
+        "UNRELEASED",
+        "RELEASED",
+        "WITHDRAWN",
+    ]
+    assert response.json()[1]["released_at"] == released.json()["released_at"]
+    assert response.json()[2]["withdrawn_at"] == withdrawn.json()["withdrawn_at"]
+
+
+def test_other_state_cannot_substitute_for_target_note_draft_approval(
+    client: TestClient,
+) -> None:
+    topic_id = _create_topic(client, "Independent Draft Release Topic")
+    content_version_id = _create_content_version(client, topic_id, "independence")
+    claim_id = _create_claim(
+        client,
+        topic_id,
+        "Independently approved fact.",
+        "APPROVED",
+    )
+    target = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
+    assert target.status_code == 201
+    target_snapshot = target.json()
+
+    source = client.post(
+        "/api/v1/sources",
+        json={
+            "title": "Independent release evidence",
+            "source_type": "official",
+            "authority_tier": 1,
+            "location": "https://example.gov/independent-release",
+            "license_status": "UNKNOWN",
+        },
+    )
+    assert source.status_code == 201
+    evidence = client.post(
+        "/api/v1/evidence",
+        json={"source_id": source.json()["id"], "content": "Supporting evidence."},
+    )
+    assert evidence.status_code == 201
+    verification = client.post(
+        "/api/v1/verifications",
+        json={
+            "claim_id": claim_id,
+            "verdict": "SUPPORTED",
+            "confidence": 1.0,
+            "evidence": [
+                {
+                    "evidence_id": evidence.json()["id"],
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    assert verification.status_code == 201
+
+    question = client.post(
+        "/api/v1/question-bank-items",
+        json={
+            "content_version_id": content_version_id,
+            "question_text": "Which fact is independently supported?",
+            "explanation": "The stored Claim provides the answer.",
+            "difficulty": "EASY",
+            "claim_ids": [claim_id],
+            "options": ["The stored fact", "An unrelated fact"],
+            "correct_option_position": 0,
+        },
+    )
+    assert question.status_code == 201
+    question_approval = client.post(
+        f"/api/v1/question-bank-items/{question.json()['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert question_approval.status_code == 200
+    question_release = client.post(
+        f"/api/v1/question-bank-items/{question.json()['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert question_release.status_code == 200
+
+    other_draft = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
+    assert other_draft.status_code == 201
+    other_approval = client.post(
+        f"/api/v1/note-drafts/{other_draft.json()['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert other_approval.status_code == 200
+    other_release = client.post(
+        f"/api/v1/note-drafts/{other_draft.json()['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert other_release.status_code == 200
+
+    response = client.post(
+        f"/api/v1/note-drafts/{target.json()['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"NoteDraft {target.json()['id']} must be approved before release"
+    }
+    assert client.get(f"/api/v1/note-drafts/{target.json()['id']}").json() == (
+        target_snapshot
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_values",
+    [
+        {"release_status": "INVALID"},
+        {"release_status": "UNRELEASED", "release_note": "not allowed"},
+        {"release_status": "UNRELEASED", "released_at": datetime.now(UTC)},
+        {"release_status": "RELEASED"},
+        {
+            "release_status": "RELEASED",
+            "released_at": datetime.now(UTC),
+            "approval_status": "DRAFT",
+        },
+        {
+            "release_status": "RELEASED",
+            "released_at": datetime.now(UTC),
+            "withdrawn_at": datetime.now(UTC),
+        },
+        {
+            "release_status": "WITHDRAWN",
+            "released_at": datetime.now(UTC),
+        },
+        {
+            "release_status": "WITHDRAWN",
+            "withdrawn_at": datetime.now(UTC),
+        },
+    ],
+)
+def test_database_rejects_invalid_note_draft_release_states(
+    client: TestClient,
+    db_connection: Connection,
+    invalid_values: dict,
+) -> None:
+    topic_id = _create_topic(client, f"Release Constraint {invalid_values}")
+    content_version_id = _create_content_version(
+        client,
+        topic_id,
+        f"release-constraint-{len(str(invalid_values))}",
+    )
+    _create_claim(client, topic_id, "Release constraint fact.", "APPROVED")
+    created = client.post(
+        f"/api/v1/topics/{topic_id}/note-drafts",
+        json={"content_version_id": content_version_id},
+    )
+    assert created.status_code == 201
+    draft_id = created.json()["id"]
+
+    savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(
+            update(NoteDraft).where(NoteDraft.id == draft_id).values(**invalid_values)
+        )
+    savepoint.rollback()
+    assert client.get(f"/api/v1/note-drafts/{draft_id}").json() == created.json()
+
+
+@pytest.mark.parametrize("release_status", ["RELEASED", "WITHDRAWN"])
+def test_database_rejects_released_state_without_content_version(
+    client: TestClient,
+    db_connection: Connection,
+    release_status: str,
+) -> None:
+    topic_id = _create_topic(client, f"No Owner {release_status}")
+    values = {
+        "topic_id": topic_id,
+        "content_version_id": None,
+        "markdown": "# Ownerless",
+        "approval_status": "APPROVED",
+        "approval_decided_at": datetime.now(UTC),
+        "release_status": release_status,
+        "released_at": datetime.now(UTC),
+    }
+    if release_status == "WITHDRAWN":
+        values["withdrawn_at"] = datetime.now(UTC)
+
+    savepoint = db_connection.begin_nested()
+    with pytest.raises(IntegrityError):
+        db_connection.execute(NoteDraft.__table__.insert().values(**values))
+    savepoint.rollback()

@@ -17,6 +17,7 @@ from app.schemas.knowledge import (
     NoteDraftApprovalCreate,
     NoteDraftCreate,
     NoteDraftPreviewResponse,
+    NoteDraftReleaseCreate,
     NoteDraftResponse,
     PreviousPaperCreate,
     PreviousPaperResponse,
@@ -337,6 +338,28 @@ def record_note_draft_approval(
         )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.post(
+    "/note-drafts/{note_draft_id}/release",
+    response_model=NoteDraftResponse,
+)
+def record_note_draft_release(
+    note_draft_id: int,
+    request: NoteDraftReleaseCreate,
+    db: DatabaseSession,
+) -> NoteDraftResponse:
+    try:
+        return KnowledgeService(db).record_note_draft_release(
+            note_draft_id,
+            request,
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.post("/evidence", response_model=EvidenceResponse, status_code=201)

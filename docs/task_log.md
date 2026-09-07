@@ -750,3 +750,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Controlled Note Release |
 | Scope | Release and withdrawal state only; no released collection, publication transport, public/learner delivery, PDF, AI generation, or personalization |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-028 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only the controlled UNRELEASED/RELEASED/WITHDRAWN lifecycle and one release-decision endpoint for stored NoteDrafts |
+| Migration | `d9e5b2a7c418_add_note_draft_release.py`, parent `c7a4e9d2f816` |
+| Tests | `uv run pytest tests/test_note_drafts.py -q`: 41 passed, 1 warning in 3.56s. `uv run pytest -q`: 183 passed, 1 warning in 10.37s. |
+| Ruff | Changed-file Ruff passed (`All checks passed!`). |
+| Migration checks | Fresh upgrade through `d9e5b2a7c418`, downgrade to `c7a4e9d2f816`, and re-upgrade passed. Seeded version-owned and legacy-null drafts retained Topic, ownership, Markdown, approval metadata, creation time, and ordered Claim links; both became UNRELEASED with null release metadata without inference. Direct PostgreSQL probes rejected invalid status, non-approved release, and ownerless release. |
+| Notes | Release requires the draft's own APPROVED state and non-null stored ContentVersion. Withdrawal is one-way and preserves the original release time. PostgreSQL enforces lifecycle metadata, approval, and ownership. Release and approval decisions lock the draft row. The existing approved-drafts endpoint remains approval-only. No released-draft list, delivery, publication transport, PDF, AI, personalization, dependency, configuration, Docker, AGENTS, README, or T-029 behavior was added. |

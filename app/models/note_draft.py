@@ -27,6 +27,26 @@ class NoteDraft(Base):
             "approval_status IN ('DRAFT', 'APPROVED', 'REJECTED')",
             name="ck_note_drafts_approval_status",
         ),
+        CheckConstraint(
+            "release_status IN ('UNRELEASED', 'RELEASED', 'WITHDRAWN')",
+            name="ck_note_drafts_release_status",
+        ),
+        CheckConstraint(
+            "(release_status = 'UNRELEASED' "
+            "AND released_at IS NULL "
+            "AND withdrawn_at IS NULL "
+            "AND release_note IS NULL) "
+            "OR (release_status = 'RELEASED' "
+            "AND released_at IS NOT NULL "
+            "AND withdrawn_at IS NULL "
+            "AND approval_status = 'APPROVED' "
+            "AND content_version_id IS NOT NULL) "
+            "OR (release_status = 'WITHDRAWN' "
+            "AND released_at IS NOT NULL "
+            "AND withdrawn_at IS NOT NULL "
+            "AND content_version_id IS NOT NULL)",
+            name="ck_note_drafts_release_lifecycle",
+        ),
         ForeignKeyConstraint(
             ["content_version_id", "topic_id"],
             ["content_versions.id", "content_versions.topic_id"],
@@ -57,6 +77,14 @@ class NoteDraft(Base):
         DateTime(timezone=True),
     )
     reviewer_note: Mapped[str | None] = mapped_column(Text)
+    release_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="UNRELEASED",
+    )
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    release_note: Mapped[str | None] = mapped_column(Text)
 
     topic: Mapped["Topic"] = relationship()
     claim_links: Mapped[list["NoteDraftClaim"]] = relationship(

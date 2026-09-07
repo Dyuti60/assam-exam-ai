@@ -36,6 +36,8 @@ from app.schemas.knowledge import (
     NoteDraftApprovalCreate,
     NoteDraftCreate,
     NoteDraftPreviewResponse,
+    NoteDraftReleaseCreate,
+    NoteDraftReleaseDecision,
     NoteDraftResponse,
     PreviousPaperCreate,
     PreviousPaperResponse,
@@ -575,6 +577,10 @@ class KnowledgeService:
             approval_status=note_draft.approval_status,
             approval_decided_at=note_draft.approval_decided_at,
             reviewer_note=note_draft.reviewer_note,
+            release_status=note_draft.release_status,
+            released_at=note_draft.released_at,
+            withdrawn_at=note_draft.withdrawn_at,
+            release_note=note_draft.release_note,
         )
 
     def get_note_draft(self, note_draft_id: int) -> NoteDraftResponse:
@@ -594,9 +600,17 @@ class KnowledgeService:
         note_draft_id: int,
         request: NoteDraftApprovalCreate,
     ) -> NoteDraftResponse:
-        note_draft = self.repository.get_note_draft(note_draft_id)
+        note_draft = self.repository.get_note_draft_for_update(note_draft_id)
         if note_draft is None:
             raise ResourceNotFoundError("NoteDraft", note_draft_id)
+        if (
+            note_draft.release_status == "RELEASED"
+            and request.approval_status != ClaimApprovalStatus.APPROVED
+        ):
+            raise ResourceConflictError(
+                f"NoteDraft {note_draft_id} must be withdrawn "
+                "before changing approval"
+            )
         is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
         self.repository.update_note_draft_approval(
             note_draft,
@@ -604,6 +618,57 @@ class KnowledgeService:
             None if is_draft else request.reviewer_note,
             None if is_draft else datetime.now(UTC),
         )
+        self._commit(note_draft)
+        return self.get_note_draft(note_draft.id)
+
+    def record_note_draft_release(
+        self,
+        note_draft_id: int,
+        request: NoteDraftReleaseCreate,
+    ) -> NoteDraftResponse:
+        note_draft = self.repository.get_note_draft_for_update(note_draft_id)
+        if note_draft is None:
+            raise ResourceNotFoundError("NoteDraft", note_draft_id)
+
+        requested_status = request.release_status.value
+        current_status = note_draft.release_status
+        if (
+            request.release_status == NoteDraftReleaseDecision.RELEASED
+            and current_status == "UNRELEASED"
+        ):
+            if note_draft.approval_status != "APPROVED":
+                raise ResourceConflictError(
+                    f"NoteDraft {note_draft_id} must be approved before release"
+                )
+            if note_draft.content_version_id is None:
+                raise ResourceConflictError(
+                    f"NoteDraft {note_draft_id} must have a ContentVersion "
+                    "before release"
+                )
+            self.repository.update_note_draft_release(
+                note_draft,
+                requested_status,
+                datetime.now(UTC),
+                None,
+                request.release_note,
+            )
+        elif (
+            request.release_status == NoteDraftReleaseDecision.WITHDRAWN
+            and current_status == "RELEASED"
+        ):
+            self.repository.update_note_draft_release(
+                note_draft,
+                requested_status,
+                note_draft.released_at,
+                datetime.now(UTC),
+                request.release_note,
+            )
+        else:
+            raise ResourceConflictError(
+                f"NoteDraft {note_draft_id} cannot transition "
+                f"from {current_status} to {requested_status}"
+            )
+
         self._commit(note_draft)
         return self.get_note_draft(note_draft.id)
 
@@ -774,6 +839,10 @@ class KnowledgeService:
             approval_status=note_draft.approval_status,
             approval_decided_at=note_draft.approval_decided_at,
             reviewer_note=note_draft.reviewer_note,
+            release_status=note_draft.release_status,
+            released_at=note_draft.released_at,
+            withdrawn_at=note_draft.withdrawn_at,
+            release_note=note_draft.release_note,
         )
 
     @staticmethod

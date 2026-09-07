@@ -284,6 +284,18 @@ class KnowledgeRepository:
         )
         return self.session.scalar(statement)
 
+    def get_note_draft_for_update(self, note_draft_id: int) -> NoteDraft | None:
+        statement = (
+            select(NoteDraft)
+            .options(
+                joinedload(NoteDraft.topic),
+                selectinload(NoteDraft.claim_links),
+            )
+            .where(NoteDraft.id == note_draft_id)
+            .with_for_update(of=NoteDraft)
+        )
+        return self.session.scalar(statement)
+
     def get_approved_note_drafts(self) -> list[NoteDraft]:
         statement = (
             select(NoteDraft)
@@ -306,6 +318,19 @@ class KnowledgeRepository:
         note_draft.approval_status = approval_status
         note_draft.approval_decided_at = decided_at
         note_draft.reviewer_note = reviewer_note
+
+    def update_note_draft_release(
+        self,
+        note_draft: NoteDraft,
+        release_status: str,
+        released_at: datetime | None,
+        withdrawn_at: datetime | None,
+        release_note: str | None,
+    ) -> None:
+        note_draft.release_status = release_status
+        note_draft.released_at = released_at
+        note_draft.withdrawn_at = withdrawn_at
+        note_draft.release_note = release_note
 
     def link_claim_evidence(self, claim_id: int, evidence_id: int) -> None:
         statement = (

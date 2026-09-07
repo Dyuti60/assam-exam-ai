@@ -256,6 +256,17 @@ class NoteDraftCreate(BaseModel):
     content_version_id: int = Field(gt=0)
 
 
+class NoteDraftReleaseStatus(StrEnum):
+    UNRELEASED = "UNRELEASED"
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
+class NoteDraftReleaseDecision(StrEnum):
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
 class NoteDraftResponse(NoteDraftPreviewResponse):
     id: int
     content_version_id: int | None
@@ -263,11 +274,20 @@ class NoteDraftResponse(NoteDraftPreviewResponse):
     approval_status: ClaimApprovalStatus
     approval_decided_at: datetime | None
     reviewer_note: str | None
+    release_status: NoteDraftReleaseStatus
+    released_at: datetime | None
+    withdrawn_at: datetime | None
+    release_note: str | None
 
 
 class NoteDraftApprovalCreate(BaseModel):
     approval_status: ClaimApprovalStatus
     reviewer_note: str | None = None
+
+
+class NoteDraftReleaseCreate(BaseModel):
+    release_status: NoteDraftReleaseDecision
+    release_note: str | None = None
 
 
 class EvidenceCreate(BaseModel):

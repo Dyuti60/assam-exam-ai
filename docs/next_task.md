@@ -2599,3 +2599,5 @@ Do not self-approve.
 Do not implement T-029.
 
 Leave T-028 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-07 Asia/Kolkata, UTC+05:30): added only the controlled NoteDraft `UNRELEASED`/`RELEASED`/`WITHDRAWN` lifecycle, migration `d9e5b2a7c418`, and `POST /api/v1/note-drafts/{note_draft_id}/release`. Release requires the draft's own APPROVED review and non-null stored ContentVersion; withdrawal preserves the original release time, and released drafts block DRAFT/REJECTED review changes until withdrawal. PostgreSQL independently enforces lifecycle metadata, approval, and ownership invariants. The approved-drafts collection remains approval-only, legacy null-owned drafts remain readable/reviewable but unreleasable, and no released collection, publication, learner delivery, PDF, AI, personalization, or T-029 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
