@@ -29,6 +29,7 @@ from app.schemas.knowledge import (
     ClaimCreate,
     ClaimResponse,
     ContentVersionCreate,
+    ContentVersionReleasedAssetsResponse,
     ContentVersionResponse,
     EvidenceCreate,
     ExamCreate,
@@ -292,6 +293,29 @@ class KnowledgeService:
         if content_version is None:
             raise ResourceNotFoundError("ContentVersion", content_version_id)
         return ContentVersionResponse.model_validate(content_version)
+
+    def get_content_version_released_assets(
+        self,
+        content_version_id: int,
+    ) -> ContentVersionReleasedAssetsResponse:
+        content_version = self.repository.get_content_version(content_version_id)
+        if content_version is None:
+            raise ResourceNotFoundError("ContentVersion", content_version_id)
+        return ContentVersionReleasedAssetsResponse(
+            content_version=ContentVersionResponse.model_validate(content_version),
+            note_drafts=[
+                self._note_draft_response(note_draft)
+                for note_draft in self.repository.get_released_note_drafts_by_content_version(
+                    content_version_id
+                )
+            ],
+            question_bank_items=[
+                self._question_bank_item_response(question_bank_item)
+                for question_bank_item in self.repository.get_released_question_bank_items_by_content_version(
+                    content_version_id
+                )
+            ],
+        )
 
     def create_question_bank_item(
         self,

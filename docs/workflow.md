@@ -1152,3 +1152,27 @@ flowchart LR
 - Stored ContentVersion ownership, Markdown, Claim provenance, review metadata, and release metadata are returned without locks, writes, regeneration, or current-state re-evaluation. The approved-drafts collection remains approval-only.
 - Developer-recorded evidence is 2 focused released-draft tests, 41 focused NoteDraft tests, and 185 full-suite tests, each with one existing warning, plus successful Ruff, Alembic-head/check, and diff checks. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
 - No model, schema, migration, dependency, configuration, Docker, publication transport, public/learner delivery, PDF, content package, mock assembly, AI, personalization, or T-030 implementation was included.
+
+
+### T-030 ContentVersion released-assets manifest
+
+```mermaid
+flowchart LR
+    REQUEST["GET /content-versions/{id}/released-assets"] --> VERSION["Resolve exact ContentVersion"]
+    VERSION --> NOTES["Filter RELEASED NoteDrafts by ContentVersion; order by ID; eager-load Topic and Claims"]
+    VERSION --> QUESTIONS["Filter RELEASED QuestionBankItems by ContentVersion; order by ID; eager-load Claims and options"]
+    NOTES --> RESPONSE["Serialize stored snapshots"]
+    QUESTIONS --> RESPONSE
+    RESPONSE --> RESULT["200 manifest; empty asset lists allowed"]
+```
+
+- The route returns the exact stored ContentVersion response and independently ordered lists of only its currently RELEASED NoteDraft and QuestionBankItem snapshots.
+- Ownership and release filtering occur in PostgreSQL. NoteDraft Topic and ordered Claim links, plus QuestionBankItem ordered Claim links and options, are eagerly loaded with fixed-query patterns that avoid per-asset relationship queries.
+- The service reuses the existing stored asset serializers. The endpoint performs no locks, writes, flushes, commits, transitions, regeneration, inference, or current Claim/Verification/priority evaluation.
+- Missing ContentVersion returns the established 404. An existing ContentVersion with no eligible assets returns HTTP 200 with both lists empty. Global approval and release collections retain their independent semantics.
+- `uv run pytest tests/test_content_version_released_assets_api.py -q`: 3 passed, 1 warning in 1.85s.
+- `uv run pytest tests/test_content_versions_api.py -q`: 12 passed, 1 warning in 1.09s.
+- `uv run pytest tests/test_released_note_drafts_api.py -q`: 2 passed, 1 warning in 1.38s.
+- `uv run pytest tests/test_released_question_bank_items_api.py -q`: 2 passed, 1 warning in 1.21s.
+- `uv run pytest -q`: 188 passed, 1 warning in 11.12s. Changed-file Ruff passed. Fresh upgrade reached `d9e5b2a7c418`; Alembic reported one head and no new upgrade operations.
+- No model, migration, dependency, configuration, environment, Docker, package persistence, publication transport, public/learner delivery, PDF, AI, personalization, or T-031 work was added.

@@ -9,6 +9,7 @@ from app.schemas.knowledge import (
     ClaimCreate,
     ClaimResponse,
     ContentVersionCreate,
+    ContentVersionReleasedAssetsResponse,
     ContentVersionResponse,
     EvidenceCreate,
     EvidenceResponse,
@@ -124,6 +125,22 @@ def get_content_version(
 ) -> ContentVersionResponse:
     try:
         return KnowledgeService(db).get_content_version(content_version_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.get(
+    "/content-versions/{content_version_id}/released-assets",
+    response_model=ContentVersionReleasedAssetsResponse,
+)
+def get_content_version_released_assets(
+    content_version_id: int,
+    db: DatabaseSession,
+) -> ContentVersionReleasedAssetsResponse:
+    try:
+        return KnowledgeService(db).get_content_version_released_assets(
+            content_version_id
+        )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
 

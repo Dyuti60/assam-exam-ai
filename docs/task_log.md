@@ -833,3 +833,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Version Release Manifest |
 | Scope | Exact ContentVersion ownership and release-state filtering with stored-snapshot assembly only; no package persistence, publication transport, PDF, public/learner delivery, AI generation, or personalization |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-030 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/content-versions/{content_version_id}/released-assets` as a computed read-only manifest of currently RELEASED stored NoteDraft and QuestionBankItem snapshots owned by one exact ContentVersion |
+| Migration | None; models and persistence unchanged, with Alembic head retained at `d9e5b2a7c418` |
+| Tests | `uv run pytest tests/test_content_version_released_assets_api.py -q`: 3 passed, 1 warning in 1.85s. `uv run pytest tests/test_content_versions_api.py -q`: 12 passed, 1 warning in 1.09s. `uv run pytest tests/test_released_note_drafts_api.py -q`: 2 passed, 1 warning in 1.38s. `uv run pytest tests/test_released_question_bank_items_api.py -q`: 2 passed, 1 warning in 1.21s. `uv run pytest -q`: 188 passed, 1 warning in 11.12s. |
+| Ruff | Changed-file Ruff passed (`All checks passed!`). |
+| Alembic | Fresh dedicated test database upgrade passed through `d9e5b2a7c418`; `uv run alembic heads` reported that single head and `uv run alembic check` reported no new upgrade operations. |
+| Notes | Repository queries filter exact stored ContentVersion ownership plus RELEASED state, order each asset type by ID, and eagerly load stored nested provenance. The service reuses existing serializers. Missing versions retain the established 404; existing versions may return empty lists. The endpoint performs no locks, writes, transitions, regeneration, inference, or current-state re-evaluation. No package persistence, publication transport, public/learner delivery, PDF, AI, personalization, dependency, configuration, Docker, AGENTS, README, or T-031 work was added. |

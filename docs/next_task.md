@@ -3243,3 +3243,5 @@ Do not self-approve.
 Do not implement T-031.
 
 Leave T-030 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-07 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-versions/{content_version_id}/released-assets` through the existing route, schema, service, repository, and stored-response serializers. It resolves the exact ContentVersion, returns only its currently RELEASED NoteDraft and QuestionBankItem snapshots in ascending asset-ID order with required nested provenance eagerly loaded, and returns empty asset lists for an existing version with no eligible assets. It performs no locks, writes, transitions, regeneration, inference, or current-state re-evaluation. No model, migration, dependency, configuration, Docker, package persistence, publication transport, public/learner delivery, PDF, AI, personalization, or T-031 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

@@ -112,6 +112,24 @@ class KnowledgeRepository:
     def get_content_version(self, content_version_id: int) -> ContentVersion | None:
         return self.session.get(ContentVersion, content_version_id)
 
+    def get_released_question_bank_items_by_content_version(
+        self,
+        content_version_id: int,
+    ) -> list[QuestionBankItem]:
+        statement = (
+            select(QuestionBankItem)
+            .options(
+                selectinload(QuestionBankItem.claim_links),
+                selectinload(QuestionBankItem.options),
+            )
+            .where(
+                QuestionBankItem.content_version_id == content_version_id,
+                QuestionBankItem.release_status == "RELEASED",
+            )
+            .order_by(QuestionBankItem.id)
+        )
+        return list(self.session.scalars(statement))
+
     def add_question_bank_item(
         self,
         question_bank_item: QuestionBankItem,
@@ -316,6 +334,24 @@ class KnowledgeRepository:
                 selectinload(NoteDraft.claim_links),
             )
             .where(NoteDraft.release_status == "RELEASED")
+            .order_by(NoteDraft.id)
+        )
+        return list(self.session.scalars(statement))
+
+    def get_released_note_drafts_by_content_version(
+        self,
+        content_version_id: int,
+    ) -> list[NoteDraft]:
+        statement = (
+            select(NoteDraft)
+            .options(
+                joinedload(NoteDraft.topic),
+                selectinload(NoteDraft.claim_links),
+            )
+            .where(
+                NoteDraft.content_version_id == content_version_id,
+                NoteDraft.release_status == "RELEASED",
+            )
             .order_by(NoteDraft.id)
         )
         return list(self.session.scalars(statement))

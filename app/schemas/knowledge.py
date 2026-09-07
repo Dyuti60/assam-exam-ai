@@ -290,6 +290,12 @@ class NoteDraftReleaseCreate(BaseModel):
     release_note: str | None = None
 
 
+class ContentVersionReleasedAssetsResponse(BaseModel):
+    content_version: ContentVersionResponse
+    note_drafts: list[NoteDraftResponse]
+    question_bank_items: list[QuestionBankItemResponse]
+
+
 class EvidenceCreate(BaseModel):
     source_id: int = Field(gt=0)
     content: str = Field(min_length=1)
