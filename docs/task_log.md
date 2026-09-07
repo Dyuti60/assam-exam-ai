@@ -805,3 +805,31 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | `uv run pytest tests/test_released_note_drafts_api.py -q`: 2 passed, 1 warning in 1.47s. `uv run pytest tests/test_note_drafts.py -q`: 41 passed, 1 warning in 3.55s. `uv run pytest -q`: 185 passed, 1 warning in 10.29s. |
 | Ruff | Changed-file Ruff passed (`All checks passed!`). |
 | Notes | The repository filters exactly on RELEASED state, orders by draft ID, and eagerly loads Topic and ordered Claim links. Responses reuse stored NoteDraft serialization and perform no lock, write, regeneration, or current-state re-evaluation. The approved boundary remains approval-only. No publication, learner delivery, PDF, content package, mock assembly, AI, personalization, dependency, configuration, Docker, AGENTS, README, migration, or T-030 behavior was added. |
+
+
+---
+
+## T-029 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-029` |
+| Implementation commit | `ee755cfc3a88700abababf2473bd8d615c16c871` |
+| Base/task-issuance commit | `a351673bc242261640faa1468a33e395fe740e4b` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only collection of currently RELEASED stored NoteDraft snapshots |
+| Validation evidence | Developer-recorded: 2 focused released-draft tests, 41 focused NoteDraft tests, and 185 full-suite tests, each with one existing warning; changed-file Ruff; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The immutable commit is exactly one commit over the issued base and changes only the expected route, repository, service, focused tests, and documentation. It filters exact RELEASED state, preserves stable ordering and stored provenance, eagerly loads required relationships, performs no writes, and keeps approval separate from release. |
+| Boundaries | No model, schema, migration, publication transport, public/learner delivery, PDF, content package, mock assembly, AI, personalization, dependency, configuration, Docker, or T-030 implementation was included. |
+
+---
+
+## T-030 issued — Add ContentVersion released-assets manifest
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one read-only internal endpoint that returns the currently RELEASED NoteDraft and QuestionBankItem snapshots owned by one exact ContentVersion |
+| Architectural phase | Canonical Content / Version Release Manifest |
+| Scope | Exact ContentVersion ownership and release-state filtering with stored-snapshot assembly only; no package persistence, publication transport, PDF, public/learner delivery, AI generation, or personalization |
+| Full implementation prompt | Appended to `docs/next_task.md` |
