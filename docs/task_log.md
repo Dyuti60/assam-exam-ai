@@ -891,3 +891,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | `uv run pytest tests/test_content_packages_api.py -q`: 10 passed, 1 warning in 2.74s. Focused regressions: released-assets manifest 3 passed, ContentVersion 12 passed, NoteDraft 41 passed, released NoteDraft 2 passed, QuestionBankItem 52 passed, and released QuestionBankItem 2 passed. `uv run pytest -q`: 198 passed, 1 warning in 13.20s. |
 | Migration validation | Fresh upgrade reached `e2c6f8a1d943`. A seeded database at `d9e5b2a7c418` preserved two NoteDrafts, two QuestionBankItems, and their Claim links through upgrade/downgrade/re-upgrade; no package was inferred. A representative package stored one released asset of each type in position 0 before downgrade. |
 | Notes | The endpoint locks the exact ContentVersion and eligible exact-version RELEASED assets, stores independently ordered zero-based membership links, and commits once. Composite PostgreSQL constraints reject cross-version links, duplicates, invalid positions, and deletion of referenced assets/version. Later withdrawal does not rewrite membership; T-030 remains the dynamic current-release manifest. No retrieval/list, package lifecycle, publication, PDF, delivery, AI, personalization, dependency, configuration, Docker, AGENTS, README, or T-032 work was added. |
+
+
+---
+
+## T-031 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-031` |
+| Implementation commit | `a261a36a539c40b718e2185eaed794f700dd4b77` |
+| Base/task-issuance commit | `12ede1545988432045ea781587d0f09059ee2160` |
+| Documentation correction | `67e80c29928eb7e913bca99f899082562e4c2cb1` corrects only the current architecture inventory after implementation |
+| Review state | **APPROVED** |
+| Approved capability | Atomic persistence of one immutable, exact-ContentVersion ContentPackage with independently ordered NoteDraft and QuestionBankItem membership snapshots |
+| Validation evidence | Developer-recorded: 10 focused ContentPackage tests and 198 full-suite tests, each with one existing warning; required focused regressions; changed-file Ruff; fresh and seeded migration upgrade; downgrade/re-upgrade; PostgreSQL constraints; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. It uses explicit row locks, one transaction, exact RELEASED and ContentVersion filtering, stable zero-based ordering, rollback-safe persistence, and PostgreSQL-enforced same-version membership. The documentation correction closes the only review blocker and changes no implementation file. |
+| Boundaries | No package retrieval/list, package approval/release/publication lifecycle, PDF/export, public/learner delivery, AI, mock assembly, personalization, dependency, configuration, or Docker behavior was included. |
+
+---
+
+## T-032 issued — Add individual ContentPackage retrieval boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one read-only internal endpoint returning the retained ordered membership snapshot for one exact ContentPackage ID |
+| Architectural phase | Canonical Content / Immutable Package Read Boundary |
+| Scope | Individual stored package retrieval only; no package list, mutation, lifecycle, publication, PDF/export, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |

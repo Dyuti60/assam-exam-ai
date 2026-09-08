@@ -1211,3 +1211,15 @@ flowchart LR
 - `uv run pytest -q`: 198 passed, 1 warning in 13.20s.
 - Fresh upgrade, seeded pre-T-031 upgrade, representative package inspection, downgrade to `d9e5b2a7c418`, and re-upgrade to `e2c6f8a1d943` passed; pre-existing rows remained intact and neither upgrade inferred a package.
 - ContentPackage has no retrieval/list route, mutable metadata, approval, release, publication, PDF, export, public/learner delivery, AI generation, mock assembly, or personalization.
+
+
+### T-031 post-push review
+
+- **APPROVED** at implementation commit `a261a36a539c40b718e2185eaed794f700dd4b77`, whose parent is the T-031 issuance head `12ede1545988432045ea781587d0f09059ee2160`.
+- Documentation-only correction commit `67e80c29928eb7e913bca99f899082562e4c2cb1` follows the implementation commit and fixes the inspection date, migration/model inventory, and verified test count without changing application code, tests, or migrations.
+- The immutable implementation adds only ContentPackage identity, two ordered membership tables, migration `e2c6f8a1d943`, and `POST /api/v1/content-versions/{content_version_id}/content-packages` through the established route, schema, service, repository, and PostgreSQL layers.
+- Creation locks the exact ContentVersion and currently RELEASED exact-version NoteDraft and QuestionBankItem rows, persists independent zero-based ordered membership lists, commits once, and rolls back the complete package on failure.
+- Composite foreign keys preserve same-ContentVersion membership. PostgreSQL also rejects duplicate membership, duplicate per-type positions, negative positions, and deletion of referenced assets or the owning ContentVersion while links exist.
+- Later withdrawal changes the dynamic T-030 released-assets manifest but does not rewrite the retained package membership snapshot.
+- Developer-recorded evidence is 10 focused ContentPackage tests and 198 full-suite tests, each with one existing warning, plus focused regressions, successful Ruff, fresh/seeded upgrade, downgrade/re-upgrade, PostgreSQL constraint probes, Alembic-head/check, and diff checks. GitHub exposes no status contexts or workflow runs for either pushed commit, so no CI pass is claimed.
+- No package retrieval/list, mutable package state, publication, PDF/export, public/learner delivery, AI generation, mock assembly, personalization, dependency, configuration, Docker, or T-032 implementation was included.
