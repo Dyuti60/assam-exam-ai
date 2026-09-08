@@ -31,6 +31,7 @@ from app.schemas.knowledge import (
     ClaimApprovalStatus,
     ClaimCreate,
     ClaimResponse,
+    ContentPackageContentResponse,
     ContentPackageResponse,
     ContentVersionCreate,
     ContentVersionReleasedAssetsResponse,
@@ -379,6 +380,43 @@ class KnowledgeService:
         if content_package is None:
             raise ResourceNotFoundError("ContentPackage", content_package_id)
         return self._content_package_response(content_package)
+
+    def get_content_package_content(
+        self,
+        content_package_id: int,
+    ) -> ContentPackageContentResponse:
+        content_package = self.repository.get_content_package(content_package_id)
+        if content_package is None:
+            raise ResourceNotFoundError("ContentPackage", content_package_id)
+
+        package_response = self._content_package_response(content_package)
+        note_drafts = self.repository.get_content_package_note_drafts(
+            content_package_id
+        )
+        question_bank_items = (
+            self.repository.get_content_package_question_bank_items(
+                content_package_id
+            )
+        )
+        if package_response.note_draft_ids != [
+            note_draft.id for note_draft in note_drafts
+        ] or package_response.question_bank_item_ids != [
+            question_bank_item.id for question_bank_item in question_bank_items
+        ]:
+            raise RuntimeError(
+                f"ContentPackage {content_package_id} membership could not be resolved"
+            )
+
+        return ContentPackageContentResponse(
+            content_package=package_response,
+            note_drafts=[
+                self._note_draft_response(note_draft) for note_draft in note_drafts
+            ],
+            question_bank_items=[
+                self._question_bank_item_response(question_bank_item)
+                for question_bank_item in question_bank_items
+            ],
+        )
 
     def create_question_bank_item(
         self,

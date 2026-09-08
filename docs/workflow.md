@@ -1253,3 +1253,25 @@ flowchart LR
 - Repository eager loading uses a fixed three-query pattern and no row locks. The endpoint performs no writes, flushes, commits, transitions, regeneration, inference, or mutation.
 - Developer-recorded evidence is 13 ContentPackage tests and 201 full-suite tests, each with one existing warning, plus required focused regressions, successful Ruff, a fresh database upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - No model, schema, repository, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, PDF/export, public/learner delivery, AI generation, mock assembly, personalization, or T-033 implementation was included.
+
+
+### T-033 Expanded ContentPackage content boundary
+
+```mermaid
+flowchart LR
+    REQUEST["GET /content-packages/{id}/content"] --> PACKAGE["Load retained package + ordered membership IDs"]
+    PACKAGE --> NOTES["Join ordered NoteDraft members; eager-load Topic + Claims"]
+    PACKAGE --> QUESTIONS["Join ordered QuestionBankItem members; eager-load Claims + options"]
+    NOTES --> VERIFY["Verify resolved IDs exactly match membership"]
+    QUESTIONS --> VERIFY
+    VERIFY --> RESPONSE["Reuse stored package and asset serializers"]
+```
+
+- The thin route delegates through the service and repository. Missing packages retain `ContentPackage <id> not found`; an impossible membership-resolution mismatch raises an internal error instead of omitting or rebuilding members.
+- Repository joins filter only by exact package ID and order each asset type by its association position. Topic, Claim links, and options use eager loading, producing a fixed eight-query mixed-package read without per-member queries or row locks.
+- The response nests the existing `ContentPackageResponse`, `NoteDraftResponse`, and `QuestionBankItemResponse`. Package membership determines eligibility and top-level order; stored Claim and option positions determine nested order.
+- Withdrawn or subsequently DRAFT/REJECTED assets remain visible when retained by the package. Claim decisions and unrelated evidence, verification, historical-question, priority, global-release, and T-030 state do not change the stored package view.
+- `uv run pytest tests/test_content_packages_api.py -k get_content_package_content -q`: 4 passed, 13 deselected, 1 warning in 2.52s. `uv run pytest tests/test_content_packages_api.py -q`: 17 passed, 1 warning in 4.72s.
+- Required focused regressions passed: ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests, each with one existing warning. `uv run pytest -q`: 205 passed, 1 warning in 14.33s.
+- Fresh dedicated-database upgrade reached unchanged Alembic head `e2c6f8a1d943`. Changed-file Ruff passed; Alembic reported one head and no new upgrade operations.
+- No model, relationship, migration, dependency, configuration, environment, Docker, package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-034 work was added.

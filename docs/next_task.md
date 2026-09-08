@@ -4525,3 +4525,5 @@ Do not self-approve.
 Do not implement T-034.
 
 Leave T-033 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-08 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-packages/{content_package_id}/content` through a composite response schema, thin route, read-only service assembly, and exact-package membership joins. It expands precisely the retained, position-ordered membership IDs into existing stored NoteDraft and QuestionBankItem responses, verifies complete resolution, and preserves nested Claim/option ordering. Withdrawal or later review/Claim changes do not hide members; T-030 remains the separate dynamic current-release manifest. The endpoint performs no locks, writes, transitions, copying, regeneration, inference, or current-state eligibility evaluation. No model, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-034 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

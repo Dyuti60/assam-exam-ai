@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.models import (
     Claim,
     ContentPackage,
+    ContentPackageNoteDraft,
+    ContentPackageQuestionBankItem,
     ContentVersion,
     Evidence,
     Exam,
@@ -172,6 +174,50 @@ class KnowledgeRepository:
             .where(ContentPackage.id == content_package_id)
         )
         return self.session.scalar(statement)
+
+    def get_content_package_note_drafts(
+        self,
+        content_package_id: int,
+    ) -> list[NoteDraft]:
+        statement = (
+            select(NoteDraft)
+            .join(
+                ContentPackageNoteDraft,
+                ContentPackageNoteDraft.note_draft_id == NoteDraft.id,
+            )
+            .options(
+                joinedload(NoteDraft.topic),
+                selectinload(NoteDraft.claim_links),
+            )
+            .where(
+                ContentPackageNoteDraft.content_package_id == content_package_id
+            )
+            .order_by(ContentPackageNoteDraft.position)
+        )
+        return list(self.session.scalars(statement))
+
+    def get_content_package_question_bank_items(
+        self,
+        content_package_id: int,
+    ) -> list[QuestionBankItem]:
+        statement = (
+            select(QuestionBankItem)
+            .join(
+                ContentPackageQuestionBankItem,
+                ContentPackageQuestionBankItem.question_bank_item_id
+                == QuestionBankItem.id,
+            )
+            .options(
+                selectinload(QuestionBankItem.claim_links),
+                selectinload(QuestionBankItem.options),
+            )
+            .where(
+                ContentPackageQuestionBankItem.content_package_id
+                == content_package_id
+            )
+            .order_by(ContentPackageQuestionBankItem.position)
+        )
+        return list(self.session.scalars(statement))
 
     def get_released_question_bank_items_by_content_version(
         self,

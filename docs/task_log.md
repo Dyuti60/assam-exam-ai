@@ -962,3 +962,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Expanded Immutable Package Read Boundary |
 | Scope | Expanded stored content retrieval only; no membership rebuilding, package list/mutation/lifecycle, publication, rendering, PDF/export, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-033 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/content-packages/{content_package_id}/content`, returning the retained package plus full stored responses for exactly its ordered NoteDraft and QuestionBankItem members |
+| Migration | None; models, relationships, persistence, and unchanged Alembic head `e2c6f8a1d943` remain intact |
+| Tests | T-033 selection: 4 passed, 13 deselected, 1 warning in 2.52s. Complete ContentPackage suite: 17 passed, 1 warning in 4.72s. Required focused regressions passed: released-assets manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests. Full suite: 205 passed, 1 warning in 14.33s. |
+| Validation | Changed-file Ruff passed. A fresh dedicated `_test` database upgrade reached the unchanged single Alembic head `e2c6f8a1d943`; Alembic reported no new upgrade operations. Diff and whitespace checks passed. |
+| Notes | PostgreSQL joins select exact package members and order them by persisted association positions. The service verifies resolved IDs against retained membership and reuses existing serializers. Withdrawn and post-withdrawal review-changed members remain visible; T-030 remains the separate dynamic current-release view. Reads use fixed-query eager loading and perform no locks, writes, transitions, regeneration, copying, or current-state re-evaluation. No package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-034 work was added. |

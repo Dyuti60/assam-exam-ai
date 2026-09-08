@@ -11,12 +11,17 @@ from sqlalchemy.orm import Session
 from app.core.database import engine, get_db
 from app.main import app
 from app.models import (
+    Claim,
     ContentPackage,
     ContentPackageNoteDraft,
     ContentPackageQuestionBankItem,
     ContentVersion,
+    Evidence,
     NoteDraft,
+    PreviousPaper,
+    PreviousQuestion,
     QuestionBankItem,
+    Verification,
 )
 from app.repositories import KnowledgeRepository
 
@@ -207,6 +212,24 @@ def _row_counts(connection: Connection) -> tuple[int, int, int]:
         connection.scalar(
             select(func.count()).select_from(ContentPackageQuestionBankItem)
         ),
+    )
+
+
+def _content_snapshot_row_counts(connection: Connection) -> tuple[int, ...]:
+    return tuple(
+        connection.scalar(select(func.count()).select_from(model))
+        for model in (
+            ContentPackage,
+            ContentPackageNoteDraft,
+            ContentPackageQuestionBankItem,
+            NoteDraft,
+            QuestionBankItem,
+            Claim,
+            Evidence,
+            Verification,
+            PreviousPaper,
+            PreviousQuestion,
+        )
     )
 
 
@@ -956,3 +979,372 @@ def test_get_content_package_uses_stored_positions_and_retains_snapshot(
     assert db_connection.execute(
         select(ContentPackage).where(ContentPackage.id == package["id"])
     ).first() == package_row_before
+
+
+def test_get_content_package_content_missing_is_stable_and_read_only(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    counts_before = _content_snapshot_row_counts(db_connection)
+
+    response = client.get("/api/v1/content-packages/999999/content")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "ContentPackage 999999 not found"}
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+
+
+def test_get_content_package_content_preserves_single_type_packages(
+    client: TestClient,
+) -> None:
+    note_foundation = _foundation(client, "content-notes")
+    note_version_id = note_foundation["first_version"]["id"]
+    note_topic_id = note_foundation["topic"]["id"]
+    _approved_claim(client, note_topic_id, "content-notes")
+    draft = _create_draft(client, note_topic_id, note_version_id)
+    released_draft = _approve_and_release_draft(client, draft["id"])
+    note_package = _create_package(client, note_version_id)
+
+    item_foundation = _foundation(client, "content-items")
+    item_version_id = item_foundation["first_version"]["id"]
+    item_topic_id = item_foundation["topic"]["id"]
+    claim_id = _approved_claim(client, item_topic_id, "content-items")
+    item = _create_item(client, item_version_id, [claim_id], "content-items")
+    released_item = _approve_and_release_item(client, item["id"])
+    item_package = _create_package(client, item_version_id)
+
+    note_response = client.get(
+        f"/api/v1/content-packages/{note_package['id']}/content"
+    )
+    item_response = client.get(
+        f"/api/v1/content-packages/{item_package['id']}/content"
+    )
+
+    assert note_response.status_code == 200
+    assert note_response.json() == {
+        "content_package": note_package,
+        "note_drafts": [released_draft],
+        "question_bank_items": [],
+    }
+    assert item_response.status_code == 200
+    assert item_response.json() == {
+        "content_package": item_package,
+        "note_drafts": [],
+        "question_bank_items": [released_item],
+    }
+
+
+def test_get_content_package_content_expands_only_retained_ordered_members(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "content-snapshot")
+    version_id = foundation["first_version"]["id"]
+    other_version_id = foundation["second_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    first_claim_id = _approved_claim(client, topic_id, "content-snapshot-first")
+    second_claim_id = _approved_claim(client, topic_id, "content-snapshot-second")
+
+    first_draft = _create_draft(client, topic_id, version_id)
+    second_draft = _create_draft(client, topic_id, version_id)
+    for draft in (first_draft, second_draft):
+        _approve_and_release_draft(client, draft["id"])
+
+    first_item = _create_item(
+        client,
+        version_id,
+        [second_claim_id, first_claim_id],
+        "content-snapshot-first",
+    )
+    second_item = _create_item(
+        client,
+        version_id,
+        [first_claim_id],
+        "content-snapshot-second",
+    )
+    for item in (first_item, second_item):
+        _approve_and_release_item(client, item["id"])
+
+    package = _create_package(client, version_id)
+    for model, first_id, second_id, id_column in (
+        (
+            ContentPackageNoteDraft,
+            first_draft["id"],
+            second_draft["id"],
+            ContentPackageNoteDraft.note_draft_id,
+        ),
+        (
+            ContentPackageQuestionBankItem,
+            first_item["id"],
+            second_item["id"],
+            ContentPackageQuestionBankItem.question_bank_item_id,
+        ),
+    ):
+        package_filter = model.content_package_id == package["id"]
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == first_id)
+            .values(position=2)
+        )
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == second_id)
+            .values(position=0)
+        )
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == first_id)
+            .values(position=1)
+        )
+
+    nonmember_draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, nonmember_draft["id"])
+    nonmember_item = _create_item(
+        client,
+        version_id,
+        [first_claim_id],
+        "content-nonmember",
+    )
+    _approve_and_release_item(client, nonmember_item["id"])
+
+    other_draft = _create_draft(client, topic_id, other_version_id)
+    _approve_and_release_draft(client, other_draft["id"])
+    other_item = _create_item(
+        client,
+        other_version_id,
+        [first_claim_id],
+        "content-other-version",
+    )
+    _approve_and_release_item(client, other_item["id"])
+    other_package = _create_package(client, other_version_id)
+
+    for resource, resource_id in (
+        ("note-drafts", first_draft["id"]),
+        ("note-drafts", second_draft["id"]),
+        ("question-bank-items", first_item["id"]),
+        ("question-bank-items", second_item["id"]),
+    ):
+        withdrawal = client.post(
+            f"/api/v1/{resource}/{resource_id}/release",
+            json={"release_status": "WITHDRAWN", "release_note": "Retained"},
+        )
+        assert withdrawal.status_code == 200
+
+    same_version_other_package = _create_package(client, version_id)
+    assert same_version_other_package["note_draft_ids"] == [nonmember_draft["id"]]
+    assert same_version_other_package["question_bank_item_ids"] == [
+        nonmember_item["id"]
+    ]
+
+    draft_review = client.post(
+        f"/api/v1/note-drafts/{first_draft['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "Retained"},
+    )
+    item_review = client.post(
+        f"/api/v1/question-bank-items/{first_item['id']}/approval",
+        json={"approval_status": "DRAFT"},
+    )
+    claim_review = client.post(
+        f"/api/v1/claims/{second_claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    )
+    assert draft_review.status_code == 200
+    assert item_review.status_code == 200
+    assert claim_review.status_code == 200
+
+    source = _post(
+        client,
+        "/api/v1/sources",
+        {
+            "title": "Expanded package evidence",
+            "source_type": "official",
+            "authority_tier": 1,
+            "location": "https://example.gov/expanded-package",
+            "license_status": "UNKNOWN",
+        },
+    )
+    evidence = _post(
+        client,
+        "/api/v1/evidence",
+        {"source_id": source["id"], "content": "Expanded package evidence."},
+    )
+    verification = _post(
+        client,
+        "/api/v1/verifications",
+        {
+            "claim_id": first_claim_id,
+            "verdict": "SUPPORTED",
+            "confidence": 0.8,
+            "evidence": [
+                {
+                    "evidence_id": evidence["id"],
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    paper = _post(
+        client,
+        "/api/v1/previous-papers",
+        {
+            "exam_id": foundation["exam"]["id"],
+            "source_id": foundation["source"]["id"],
+            "year": 2023,
+            "label": "Expanded package paper",
+        },
+    )
+    previous_question = _post(
+        client,
+        "/api/v1/previous-questions",
+        {
+            "previous_paper_id": paper["id"],
+            "topic_id": topic_id,
+            "position": 0,
+            "question_text": "Expanded package history?",
+        },
+    )
+    priority = client.get(
+        "/api/v1/syllabus-versions/"
+        f"{foundation['syllabus']['id']}/topics/{topic_id}/priority"
+    )
+    assert verification["claim"]["id"] == first_claim_id
+    assert previous_question["previous_paper_id"] == paper["id"]
+    assert priority.status_code == 200
+    assert other_package["content_version_id"] == other_version_id
+
+    manifest = client.get(f"/api/v1/content-versions/{version_id}/released-assets")
+    released_drafts = client.get("/api/v1/note-drafts/released")
+    released_items = client.get("/api/v1/question-bank-items/released")
+    assert manifest.status_code == 200
+    assert [draft["id"] for draft in manifest.json()["note_drafts"]] == [
+        nonmember_draft["id"]
+    ]
+    assert [item["id"] for item in manifest.json()["question_bank_items"]] == [
+        nonmember_item["id"]
+    ]
+    assert released_drafts.status_code == 200
+    assert {draft["id"] for draft in released_drafts.json()} == {
+        nonmember_draft["id"],
+        other_draft["id"],
+    }
+    assert released_items.status_code == 200
+    assert {item["id"] for item in released_items.json()} == {
+        nonmember_item["id"],
+        other_item["id"],
+    }
+
+    package_response = client.get(f"/api/v1/content-packages/{package['id']}")
+    expected_drafts = [
+        client.get(f"/api/v1/note-drafts/{draft_id}").json()
+        for draft_id in (second_draft["id"], first_draft["id"])
+    ]
+    expected_items = [
+        client.get(f"/api/v1/question-bank-items/{item_id}").json()
+        for item_id in (second_item["id"], first_item["id"])
+    ]
+    counts_before = _content_snapshot_row_counts(db_connection)
+    selected_statements: list[str] = []
+
+    def record_selects(
+        connection,
+        cursor,
+        statement: str,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            selected_statements.append(statement)
+
+    event.listen(db_connection, "before_cursor_execute", record_selects)
+    try:
+        first_response = client.get(
+            f"/api/v1/content-packages/{package['id']}/content"
+        )
+        second_response = client.get(
+            f"/api/v1/content-packages/{package['id']}/content"
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_selects)
+
+    expected = {
+        "content_package": package_response.json(),
+        "note_drafts": expected_drafts,
+        "question_bank_items": expected_items,
+    }
+    assert package_response.status_code == 200
+    assert expected["content_package"]["note_draft_ids"] == [
+        draft["id"] for draft in expected_drafts
+    ]
+    assert expected["content_package"]["question_bank_item_ids"] == [
+        item["id"] for item in expected_items
+    ]
+    assert expected_drafts[0]["content_version_id"] == version_id
+    assert expected_drafts[0]["topic_id"] == topic_id
+    assert expected_drafts[0]["topic_name"] == foundation["topic"]["name"]
+    assert expected_drafts[0]["markdown"] == second_draft["markdown"]
+    assert expected_drafts[0]["claim_ids"] == [first_claim_id, second_claim_id]
+    assert expected_drafts[0]["created_at"] == second_draft["created_at"]
+    assert expected_drafts[0]["approval_status"] == "APPROVED"
+    assert expected_drafts[0]["approval_decided_at"] is not None
+    assert expected_drafts[0]["reviewer_note"] == "Package review"
+    assert expected_drafts[0]["release_status"] == "WITHDRAWN"
+    assert expected_drafts[0]["released_at"] is not None
+    assert expected_drafts[0]["withdrawn_at"] is not None
+    assert expected_drafts[0]["release_note"] == "Retained"
+    assert expected_items[1]["content_version_id"] == version_id
+    assert expected_items[1]["question_text"] == first_item["question_text"]
+    assert expected_items[1]["explanation"] == first_item["explanation"]
+    assert expected_items[1]["difficulty"] == first_item["difficulty"]
+    assert expected_items[1]["claim_ids"] == [second_claim_id, first_claim_id]
+    assert expected_items[1]["options"] == first_item["options"]
+    assert (
+        expected_items[1]["correct_option_position"]
+        == first_item["correct_option_position"]
+    )
+    assert expected_items[1]["created_at"] == first_item["created_at"]
+    assert expected_items[1]["approval_status"] == "DRAFT"
+    assert expected_items[1]["release_status"] == "WITHDRAWN"
+    assert expected_items[1]["release_note"] == "Retained"
+    assert expected_items[0]["approval_status"] == "APPROVED"
+    assert expected_items[0]["approval_decided_at"] is not None
+    assert expected_items[0]["reviewer_note"] == "Package review"
+    assert expected_items[0]["released_at"] is not None
+    assert expected_items[0]["withdrawn_at"] is not None
+    assert first_response.status_code == 200
+    assert first_response.json() == expected
+    assert second_response.status_code == 200
+    assert second_response.json() == expected
+    assert len(selected_statements) == 16
+    assert all("FOR UPDATE" not in statement.upper() for statement in selected_statements)
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+
+
+def test_get_content_package_content_rejects_unresolved_membership(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "content-integrity")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    _approved_claim(client, topic_id, "content-integrity")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    counts_before = _content_snapshot_row_counts(db_connection)
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "get_content_package_note_drafts",
+        lambda repository, content_package_id: [],
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=f"ContentPackage {package['id']} membership could not be resolved",
+    ):
+        client.get(f"/api/v1/content-packages/{package['id']}/content")
+
+    assert _content_snapshot_row_counts(db_connection) == counts_before

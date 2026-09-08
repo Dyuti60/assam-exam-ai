@@ -304,6 +304,12 @@ class ContentPackageResponse(BaseModel):
     question_bank_item_ids: list[int]
 
 
+class ContentPackageContentResponse(BaseModel):
+    content_package: ContentPackageResponse
+    note_drafts: list[NoteDraftResponse]
+    question_bank_items: list[QuestionBankItemResponse]
+
+
 class EvidenceCreate(BaseModel):
     source_id: int = Field(gt=0)
     content: str = Field(min_length=1)
