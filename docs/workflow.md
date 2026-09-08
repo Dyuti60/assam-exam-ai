@@ -1242,3 +1242,14 @@ flowchart LR
 - `uv run pytest tests/test_content_packages_api.py -q`: 13 passed, 1 warning in 5.78s. Required focused regressions passed: T-031 package creation 10, ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests, each with one existing warning.
 - `uv run pytest -q`: 201 passed, 1 warning in 32.75s. Changed-file Ruff passed. Fresh upgrade reached unchanged Alembic head `e2c6f8a1d943`; Alembic reported no new upgrade operations.
 - No model, schema, migration, dependency, configuration, environment, Docker, package list/mutation/lifecycle, publication, PDF/export, public/learner delivery, AI, mock assembly, personalization, or T-033 work was added.
+
+
+### T-032 post-push review
+
+- **APPROVED** at implementation commit `1a695d8a2335612ff4873df3a3c3bb51543d1591`, whose parent is the T-032 issuance head `94cb1894a40e1736f9af39a41a849d8858965601`.
+- The immutable commit adds only `GET /api/v1/content-packages/{content_package_id}` through one thin route and one read-only service method, reusing the existing repository retrieval query and shared `ContentPackageResponse` serializer.
+- Both membership lists come from persisted association rows in stored position order. Retrieval does not rebuild from current release state, sort by asset ID, load full asset bodies, or inspect Claim, Verification, priority, approval, or other package state.
+- Missing packages return the exact established 404. Later withdrawal, permitted review changes, and Claim changes do not alter or hide retained membership; the T-030 manifest remains the independent dynamic current-release view.
+- Repository eager loading uses a fixed three-query pattern and no row locks. The endpoint performs no writes, flushes, commits, transitions, regeneration, inference, or mutation.
+- Developer-recorded evidence is 13 ContentPackage tests and 201 full-suite tests, each with one existing warning, plus required focused regressions, successful Ruff, a fresh database upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No model, schema, repository, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, PDF/export, public/learner delivery, AI generation, mock assembly, personalization, or T-033 implementation was included.

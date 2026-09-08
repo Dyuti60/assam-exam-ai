@@ -934,3 +934,31 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | `uv run pytest tests/test_content_packages_api.py -q`: 13 passed, 1 warning in 5.78s. T-032-only selection: 3 passed, 10 deselected. T-031 creation selection: 10 passed, 3 deselected. Required focused regressions passed: released-assets manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests. `uv run pytest -q`: 201 passed, 1 warning in 32.75s. |
 | Validation | Changed-file Ruff passed. A fresh dedicated test database upgrade reached the unchanged single Alembic head `e2c6f8a1d943`; Alembic reported no new upgrade operations. Diff and whitespace checks passed. |
 | Notes | Retrieval uses the existing repository's fixed-query eager loading and shared stored package serializer. Membership IDs retain persisted association-position order even after withdrawal, review changes, or Claim changes; T-030 remains the separate dynamic current-release manifest. Missing packages retain the exact established 404. The endpoint performs no locks, writes, transitions, regeneration, or inference. No package list/mutation/lifecycle, publication, PDF/export, public/learner delivery, AI, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-033 work was added. |
+
+
+---
+
+## T-032 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-032` |
+| Implementation commit | `1a695d8a2335612ff4873df3a3c3bb51543d1591` |
+| Base/task-issuance commit | `94cb1894a40e1736f9af39a41a849d8858965601` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only retrieval of one retained ContentPackage identity and both immutable membership ID lists in persisted association-position order |
+| Validation evidence | Developer-recorded: 13 complete ContentPackage tests and 201 full-suite tests, each with one existing warning; required focused regressions; changed-file Ruff; fresh database upgrade; unchanged Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The immutable commit is exactly one commit over the issued base and changes only the expected route, service, focused tests, and documentation. It reuses fixed-query repository eager loading and the stored serializer, returns the stable missing-package 404, preserves membership after later state changes, and performs no locks or writes. |
+| Boundaries | No model, schema, repository, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, PDF/export, public/learner delivery, AI, mock assembly, personalization, or T-033 behavior was included. |
+
+---
+
+## T-033 issued — Add expanded ContentPackage content boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one read-only internal endpoint returning the retained ContentPackage identity plus full stored NoteDraft and QuestionBankItem snapshots in package-membership order |
+| Architectural phase | Canonical Content / Expanded Immutable Package Read Boundary |
+| Scope | Expanded stored content retrieval only; no membership rebuilding, package list/mutation/lifecycle, publication, rendering, PDF/export, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |
