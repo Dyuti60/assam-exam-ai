@@ -3738,3 +3738,5 @@ Do not self-approve.
 Do not implement T-032.
 
 Leave T-031 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-08 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/content-versions/{content_version_id}/content-packages`, ContentPackage identity and ordered membership models, and migration `e2c6f8a1d943`. Creation locks the exact ContentVersion and its currently RELEASED exact-version NoteDraft and QuestionBankItem rows, then atomically stores independently ordered zero-based membership links. Composite PostgreSQL constraints preserve same-version provenance and ordering; later withdrawal changes the dynamic T-030 manifest without rewriting package membership. No package retrieval/list, approval/release/publication lifecycle, PDF, export, public/learner delivery, AI, mock assembly, personalization, dependency, configuration, or infrastructure change was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`; T-031 remains ready for independent review.

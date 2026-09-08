@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models import (
     Claim,
+    ContentPackage,
     ContentVersion,
     Evidence,
     Exam,
@@ -111,6 +112,66 @@ class KnowledgeRepository:
 
     def get_content_version(self, content_version_id: int) -> ContentVersion | None:
         return self.session.get(ContentVersion, content_version_id)
+
+    def get_content_version_for_package_creation(
+        self,
+        content_version_id: int,
+    ) -> ContentVersion | None:
+        statement = (
+            select(ContentVersion)
+            .where(ContentVersion.id == content_version_id)
+            .with_for_update()
+        )
+        return self.session.scalar(statement)
+
+    def get_released_note_drafts_for_package(
+        self,
+        content_version_id: int,
+    ) -> list[NoteDraft]:
+        statement = (
+            select(NoteDraft)
+            .where(
+                NoteDraft.content_version_id == content_version_id,
+                NoteDraft.release_status == "RELEASED",
+            )
+            .order_by(NoteDraft.id)
+            .with_for_update()
+        )
+        return list(self.session.scalars(statement))
+
+    def get_released_question_bank_items_for_package(
+        self,
+        content_version_id: int,
+    ) -> list[QuestionBankItem]:
+        statement = (
+            select(QuestionBankItem)
+            .where(
+                QuestionBankItem.content_version_id == content_version_id,
+                QuestionBankItem.release_status == "RELEASED",
+            )
+            .order_by(QuestionBankItem.id)
+            .with_for_update()
+        )
+        return list(self.session.scalars(statement))
+
+    def add_content_package(
+        self,
+        content_package: ContentPackage,
+    ) -> ContentPackage:
+        self.session.add(content_package)
+        self.session.flush()
+        return content_package
+
+    def get_content_package(self, content_package_id: int) -> ContentPackage | None:
+        statement = (
+            select(ContentPackage)
+            .options(
+                selectinload(ContentPackage.note_draft_links),
+                selectinload(ContentPackage.question_bank_item_links),
+            )
+            .where(ContentPackage.id == content_package_id)
+        )
+        return self.session.scalar(statement)
 
     def get_released_question_bank_items_by_content_version(
         self,

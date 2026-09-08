@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -66,6 +67,11 @@ class QuestionBankItem(Base):
             name="fk_question_bank_items_correct_option",
             ondelete="RESTRICT",
             use_alter=True,
+        ),
+        UniqueConstraint(
+            "id",
+            "content_version_id",
+            name="uq_question_bank_items_id_content_version",
         ),
     )
 

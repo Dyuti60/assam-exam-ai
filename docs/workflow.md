@@ -1187,3 +1187,27 @@ flowchart LR
 - Stored ContentVersion, NoteDraft, and QuestionBankItem serializers are reused. Missing versions retain the established 404; existing versions may return two empty lists; requests perform no locks, writes, transitions, inference, regeneration, or current-state re-evaluation.
 - Developer-recorded evidence is 3 focused manifest tests, 12 ContentVersion tests, 2 released-NoteDraft tests, 2 released-QuestionBankItem tests, and 188 full-suite tests, each with one existing warning, plus successful Ruff, fresh database upgrade, Alembic-head/check, and diff checks. GitHub exposes no status contexts or workflow runs for either pushed commit, so no CI pass is claimed.
 - No model, migration, dependency, configuration, Docker, persisted package, publication transport, public/learner delivery, PDF, AI, personalization, or actual T-031 implementation was included.
+
+
+### T-031 Immutable ContentPackage membership snapshot
+
+```mermaid
+flowchart LR
+    REQUEST["POST /content-versions/{id}/content-packages"] --> LOCK["Lock ContentVersion"]
+    LOCK --> NOTES["Lock exact-version RELEASED NoteDrafts; order by ID"]
+    LOCK --> QUESTIONS["Lock exact-version RELEASED QuestionBankItems; order by ID"]
+    NOTES --> PACKAGE["Persist package + zero-based ordered links"]
+    QUESTIONS --> PACKAGE
+    PACKAGE --> COMMIT["One commit; stored membership response"]
+```
+
+- `ContentPackageResponse` returns the stored package ID, ContentVersion ID, creation time, and both membership ID lists in persisted position order.
+- Repository selection filters exact ContentVersion ownership plus RELEASED state in PostgreSQL, orders each asset type by ID, and uses row locks together with the locked ContentVersion during creation.
+- The service rejects a missing ContentVersion with the established 404 and rejects two empty eligible collections with `ContentVersion <id> has no released assets to package`; both paths create no package or links.
+- PostgreSQL composite foreign keys bind every package link and asset to the same ContentVersion. Per-type primary keys, unique package positions, and non-negative position checks reject duplicate membership and invalid ordering; referenced assets and the ContentVersion are deletion-restricted while package membership exists.
+- Package creation stores membership IDs and positions only. Later withdrawal changes the dynamic T-030 manifest but does not alter the retained package membership.
+- `uv run pytest tests/test_content_packages_api.py -q`: 10 passed, 1 warning in 2.74s.
+- Required focused regressions passed: ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests, each with one existing warning.
+- `uv run pytest -q`: 198 passed, 1 warning in 13.20s.
+- Fresh upgrade, seeded pre-T-031 upgrade, representative package inspection, downgrade to `d9e5b2a7c418`, and re-upgrade to `e2c6f8a1d943` passed; pre-existing rows remained intact and neither upgrade inferred a package.
+- ContentPackage has no retrieval/list route, mutable metadata, approval, release, publication, PDF, export, public/learner delivery, AI generation, mock assembly, or personalization.

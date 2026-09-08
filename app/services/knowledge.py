@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Claim,
+    ContentPackage,
+    ContentPackageNoteDraft,
+    ContentPackageQuestionBankItem,
     ContentVersion,
     Evidence,
     Exam,
@@ -28,6 +31,7 @@ from app.schemas.knowledge import (
     ClaimApprovalStatus,
     ClaimCreate,
     ClaimResponse,
+    ContentPackageResponse,
     ContentVersionCreate,
     ContentVersionReleasedAssetsResponse,
     ContentVersionResponse,
@@ -316,6 +320,56 @@ class KnowledgeService:
                 )
             ],
         )
+
+    def create_content_package(
+        self,
+        content_version_id: int,
+    ) -> ContentPackageResponse:
+        content_version = self.repository.get_content_version_for_package_creation(
+            content_version_id
+        )
+        if content_version is None:
+            raise ResourceNotFoundError("ContentVersion", content_version_id)
+
+        note_drafts = self.repository.get_released_note_drafts_for_package(
+            content_version_id
+        )
+        question_bank_items = (
+            self.repository.get_released_question_bank_items_for_package(
+                content_version_id
+            )
+        )
+        if not note_drafts and not question_bank_items:
+            raise ResourceConflictError(
+                f"ContentVersion {content_version_id} has no released assets to package"
+            )
+
+        content_package = ContentPackage(
+            content_version_id=content_version_id,
+            note_draft_links=[
+                ContentPackageNoteDraft(
+                    content_version_id=content_version_id,
+                    note_draft_id=note_draft.id,
+                    position=position,
+                )
+                for position, note_draft in enumerate(note_drafts)
+            ],
+            question_bank_item_links=[
+                ContentPackageQuestionBankItem(
+                    content_version_id=content_version_id,
+                    question_bank_item_id=question_bank_item.id,
+                    position=position,
+                )
+                for position, question_bank_item in enumerate(question_bank_items)
+            ],
+        )
+        self._commit_content_package(content_package)
+        stored_package = self.repository.get_content_package(content_package.id)
+        if stored_package is None:
+            raise RuntimeError(
+                f"ContentPackage {content_package.id} missing after successful commit"
+            )
+        return self._content_package_response(stored_package)
 
     def create_question_bank_item(
         self,
@@ -820,6 +874,14 @@ class KnowledgeService:
             self.session.rollback()
             raise
 
+    def _commit_content_package(self, content_package: ContentPackage) -> None:
+        try:
+            self.repository.add_content_package(content_package)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
     def _commit_question_bank_item(
         self,
         question_bank_item: QuestionBankItem,
@@ -834,6 +896,23 @@ class KnowledgeService:
         except Exception:
             self.session.rollback()
             raise
+
+    @staticmethod
+    def _content_package_response(
+        content_package: ContentPackage,
+    ) -> ContentPackageResponse:
+        return ContentPackageResponse(
+            id=content_package.id,
+            content_version_id=content_package.content_version_id,
+            created_at=content_package.created_at,
+            note_draft_ids=[
+                link.note_draft_id for link in content_package.note_draft_links
+            ],
+            question_bank_item_ids=[
+                link.question_bank_item_id
+                for link in content_package.question_bank_item_links
+            ],
+        )
 
     @staticmethod
     def _render_note_markdown(topic_name: str, claims: list[Claim]) -> str:

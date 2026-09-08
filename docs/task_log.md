@@ -877,3 +877,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Immutable Package Snapshot |
 | Scope | Package identity and ordered same-ContentVersion membership only; no package publication/release lifecycle, retrieval collection, PDF, export, download, public/learner delivery, AI generation, or personalization |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-031 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only atomic creation of an immutable internal ContentPackage membership snapshot for the currently RELEASED NoteDrafts and QuestionBankItems owned by one exact ContentVersion |
+| Migration | `e2c6f8a1d943` follows `d9e5b2a7c418`; it adds ContentPackage identity, two ordered membership tables, and only the composite-foreign-key support constraints |
+| Tests | `uv run pytest tests/test_content_packages_api.py -q`: 10 passed, 1 warning in 2.74s. Focused regressions: released-assets manifest 3 passed, ContentVersion 12 passed, NoteDraft 41 passed, released NoteDraft 2 passed, QuestionBankItem 52 passed, and released QuestionBankItem 2 passed. `uv run pytest -q`: 198 passed, 1 warning in 13.20s. |
+| Migration validation | Fresh upgrade reached `e2c6f8a1d943`. A seeded database at `d9e5b2a7c418` preserved two NoteDrafts, two QuestionBankItems, and their Claim links through upgrade/downgrade/re-upgrade; no package was inferred. A representative package stored one released asset of each type in position 0 before downgrade. |
+| Notes | The endpoint locks the exact ContentVersion and eligible exact-version RELEASED assets, stores independently ordered zero-based membership links, and commits once. Composite PostgreSQL constraints reject cross-version links, duplicates, invalid positions, and deletion of referenced assets/version. Later withdrawal does not rewrite membership; T-030 remains the dynamic current-release manifest. No retrieval/list, package lifecycle, publication, PDF, delivery, AI, personalization, dependency, configuration, Docker, AGENTS, README, or T-032 work was added. |

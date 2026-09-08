@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -52,6 +53,11 @@ class NoteDraft(Base):
             ["content_versions.id", "content_versions.topic_id"],
             name="fk_note_drafts_content_version_topic",
             ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "id",
+            "content_version_id",
+            name="uq_note_drafts_id_content_version",
         ),
     )
 

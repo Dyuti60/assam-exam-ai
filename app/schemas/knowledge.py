@@ -296,6 +296,14 @@ class ContentVersionReleasedAssetsResponse(BaseModel):
     question_bank_items: list[QuestionBankItemResponse]
 
 
+class ContentPackageResponse(BaseModel):
+    id: int
+    content_version_id: int
+    created_at: datetime
+    note_draft_ids: list[int]
+    question_bank_item_ids: list[int]
+
+
 class EvidenceCreate(BaseModel):
     source_id: int = Field(gt=0)
     content: str = Field(min_length=1)
