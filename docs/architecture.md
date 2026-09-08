@@ -30,7 +30,7 @@ The Content Factory is being built incrementally. The Learning Engine, user prof
 
 ## Current confirmed implementation
 
-This section describes only the repository inspected on 2026-09-07 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
+This section describes only the repository inspected on 2026-09-08 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
 
 | Area | Confirmed state |
 | --- | --- |
@@ -40,10 +40,10 @@ This section describes only the repository inspected on 2026-09-07 in Asia/Kolka
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; fifteen migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, versioned NoteDraft ownership, complete internal MCQ candidates, and independent review and controlled release for candidates and drafts |
-| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, ordered `QuestionBankOption` records, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, and ordered provenance associations |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; sixteen migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, versioned NoteDraft ownership, complete internal MCQ candidates, independent review and controlled release for candidates and drafts, and immutable ContentPackage identity with ordered membership snapshots |
+| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, ordered `QuestionBankOption` records, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, `ContentPackage`, `ContentPackageNoteDraft`, `ContentPackageQuestionBankItem`, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | One hundred eighty-eight tests cover the foundation, ContentVersion ownership and complete internal MCQ-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, independent approval/release boundaries, version-scoped released-asset manifests, stored snapshots, and failure atomicity |
+| Tests | One hundred ninety-eight tests cover the foundation, ContentVersion ownership and complete internal MCQ-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, independent approval/release boundaries, version-scoped released-asset manifests, T-031 package creation with ordered immutable membership and exact ContentVersion agreement, PostgreSQL constraints, stored snapshots, and transactional failure atomicity |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
