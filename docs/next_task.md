@@ -4527,3 +4527,206 @@ Do not implement T-034.
 Leave T-033 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-08 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-packages/{content_package_id}/content` through a composite response schema, thin route, read-only service assembly, and exact-package membership joins. It expands precisely the retained, position-ordered membership IDs into existing stored NoteDraft and QuestionBankItem responses, verifies complete resolution, and preserves nested Claim/option ordering. Withdrawal or later review/Claim changes do not hide members; T-030 remains the separate dynamic current-release manifest. The endpoint performs no locks, writes, transitions, copying, regeneration, inference, or current-state eligibility evaluation. No model, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-034 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## T-033 independent review outcome
+
+T-033 is **APPROVED** at implementation commit `673b4ae62c4d2dd102986f3144ed8e30dea9116f`, whose parent is the T-033 task-issuance commit `23539a56f397202480e76aee42a0ade99424ddce`.
+
+The immutable T-033 diff adds only `GET /api/v1/content-packages/{content_package_id}/content` through the expected route, composite response schema, service, repository queries, focused tests, and documentation. It expands precisely the package's two retained, position-ordered membership lists into the existing stored NoteDraft and QuestionBankItem response shapes. The repository joins through each association table, filters by exact package ID, orders by association position, and eagerly loads required nested relationships. The service rejects incomplete resolution internally instead of silently omitting or rebuilding members.
+
+Later withdrawal, permitted post-withdrawal review changes, and Claim decisions do not alter the retained package view; T-030 remains the independent dynamic current-release manifest. The endpoint performs no locks, writes, flushes, commits, transitions, copying, regeneration, inference, repair, or current-state eligibility evaluation.
+
+Developer-recorded validation reported 4 focused T-033 tests, 17 complete ContentPackage tests, and 205 full-suite tests, each with one existing warning, plus the required focused regressions, successful Ruff, a fresh database upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
+
+No blocking finding remains. No model, relationship, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-034 implementation was included.
+
+---
+
+# T-034 — Add independent ContentPackage human-review lifecycle
+
+## Role
+
+You are the implementation engineer for `Dyuti60/assam-exam-ai`.
+
+Implement only T-034. Follow `AGENTS.md`, the live approved architecture, and the established route → schema → service → repository → PostgreSQL layering.
+
+Before editing:
+
+1. fetch `origin` and fast-forward local `main`;
+2. record `git rev-parse HEAD` and confirm it equals `origin/main`;
+3. confirm the working tree is clean;
+4. confirm approved T-033 commit `673b4ae62c4d2dd102986f3144ed8e30dea9116f` and the documentation commit that issued this task exist in history;
+5. read the complete live repository and this prompt.
+
+If branch, history, synchronization, or working tree is unexpected, stop without changing files. The live repository is authoritative.
+
+## Current context and bounded goal
+
+The approved system has exact ContentVersion identity; version-owned NoteDraft and QuestionBankItem snapshots with independent review and release; dynamic released-asset reads; immutable ContentPackage identities and ordered memberships; package creation; ID-only package retrieval; and exact-member expanded-content retrieval.
+
+Add only an independent human-review lifecycle to ContentPackage itself:
+
+- `DRAFT`
+- `APPROVED`
+- `REJECTED`
+
+Every existing and new package begins DRAFT with no decision timestamp or reviewer note.
+
+Add exactly one endpoint:
+
+`POST /api/v1/content-packages/{content_package_id}/approval`
+
+It records or resets only the target package's review decision. It must not inspect or change members, membership, Claims, Verification, priority, the T-030 manifest, or another package. Approval is not release, publication, rendering, export, download, or learner delivery.
+
+## API contract
+
+Add `ContentPackageApprovalCreate`:
+
+- `approval_status`: DRAFT, APPROVED, or REJECTED only;
+- `reviewer_note`: optional string or null.
+
+Extend the existing `ContentPackageResponse` with stored:
+
+- `approval_status`;
+- `approval_decided_at`;
+- `reviewer_note`.
+
+Return those fields consistently from package creation, ID-only retrieval, the nested package object in expanded-content retrieval, and the new approval endpoint. Do not duplicate package response schemas.
+
+Semantics:
+
+- APPROVED and REJECTED record the requested state, current UTC decision timestamp, and optional note;
+- DRAFT clears decision timestamp and reviewer note;
+- decisions never change package identity, ContentVersion, creation time, membership IDs, association positions, or any member;
+- missing package returns HTTP 404 with `{"detail": "ContentPackage <id> not found"}`;
+- invalid or missing decisions return normal HTTP 422;
+- add no unrelated 404/409 behavior;
+- rollback and re-raise generic database exceptions rather than translating them to domain conflicts.
+
+## Persistence and migration
+
+Extend `ContentPackage` with exactly:
+
+- `approval_status`: non-null string, default DRAFT;
+- `approval_decided_at`: nullable timezone-aware timestamp;
+- `reviewer_note`: nullable text.
+
+PostgreSQL and model metadata must enforce:
+
+1. status is exactly DRAFT, APPROVED, or REJECTED;
+2. DRAFT has null decision timestamp and null reviewer note;
+3. APPROVED/REJECTED have a non-null decision timestamp, with optional reviewer note.
+
+Create exactly one Alembic revision whose parent is `e2c6f8a1d943`. It adds only these fields and constraints, migrates all existing packages to DRAFT/null without inference, preserves all packages, memberships, ordering, assets, ContentVersions, timestamps, and provenance, and edits no historical migration. Keep defaults aligned with model metadata and `alembic check`.
+
+Downgrade drops only T-034 constraints and fields, leaving every pre-T-034 object and row intact.
+
+Validate a seeded cycle:
+
+`e2c6f8a1d943 → T-034 head → e2c6f8a1d943 → T-034 head`.
+
+Prove seeded packages and both membership types retain IDs, ContentVersion, creation time, member IDs, and positions; every upgrade produces DRAFT/null review state with no inference.
+
+Do not add reviewer identity, decision history, audit tables, package release/publication fields, labels, names, version numbers, files, checksums, or user ownership.
+
+## Repository, service, locking, and atomicity
+
+Approval must:
+
+- load only the target ContentPackage with `SELECT ... FOR UPDATE`;
+- not lock or rewrite members or memberships;
+- update only the three review fields;
+- commit exactly once on success;
+- roll back the session on persistence failure;
+- freshly retrieve and return the stored package response;
+- preserve both membership lists in association-position order.
+
+Ordinary package retrieval and expanded-content retrieval remain lock-free and read-only.
+
+Package review is independent of member approval/release, later member withdrawal/review changes, Claim/Verification/priority state, T-030 results, other ContentVersions, and other packages.
+
+## Required tests
+
+Add PostgreSQL-backed tests proving:
+
+- new and migrated packages default to DRAFT with null timestamp/note and no inferred approval;
+- creation, ID-only retrieval, expanded-content retrieval, and decision responses expose the same stored review metadata;
+- APPROVED and REJECTED record exact UTC-offset timestamps and optional notes;
+- DRAFT reset clears timestamp and note;
+- repeated valid decisions preserve identity, ContentVersion, creation time, membership IDs, and positions;
+- review changes no package membership, asset, Claim, Verification, or related row counts;
+- member withdrawal and permitted member review changes do not block package decisions;
+- unrelated state cannot substitute for or alter the target package's decision;
+- missing package returns the exact 404 without mutation;
+- missing/invalid/unsupported decisions return 422;
+- PostgreSQL rejects invalid status, DRAFT with timestamp or note, and APPROVED/REJECTED without timestamp;
+- injected persistence failure rolls back and leaves the package unchanged;
+- approval SQL contains FOR UPDATE on the package row;
+- normal retrieval and expanded-content SQL contain no FOR UPDATE;
+- T-030 through T-033 and all existing member approval/release/read behavior remain compatible.
+
+Do not weaken, delete, reorder, or silently skip existing tests.
+
+## Required validation
+
+Use a dedicated PostgreSQL database ending in `_test`. Run and report exact results for:
+
+- focused T-034 and complete ContentPackage tests;
+- T-030 released-assets, ContentVersion, NoteDraft, released-NoteDraft, QuestionBankItem, and released-QuestionBankItem suites;
+- the full suite;
+- Ruff on every changed Python file;
+- `uv run alembic heads` and `uv run alembic check`;
+- fresh upgrade through the new head;
+- seeded upgrade/downgrade/re-upgrade;
+- direct PostgreSQL constraint probes;
+- `git diff --check`, whitespace checks for untracked files, and `git status --short`.
+
+Confirm one Alembic head whose parent is `e2c6f8a1d943`, no schema drift, no historical migration edits, and no dependency/configuration/environment/Docker/API-key/infrastructure change.
+
+## Affected components
+
+Update only where required:
+
+- `app/models/content_package.py`;
+- model registration only if the existing import structure requires it;
+- `app/schemas/knowledge.py`;
+- `app/repositories/knowledge.py`;
+- `app/services/knowledge.py`;
+- `app/api/v1/routes/knowledge.py`;
+- exactly one new Alembic migration;
+- focused ContentPackage tests;
+- `docs/architecture.md` and `docs/workflow.md`;
+- append-only `docs/task_log.md` and `docs/next_task.md`.
+
+Inspect but otherwise leave unchanged: membership models/relationships; all other domain models and historical migrations; all existing approval/release endpoints; T-030 through T-033 behavior; `pyproject.toml`; `uv.lock`; `.env.example`; `app/core/config.py`; `docker-compose.yml`; `AGENTS.md`; and `README.md`.
+
+## Documentation requirements
+
+Document only implemented behavior. Keep task log and next-task history append-only. Add a T-034 implementation record with status `Ready for review` and an implementation note below this prompt.
+
+State clearly that package review is independent of member review/release, cannot alter immutable membership, uses DRAFT-reset semantics, and is not release/publication/rendering/export/delivery. No approved-package or released-package collection exists.
+
+Do not mark T-034 approved. Do not define or implement T-035.
+
+## Dependency and scope gate
+
+T-034 requires no API key, external service, dependency, secret, environment variable, configuration, Docker service, storage backend, or infrastructure change. If any appears necessary, stop and report why.
+
+Do not add package lists; package release/withdrawal/publication/delivery; mutation, reorder, rebuild, clone, deletion, or backfill; rendered documents, HTML, PDF, export, download, files, object storage, CDN, or email; public/learner endpoints; users/auth/reviewer identity/history; learner sessions, scoring, analytics, recommendations, mocks, or personalization; AI/LLM providers, keys, prompts, generation, source discovery, ingestion, RAG, embeddings, vectors, or scraping; automatic version inference; content copying/regeneration; new member transitions; PreviousQuestion conversion; predictions; dependencies; configuration; Docker services; payments; or unrelated infrastructure.
+
+Preserve trust, provenance, explicit human review, controlled member release, exact ContentVersion ownership, immutable ordered package membership, and Generate Once/Personalize Later.
+
+## Final report
+
+Report exact starting HEAD; changed/created files; migration revision/parent; model constraints; request/response contracts; decision/reset/errors; locking/transaction/rollback; immutable ordering; state independence; compatibility; focused/full tests; fresh and seeded migration results; PostgreSQL probes; Alembic/Ruff/diff results; dependency/config/Docker inspection; retained boundaries; final status; and explicit confirmation of no commit, push, PR, self-approval, T-035, package release/list/mutation, publication, rendering, PDF/export, delivery, AI, source discovery, mock assembly, or personalization.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-035.
+
+Leave T-034 uncommitted and unpushed in the working tree for independent review.

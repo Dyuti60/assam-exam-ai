@@ -1275,3 +1275,14 @@ flowchart LR
 - Required focused regressions passed: ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests, each with one existing warning. `uv run pytest -q`: 205 passed, 1 warning in 14.33s.
 - Fresh dedicated-database upgrade reached unchanged Alembic head `e2c6f8a1d943`. Changed-file Ruff passed; Alembic reported one head and no new upgrade operations.
 - No model, relationship, migration, dependency, configuration, environment, Docker, package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-034 work was added.
+
+
+### T-033 post-push review
+
+- **APPROVED** at implementation commit `673b4ae62c4d2dd102986f3144ed8e30dea9116f`, whose parent is the T-033 issuance head `23539a56f397202480e76aee42a0ade99424ddce`.
+- The immutable commit adds only `GET /api/v1/content-packages/{content_package_id}/content` through the expected route, composite schema, service, repository queries, focused tests, and documentation.
+- Each asset query joins through the appropriate retained membership table, filters by exact package ID, orders by stored association position, and eagerly loads the nested relationships required by the existing snapshot serializers.
+- The service verifies that resolved IDs exactly match both stored membership lists. Withdrawn and later review-changed assets remain present, while the T-030 manifest remains the separate dynamic current-release view.
+- The endpoint is read-only: no row locks, writes, flushes, commits, transitions, regeneration, copying, inference, repair, or current-state eligibility evaluation were added.
+- Developer-recorded evidence is 4 focused T-033 tests, 17 complete ContentPackage tests, and 205 full-suite tests, each with one existing warning, plus required focused regressions, successful Ruff, a fresh database upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
+- No model, relationship, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-034 implementation was included.

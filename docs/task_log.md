@@ -976,3 +976,31 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-033 selection: 4 passed, 13 deselected, 1 warning in 2.52s. Complete ContentPackage suite: 17 passed, 1 warning in 4.72s. Required focused regressions passed: released-assets manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests. Full suite: 205 passed, 1 warning in 14.33s. |
 | Validation | Changed-file Ruff passed. A fresh dedicated `_test` database upgrade reached the unchanged single Alembic head `e2c6f8a1d943`; Alembic reported no new upgrade operations. Diff and whitespace checks passed. |
 | Notes | PostgreSQL joins select exact package members and order them by persisted association positions. The service verifies resolved IDs against retained membership and reuses existing serializers. Withdrawn and post-withdrawal review-changed members remain visible; T-030 remains the separate dynamic current-release view. Reads use fixed-query eager loading and perform no locks, writes, transitions, regeneration, copying, or current-state re-evaluation. No package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-034 work was added. |
+
+
+---
+
+## T-033 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-033` |
+| Implementation commit | `673b4ae62c4d2dd102986f3144ed8e30dea9116f` |
+| Base/task-issuance commit | `23539a56f397202480e76aee42a0ade99424ddce` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only expansion of one retained ContentPackage into exactly its position-ordered stored NoteDraft and QuestionBankItem member snapshots |
+| Validation evidence | Developer-recorded: 4 focused T-033 tests, 17 complete ContentPackage tests, and 205 full-suite tests, each with one existing warning; required focused regressions; changed-file Ruff; fresh database upgrade; unchanged Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base and changes only the expected route, schema, repository, service, focused tests, and documentation. Exact membership joins, stored-position ordering, complete-resolution checks, eager loading, retained-snapshot semantics, stable 404 behavior, and read-only execution match the task. |
+| Boundaries | No model, relationship, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-034 behavior was included. |
+
+---
+
+## T-034 issued — Add independent ContentPackage human-review lifecycle
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add an explicit DRAFT/APPROVED/REJECTED human-review decision on ContentPackage itself while preserving immutable membership and keeping package release separate |
+| Architectural phase | Canonical Content / Independent Package Review |
+| Scope | Package review fields, constraints, migration, and one decision endpoint only; no package release, publication, rendering, PDF/export, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |
