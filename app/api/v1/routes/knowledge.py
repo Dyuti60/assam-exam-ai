@@ -163,6 +163,20 @@ def create_content_package(
         raise _conflict(error) from error
 
 
+@router.get(
+    "/content-packages/{content_package_id}",
+    response_model=ContentPackageResponse,
+)
+def get_content_package(
+    content_package_id: int,
+    db: DatabaseSession,
+) -> ContentPackageResponse:
+    try:
+        return KnowledgeService(db).get_content_package(content_package_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
 @router.post(
     "/question-bank-items",
     response_model=QuestionBankItemResponse,

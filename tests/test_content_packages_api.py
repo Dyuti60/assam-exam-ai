@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, event, func, insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -687,3 +687,272 @@ def test_package_membership_restricts_referenced_deletions(
         delete(ContentPackage).where(ContentPackage.id == package["id"])
     )
     assert _row_counts(db_connection) == (0, 0, 0)
+
+
+def test_get_content_package_missing_is_stable_and_read_only(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    counts_before = _row_counts(db_connection)
+
+    response = client.get("/api/v1/content-packages/999999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "ContentPackage 999999 not found"}
+    assert _row_counts(db_connection) == counts_before
+
+
+def test_get_content_package_preserves_single_type_empty_lists(
+    client: TestClient,
+) -> None:
+    note_foundation = _foundation(client, "retrieve-notes")
+    note_version_id = note_foundation["first_version"]["id"]
+    note_topic_id = note_foundation["topic"]["id"]
+    _approved_claim(client, note_topic_id, "retrieve-notes")
+    draft = _create_draft(client, note_topic_id, note_version_id)
+    _approve_and_release_draft(client, draft["id"])
+    note_package = _create_package(client, note_version_id)
+
+    item_foundation = _foundation(client, "retrieve-items")
+    item_version_id = item_foundation["first_version"]["id"]
+    item_topic_id = item_foundation["topic"]["id"]
+    claim_id = _approved_claim(client, item_topic_id, "retrieve-items")
+    item = _create_item(client, item_version_id, [claim_id], "retrieve-items")
+    _approve_and_release_item(client, item["id"])
+    item_package = _create_package(client, item_version_id)
+
+    note_response = client.get(
+        f"/api/v1/content-packages/{note_package['id']}"
+    )
+    item_response = client.get(
+        f"/api/v1/content-packages/{item_package['id']}"
+    )
+
+    assert note_response.status_code == 200
+    assert note_response.json() == note_package
+    assert note_response.json()["note_draft_ids"] == [draft["id"]]
+    assert note_response.json()["question_bank_item_ids"] == []
+    assert item_response.status_code == 200
+    assert item_response.json() == item_package
+    assert item_response.json()["note_draft_ids"] == []
+    assert item_response.json()["question_bank_item_ids"] == [item["id"]]
+
+
+def test_get_content_package_uses_stored_positions_and_retains_snapshot(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "retrieve-snapshot")
+    version_id = foundation["first_version"]["id"]
+    other_version_id = foundation["second_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    first_claim_id = _approved_claim(client, topic_id, "retrieve-first")
+    second_claim_id = _approved_claim(client, topic_id, "retrieve-second")
+
+    first_draft = _create_draft(client, topic_id, version_id)
+    second_draft = _create_draft(client, topic_id, version_id)
+    other_draft = _create_draft(client, topic_id, other_version_id)
+    for draft in (first_draft, second_draft, other_draft):
+        _approve_and_release_draft(client, draft["id"])
+
+    first_item = _create_item(
+        client,
+        version_id,
+        [second_claim_id, first_claim_id],
+        "retrieve-first",
+    )
+    second_item = _create_item(
+        client,
+        version_id,
+        [first_claim_id],
+        "retrieve-second",
+    )
+    other_item = _create_item(
+        client,
+        other_version_id,
+        [first_claim_id],
+        "retrieve-other",
+    )
+    for item in (first_item, second_item, other_item):
+        _approve_and_release_item(client, item["id"])
+
+    package = _create_package(client, version_id)
+    other_package = _create_package(client, other_version_id)
+
+    for model, first_id, second_id, id_column in (
+        (
+            ContentPackageNoteDraft,
+            first_draft["id"],
+            second_draft["id"],
+            ContentPackageNoteDraft.note_draft_id,
+        ),
+        (
+            ContentPackageQuestionBankItem,
+            first_item["id"],
+            second_item["id"],
+            ContentPackageQuestionBankItem.question_bank_item_id,
+        ),
+    ):
+        package_filter = model.content_package_id == package["id"]
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == first_id)
+            .values(position=2)
+        )
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == second_id)
+            .values(position=0)
+        )
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == first_id)
+            .values(position=1)
+        )
+
+    for resource, resource_id in (
+        ("note-drafts", first_draft["id"]),
+        ("note-drafts", second_draft["id"]),
+        ("question-bank-items", first_item["id"]),
+        ("question-bank-items", second_item["id"]),
+    ):
+        withdrawal = client.post(
+            f"/api/v1/{resource}/{resource_id}/release",
+            json={"release_status": "WITHDRAWN", "release_note": "Retained"},
+        )
+        assert withdrawal.status_code == 200
+
+    draft_review = client.post(
+        f"/api/v1/note-drafts/{first_draft['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "After withdrawal"},
+    )
+    item_review = client.post(
+        f"/api/v1/question-bank-items/{first_item['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "After withdrawal"},
+    )
+    claim_review = client.post(
+        f"/api/v1/claims/{second_claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    )
+    assert draft_review.status_code == 200
+    assert item_review.status_code == 200
+    assert claim_review.status_code == 200
+
+    source = _post(
+        client,
+        "/api/v1/sources",
+        {
+            "title": "Retrieval unrelated evidence",
+            "source_type": "official",
+            "authority_tier": 1,
+            "location": "https://example.gov/retrieval-evidence",
+            "license_status": "UNKNOWN",
+        },
+    )
+    evidence = _post(
+        client,
+        "/api/v1/evidence",
+        {"source_id": source["id"], "content": "Unrelated evidence."},
+    )
+    verification = _post(
+        client,
+        "/api/v1/verifications",
+        {
+            "claim_id": first_claim_id,
+            "verdict": "SUPPORTED",
+            "confidence": 0.8,
+            "evidence": [
+                {
+                    "evidence_id": evidence["id"],
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    paper = _post(
+        client,
+        "/api/v1/previous-papers",
+        {
+            "exam_id": foundation["exam"]["id"],
+            "source_id": foundation["source"]["id"],
+            "year": 2024,
+            "label": "Retrieval paper",
+        },
+    )
+    previous_question = _post(
+        client,
+        "/api/v1/previous-questions",
+        {
+            "previous_paper_id": paper["id"],
+            "topic_id": topic_id,
+            "position": 0,
+            "question_text": "Unrelated historical question?",
+        },
+    )
+    priority = client.get(
+        "/api/v1/syllabus-versions/"
+        f"{foundation['syllabus']['id']}/topics/{topic_id}/priority"
+    )
+    assert verification["claim"]["id"] == first_claim_id
+    assert previous_question["previous_paper_id"] == paper["id"]
+    assert priority.status_code == 200
+    assert other_package["content_version_id"] == other_version_id
+
+    manifest = client.get(f"/api/v1/content-versions/{version_id}/released-assets")
+    assert manifest.status_code == 200
+    assert manifest.json()["note_drafts"] == []
+    assert manifest.json()["question_bank_items"] == []
+    released_drafts = client.get("/api/v1/note-drafts/released")
+    released_items = client.get("/api/v1/question-bank-items/released")
+    assert released_drafts.status_code == 200
+    assert [draft["id"] for draft in released_drafts.json()] == [other_draft["id"]]
+    assert released_items.status_code == 200
+    assert [item["id"] for item in released_items.json()] == [other_item["id"]]
+
+    counts_before = _row_counts(db_connection)
+    package_row_before = db_connection.execute(
+        select(ContentPackage).where(ContentPackage.id == package["id"])
+    ).first()
+    selected_statements: list[str] = []
+
+    def record_selects(
+        connection,
+        cursor,
+        statement: str,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            selected_statements.append(statement)
+
+    event.listen(db_connection, "before_cursor_execute", record_selects)
+    try:
+        first_response = client.get(f"/api/v1/content-packages/{package['id']}")
+        second_response = client.get(f"/api/v1/content-packages/{package['id']}")
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_selects)
+
+    expected = {
+        "id": package["id"],
+        "content_version_id": version_id,
+        "created_at": package["created_at"],
+        "note_draft_ids": [second_draft["id"], first_draft["id"]],
+        "question_bank_item_ids": [second_item["id"], first_item["id"]],
+    }
+    assert package_row_before.id == expected["id"]
+    assert package_row_before.content_version_id == expected["content_version_id"]
+    assert package_row_before.created_at == datetime.fromisoformat(
+        expected["created_at"]
+    )
+    assert first_response.status_code == 200
+    assert first_response.json() == expected
+    assert second_response.status_code == 200
+    assert second_response.json() == expected
+    assert len(selected_statements) == 6
+    assert all("FOR UPDATE" not in statement.upper() for statement in selected_statements)
+    assert _row_counts(db_connection) == counts_before
+    assert db_connection.execute(
+        select(ContentPackage).where(ContentPackage.id == package["id"])
+    ).first() == package_row_before

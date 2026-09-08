@@ -1223,3 +1223,22 @@ flowchart LR
 - Later withdrawal changes the dynamic T-030 released-assets manifest but does not rewrite the retained package membership snapshot.
 - Developer-recorded evidence is 10 focused ContentPackage tests and 198 full-suite tests, each with one existing warning, plus focused regressions, successful Ruff, fresh/seeded upgrade, downgrade/re-upgrade, PostgreSQL constraint probes, Alembic-head/check, and diff checks. GitHub exposes no status contexts or workflow runs for either pushed commit, so no CI pass is claimed.
 - No package retrieval/list, mutable package state, publication, PDF/export, public/learner delivery, AI generation, mock assembly, personalization, dependency, configuration, Docker, or T-032 implementation was included.
+
+
+### T-032 Individual ContentPackage retrieval boundary
+
+```mermaid
+flowchart LR
+    REQUEST["GET /content-packages/{id}"] --> QUERY["Load exact ContentPackage"]
+    QUERY --> EAGER["Select-in load both ordered membership-link collections"]
+    EAGER --> SERIALIZE["Reuse stored ContentPackageResponse serializer"]
+    SERIALIZE --> RESPONSE["200 retained ID lists; 404 when missing"]
+```
+
+- The thin route delegates through the service and existing repository retrieval method; a missing package returns `ContentPackage <id> not found`.
+- Both membership lists come from persisted association rows in stored position order. Retrieval does not sort by asset ID, inspect current approval or release state, or rebuild membership from the dynamic T-030 manifest.
+- The repository eagerly loads both link collections with a fixed three-query strategy. The service reuses the T-031 package serializer and performs no locks, writes, flushes, commits, transitions, regeneration, or inference.
+- Later asset withdrawal, permitted post-withdrawal review changes, and Claim approval changes do not alter retained membership. T-030 continues to reflect current RELEASED assets independently.
+- `uv run pytest tests/test_content_packages_api.py -q`: 13 passed, 1 warning in 5.78s. Required focused regressions passed: T-031 package creation 10, ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests, each with one existing warning.
+- `uv run pytest -q`: 201 passed, 1 warning in 32.75s. Changed-file Ruff passed. Fresh upgrade reached unchanged Alembic head `e2c6f8a1d943`; Alembic reported no new upgrade operations.
+- No model, schema, migration, dependency, configuration, environment, Docker, package list/mutation/lifecycle, publication, PDF/export, public/learner delivery, AI, mock assembly, personalization, or T-033 work was added.

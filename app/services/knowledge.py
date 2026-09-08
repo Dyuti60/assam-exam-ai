@@ -371,6 +371,15 @@ class KnowledgeService:
             )
         return self._content_package_response(stored_package)
 
+    def get_content_package(
+        self,
+        content_package_id: int,
+    ) -> ContentPackageResponse:
+        content_package = self.repository.get_content_package(content_package_id)
+        if content_package is None:
+            raise ResourceNotFoundError("ContentPackage", content_package_id)
+        return self._content_package_response(content_package)
+
     def create_question_bank_item(
         self,
         request: QuestionBankItemCreate,

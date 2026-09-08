@@ -4104,3 +4104,5 @@ Do not self-approve.
 Do not implement T-033.
 
 Leave T-032 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-08 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-packages/{content_package_id}` through the existing route, service, repository, and `ContentPackageResponse` flow. It retrieves the retained package identity and both membership ID lists in persisted association-position order, returning the established 404 when missing. Retrieval does not rebuild membership from current release or review state; later withdrawal changes T-030's dynamic manifest but not the T-032 snapshot. It performs no locks, writes, transitions, regeneration, or inference. No model, schema, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, PDF/export, public/learner delivery, AI, mock assembly, personalization, or T-033 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

@@ -920,3 +920,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Immutable Package Read Boundary |
 | Scope | Individual stored package retrieval only; no package list, mutation, lifecycle, publication, PDF/export, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-032 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/content-packages/{content_package_id}` for read-only retrieval of one retained ContentPackage identity and its two stored position-ordered membership ID lists |
+| Migration | None; models, schemas, relationships, persistence, and Alembic head `e2c6f8a1d943` remain unchanged |
+| Tests | `uv run pytest tests/test_content_packages_api.py -q`: 13 passed, 1 warning in 5.78s. T-032-only selection: 3 passed, 10 deselected. T-031 creation selection: 10 passed, 3 deselected. Required focused regressions passed: released-assets manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests. `uv run pytest -q`: 201 passed, 1 warning in 32.75s. |
+| Validation | Changed-file Ruff passed. A fresh dedicated test database upgrade reached the unchanged single Alembic head `e2c6f8a1d943`; Alembic reported no new upgrade operations. Diff and whitespace checks passed. |
+| Notes | Retrieval uses the existing repository's fixed-query eager loading and shared stored package serializer. Membership IDs retain persisted association-position order even after withdrawal, review changes, or Claim changes; T-030 remains the separate dynamic current-release manifest. Missing packages retain the exact established 404. The endpoint performs no locks, writes, transitions, regeneration, or inference. No package list/mutation/lifecycle, publication, PDF/export, public/learner delivery, AI, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-033 work was added. |
