@@ -1440,3 +1440,33 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | Focused T-044: 10 passed, 20 deselected, 1 warning in 2.13s. Complete PdfArtifact: 30 passed, 1 warning in 4.80s. ContentPackage/ContentDocument: 61 passed, 1 warning in 11.22s. Required regressions: 173 passed, 1 warning in 18.44s. Full suite: 279 passed, 1 warning in 23.57s. |
 | Validation | Fresh and seeded migration cycles, direct PostgreSQL constraints, changed-file Ruff, lock verification, Alembic head/check, and diff checks passed on dedicated `_test` databases. |
 | Notes | Review locks only the target artifact, updates only review metadata, commits once, rolls back failures, and preserves exact bytes, checksum, ownership, metadata and ungated download. T-044 is Ready for review, not approved. No release/list, publication, storage, learner, AI, personalization, dependency, configuration, Docker, or T-045 work was added. |
+
+
+---
+
+## T-044 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-044` |
+| Issuance base | `f2f2e36dc8fae2c2008c3a457ce7a4d6b6a23612` |
+| Implementation commit | `b8f519a1ed5adf017767562f78ae168226c300e6` |
+| Test-correction commit | `592847b89b86bf0f9a744280dfa455562cefb70a` |
+| Review state | **APPROVED** |
+| Approved capability | Independent database-enforced DRAFT/APPROVED/REJECTED human review of immutable PdfArtifacts with target-only locking and atomic decisions |
+| Migration | `f3c8a1d6e924` after `e7b4c9d2a615` |
+| Validation evidence | Original developer-recorded: 10 focused T-044, 30 PdfArtifact, 61 ContentPackage/ContentDocument, 173 combined regressions, and 279 full-suite tests. Corrected developer-recorded: 2 correction-focused, 32 PdfArtifact, 61 ContentPackage/ContentDocument, 112 earlier-boundary regressions, and 281 full-suite tests; all reported one existing warning. Ruff, lock verification, Alembic head/check, fresh/seeded migration validation, PostgreSQL probes, and diff checks passed as recorded. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The original implementation satisfies model/migration parity, constraints, API transitions, immutable payload protection, layered locking/atomicity, compatibility, documentation, and exclusions. The correction changes only the focused test file and proves target-only SQL after related-state changes plus rollback after an actual flushed UPDATE. No blocking finding remains. |
+| Boundaries | No PdfArtifact release/list, publication, external storage, public/learner delivery, AI, mock assembly, personalization, dependency, configuration, Docker, AGENTS.md, README, or T-045 behavior was included. |
+
+---
+
+## T-045 issued — Add controlled PdfArtifact release lifecycle
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add a database-enforced UNRELEASED/RELEASED/WITHDRAWN lifecycle to reviewed PdfArtifacts while preserving immutable bytes and separating release from publication/delivery |
+| Architectural phase | Canonical Content / Artifact Release Boundary |
+| Scope | PdfArtifact release metadata, constraints, one release endpoint, approval conflict guard, migration, and tests only; no released collection, publication, public delivery, or T-046 |
+| Full implementation prompt | Appended to `docs/next_task.md` |
