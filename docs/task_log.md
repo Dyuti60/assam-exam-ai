@@ -1061,3 +1061,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-035 selection: 5 passed, 22 deselected, 1 warning in 1.37s. Complete ContentPackage suite: 27 passed, 1 warning in 5.59s. Required focused regressions: 112 passed, 1 warning in 7.09s. Full suite: 215 passed, 1 warning in 14.09s. |
 | Validation | Fresh upgrade and seeded upgrade/downgrade/re-upgrade passed on dedicated `_test` databases, preserving package review, identity, creation time, and both member IDs/positions while producing UNRELEASED/null release metadata on each upgrade. PostgreSQL probes, changed-file Ruff, Alembic head/check, diff, and whitespace checks passed. |
 | Notes | Release and conflicting approval decisions lock only the package row. Eligibility uses only stored package approval and retained membership; member state is not re-evaluated. Withdrawal retains release time and prevents re-release. No released-package collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-036 work was added. |
+
+
+---
+
+## T-035 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-035` |
+| Implementation commit | `632fb01e6566d3270ef82c0a47788e8eabeac229` |
+| Base/task-issuance commit | `e2cef231108f8285365277ee35387a704c9f57c3` |
+| Review state | **APPROVED** |
+| Approved capability | Controlled one-way ContentPackage UNRELEASED/RELEASED/WITHDRAWN lifecycle with approval and non-empty-membership eligibility |
+| Migration | `a8c4e2f9b671` follows `f7b3d1a8c529` and safely migrates existing packages to UNRELEASED with null metadata |
+| Validation evidence | Developer-recorded: 5 focused T-035 tests, 27 complete ContentPackage tests, 112 combined regressions, and 215 full-suite tests, each with one existing warning; Ruff; fresh and seeded migration cycles; PostgreSQL probes; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. Transition ordering, stable conflicts, review lock, UTC provenance, empty-membership rejection, package-only locking, rollback, shared response compatibility, model/migration alignment, data preservation, and exclusions match the task with no blocking finding. |
+| Boundaries | No released-package collection, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-036 behavior was included. |
+
+---
+
+## T-036 issued — Add released ContentPackage read boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one read-only internal collection returning only currently RELEASED ContentPackage snapshots in stable package-ID order |
+| Architectural phase | Canonical Content / Released Package Read Boundary |
+| Scope | Exact package release-state filtering and stored membership response only; no expanded package bodies, publication, rendering, PDF/export, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |

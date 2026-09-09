@@ -1329,3 +1329,14 @@ flowchart LR
 - Focused T-035 selection: 5 passed, 22 deselected, 1 warning in 1.37s. Complete ContentPackage suite: 27 passed, 1 warning in 5.59s. Required focused regressions: 112 passed, 1 warning in 7.09s. Full suite: 215 passed, 1 warning in 14.09s.
 - Fresh upgrade reached `a8c4e2f9b671`. A seeded `f7b3d1a8c529 -> a8c4e2f9b671 -> f7b3d1a8c529 -> a8c4e2f9b671` cycle preserved package identity, ContentVersion, creation time, APPROVED review metadata, and both membership IDs/positions; each upgrade produced UNRELEASED/null release metadata.
 - No released-package collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, or infrastructure behavior was added.
+
+
+### T-035 post-push review
+
+- **APPROVED** at implementation commit `632fb01e6566d3270ef82c0a47788e8eabeac229`, whose parent is the T-035 issuance head `e2cef231108f8285365277ee35387a704c9f57c3`.
+- The immutable commit adds only ContentPackage UNRELEASED/RELEASED/WITHDRAWN fields, migration `a8c4e2f9b671`, shared response metadata, row-locked approval/release behavior, one release endpoint, focused tests, and documentation.
+- Release requires the package's own APPROVED state and at least one retained membership link. It does not re-evaluate or lock members, Claims, Verification, priority, T-030, other packages, or other ContentVersions.
+- Only UNRELEASED → RELEASED → WITHDRAWN is allowed. Withdrawal preserves the original release time and prevents in-place re-release; RELEASED blocks DRAFT/REJECTED package review until withdrawal.
+- PostgreSQL constrains lifecycle status, timestamps, notes, and approval. Existing packages migrate to UNRELEASED with null release metadata and no inferred release; downgrade removes only T-035 state.
+- Developer-recorded evidence is 5 focused T-035 tests, 27 complete ContentPackage tests, 112 combined focused regressions, and 215 full-suite tests, each with one existing warning, plus Ruff, fresh and seeded migration cycles, PostgreSQL probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No released-package collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-036 implementation was included.

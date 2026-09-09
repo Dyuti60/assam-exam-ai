@@ -4971,3 +4971,204 @@ Do not implement T-036.
 Leave T-035 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only the controlled ContentPackage UNRELEASED/RELEASED/WITHDRAWN lifecycle through migration `a8c4e2f9b671` and `POST /api/v1/content-packages/{content_package_id}/release`. Existing and new packages begin UNRELEASED with null release metadata. Release requires the package's own APPROVED review plus retained membership, records UTC release time and an optional note, and never re-evaluates member state. Withdrawal preserves release time, records UTC withdrawal time, replaces the note, and prevents in-place re-release. Release and conflicting approval decisions lock only the package row; immutable membership remains unchanged. T-035 is Ready for review, not approved. No released-package collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, or T-036 behavior was added.
+
+
+---
+
+## T-035 independent review outcome
+
+T-035 is **APPROVED** at implementation commit `632fb01e6566d3270ef82c0a47788e8eabeac229`, whose parent is the T-035 task-issuance commit `e2cef231108f8285365277ee35387a704c9f57c3`.
+
+The immutable diff adds only ContentPackage UNRELEASED/RELEASED/WITHDRAWN persistence, migration `a8c4e2f9b671`, response metadata, row-locked approval/release decisions, one release endpoint, focused tests, and accurate documentation. Release requires the target package's own APPROVED review plus at least one retained member. Member and external state are not re-evaluated or locked.
+
+The one-way lifecycle permits only UNRELEASED → RELEASED → WITHDRAWN. Withdrawal retains the original release timestamp and prevents in-place re-release. A currently RELEASED package blocks DRAFT/REJECTED review changes until withdrawal. PostgreSQL enforces status, metadata, and approval invariants. Existing packages migrate to UNRELEASED/null without inferred release, and the seeded downgrade/re-upgrade evidence preserves review, identity, ContentVersion, creation time, and both ordered memberships.
+
+Developer-recorded validation reported 5 focused T-035 tests, 27 complete ContentPackage tests, 112 combined regressions, and 215 full-suite tests, each with one existing warning, plus Ruff, fresh and seeded migration cycles, PostgreSQL probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+
+No blocking finding remains. No released-package collection, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-036 implementation was included.
+
+---
+
+# T-036 — Add released ContentPackage read boundary
+
+## Role and synchronization
+
+You are the implementation engineer for `Dyuti60/assam-exam-ai`. Implement only T-036 using the live repository, `AGENTS.md`, and the established route → schema → service → repository → PostgreSQL layering.
+
+Before editing:
+
+1. fetch `origin` and fast-forward local `main`;
+2. record `git rev-parse HEAD` and confirm it equals `origin/main`;
+3. confirm the working tree is clean;
+4. confirm approved T-035 commit `632fb01e6566d3270ef82c0a47788e8eabeac229` and the documentation commit issuing T-036 exist in history;
+5. read the complete live repository and this prompt.
+
+Stop without changing files if branch, synchronization, history, or working tree is unexpected. The live repository is authoritative.
+
+## Current context and bounded goal
+
+ContentPackage now has immutable, independently ordered exact-ContentVersion memberships; ID-only and expanded-content retrieval; independent human review; and controlled release/withdrawal.
+
+Add exactly one endpoint:
+
+`GET /api/v1/content-packages/released`
+
+It returns a JSON list of existing `ContentPackageResponse` objects for packages whose current persisted `release_status` is exactly `RELEASED`.
+
+This is an internal read boundary only. It is not publication, distribution, rendering, export, download, or learner delivery.
+
+## Eligibility, ordering, and response
+
+Eligibility is exactly:
+
+`ContentPackage.release_status == "RELEASED"`
+
+Therefore:
+
+- exclude every UNRELEASED package, including APPROVED ones;
+- exclude every WITHDRAWN package, including APPROVED ones;
+- include every currently RELEASED package;
+- do not independently filter by approval_status because PostgreSQL already requires RELEASED packages to remain APPROVED;
+- do not inspect current member approval/release, Claims, Verification, priority, T-030 manifest, ContentVersion recency, other package state, or any external state.
+
+Return packages ordered by ascending ContentPackage ID.
+
+Return HTTP 200 with `[]` when no package qualifies, including an empty database.
+
+Each item must use the existing shared `ContentPackageResponse` and preserve:
+
+- package ID;
+- exact ContentVersion ID;
+- creation timestamp;
+- NoteDraft member IDs in stored association-position order;
+- QuestionBankItem member IDs in stored association-position order;
+- approval status, timestamp, and reviewer note;
+- release status, release timestamp, withdrawal timestamp, and release note.
+
+Do not expand full member bodies in this endpoint. T-033 remains the explicit individual expanded-content boundary.
+
+## Route safety and layering
+
+Register the static `/content-packages/released` route before the dynamic `/content-packages/{content_package_id}` route so `released` is never parsed as an ID.
+
+Implement through:
+
+- one thin FastAPI route;
+- one service method;
+- one repository method.
+
+The repository must:
+
+- filter exactly on RELEASED in PostgreSQL;
+- order by ContentPackage ID in PostgreSQL;
+- eagerly load both ordered membership-link collections using a fixed-query strategy;
+- avoid per-package membership N+1 queries;
+- perform no `FOR UPDATE`.
+
+The service must reuse the existing stored package serializer and add no mutation or eligibility inference.
+
+## Read-only and compatibility requirements
+
+The request must perform no:
+
+- inserts, updates, deletes, flushes, commits, refresh mutation, or transitions;
+- row locks;
+- membership rebuilding, sorting by asset ID, synchronization, or repair;
+- full member-body loading;
+- regeneration, copying, AI, or current-state re-evaluation.
+
+Membership order is the persisted association-position order, even if it differs from ascending member IDs.
+
+Later member withdrawal, member review changes, or Claim decisions must not affect package eligibility or returned membership. Only the package's own current RELEASED state controls inclusion.
+
+Withdrawing a package must remove it from this collection without deleting or changing it. A different approved UNRELEASED package remains excluded.
+
+Existing T-030 dynamic assets, T-031 creation, T-032 ID retrieval, T-033 content expansion, T-034 review, and T-035 transitions must remain unchanged.
+
+## Required tests
+
+Add PostgreSQL-backed focused tests proving:
+
+- empty database returns HTTP 200 and `[]`;
+- a database containing only ineligible packages returns `[]`;
+- DRAFT UNRELEASED, APPROVED UNRELEASED, REJECTED UNRELEASED, and APPROVED WITHDRAWN packages are excluded;
+- multiple RELEASED packages are returned in ascending package-ID order;
+- each response exactly preserves stored review and release metadata;
+- both membership ID lists retain stored association-position order, including fixtures whose positions differ from asset ID order;
+- packages containing only one asset type remain valid and serialize the other list empty;
+- member withdrawal and permitted post-withdrawal member review changes do not remove the package or change membership;
+- Claim, Verification, priority, T-030, another package, another ContentVersion, and global member collections do not determine package eligibility;
+- withdrawing one package removes only that package from the collection;
+- repeated reads return identical responses when stored state is unchanged;
+- read leaves package, membership, assets, Claims, Verification, and related row counts unchanged;
+- query count is fixed with respect to package count and introduces no obvious membership N+1;
+- generated SQL contains no `FOR UPDATE`;
+- static route precedence is correct;
+- existing T-031 through T-035 package behavior remains compatible.
+
+Do not weaken, delete, reorder, or silently skip existing tests.
+
+## Validation
+
+Use a dedicated PostgreSQL database ending in `_test`. Run and report exact results for:
+
+- focused T-036 tests;
+- complete ContentPackage tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft/released-NoteDraft tests;
+- QuestionBankItem/released-QuestionBankItem tests;
+- full suite;
+- Ruff on every changed Python file;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh upgrade through `a8c4e2f9b671`;
+- `git diff --check`;
+- whitespace checks for untracked files;
+- final `git status --short`.
+
+Confirm Alembic remains exactly one head at `a8c4e2f9b671`, no migration/schema change, and no dependency/config/environment/Docker/API-key/infrastructure change. A downgrade/re-upgrade cycle is not required because T-036 changes no persistence.
+
+## Affected components
+
+Update only where required:
+
+- `app/repositories/knowledge.py`;
+- `app/services/knowledge.py`;
+- `app/api/v1/routes/knowledge.py`;
+- focused released-ContentPackage tests;
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append-only `docs/task_log.md`;
+- append-only `docs/next_task.md`.
+
+Inspect but leave unchanged:
+
+- all schemas;
+- ContentPackage and membership models;
+- model registration;
+- every migration;
+- every other domain model;
+- existing approval/release/create/read/content routes;
+- `pyproject.toml`, `uv.lock`, `.env.example`, `app/core/config.py`, `docker-compose.yml`, `AGENTS.md`, and `README.md`.
+
+## Documentation and scope gate
+
+Document only implemented behavior. Keep task log and next-task history append-only. Record T-036 only as `Ready for review`; do not define or implement T-037.
+
+T-036 needs no API key, external service, dependency, secret, configuration, Docker service, storage backend, or infrastructure change. Stop and report if one appears necessary.
+
+Do not add approved-package lists; expanded collection bodies; package publication/delivery; rendering, HTML, PDF, export, files, storage, CDN, email; public/learner APIs; users/auth/identity/history; membership mutation/rebuild; learner sessions/scoring/analytics/recommendations/mocks/personalization; AI/LLM providers, keys, prompts, generation, source discovery, ingestion, RAG, embeddings, vectors, scraping; automatic version inference; content regeneration; new transitions; PreviousQuestion conversion; predictions; dependencies; configuration; Docker services; payments; or unrelated infrastructure.
+
+Preserve trust, provenance, independent review, controlled release, exact ContentVersion ownership, immutable ordered package membership, and Generate Once/Personalize Later.
+
+## Final report and handoff
+
+Report starting HEAD; files changed/created; endpoint and response behavior; exact eligibility/order; membership preservation; route precedence; eager loading/query count; no-lock/no-write proof; compatibility; focused/full tests; Alembic/Ruff/diff results; unchanged dependency/config inspection; retained boundaries; final status; and explicit confirmation of no commit, push, PR, self-approval, T-037, approved-package list, expanded collection, publication, rendering, PDF/export, delivery, AI, source discovery, mock assembly, or personalization.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-037.
+
+Leave T-036 uncommitted and unpushed in the working tree for independent review.
