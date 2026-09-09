@@ -33,6 +33,8 @@ from app.schemas.knowledge import (
     ClaimResponse,
     ContentPackageApprovalCreate,
     ContentPackageContentResponse,
+    ContentPackageReleaseCreate,
+    ContentPackageReleaseDecision,
     ContentPackageResponse,
     ContentVersionCreate,
     ContentVersionReleasedAssetsResponse,
@@ -430,6 +432,16 @@ class KnowledgeService:
         if content_package is None:
             raise ResourceNotFoundError("ContentPackage", content_package_id)
 
+        if (
+            content_package.release_status == "RELEASED"
+            and request.approval_status
+            in (ClaimApprovalStatus.DRAFT, ClaimApprovalStatus.REJECTED)
+        ):
+            raise ResourceConflictError(
+                f"ContentPackage {content_package_id} must be withdrawn "
+                "before changing approval"
+            )
+
         is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
         self._commit_content_package_approval(
             content_package,
@@ -441,6 +453,63 @@ class KnowledgeService:
         if stored_package is None:
             raise RuntimeError(
                 f"ContentPackage {content_package_id} missing after successful review"
+            )
+        return self._content_package_response(stored_package)
+
+    def record_content_package_release(
+        self,
+        content_package_id: int,
+        request: ContentPackageReleaseCreate,
+    ) -> ContentPackageResponse:
+        content_package = self.repository.get_content_package_for_update(
+            content_package_id
+        )
+        if content_package is None:
+            raise ResourceNotFoundError("ContentPackage", content_package_id)
+
+        requested_status = request.release_status.value
+        current_status = content_package.release_status
+        if (
+            request.release_status == ContentPackageReleaseDecision.RELEASED
+            and current_status == "UNRELEASED"
+        ):
+            if content_package.approval_status != "APPROVED":
+                raise ResourceConflictError(
+                    f"ContentPackage {content_package_id} must be approved before release"
+                )
+            if not (
+                content_package.note_draft_links
+                or content_package.question_bank_item_links
+            ):
+                raise ResourceConflictError(
+                    f"ContentPackage {content_package_id} has no retained members "
+                    "to release"
+                )
+            released_at = datetime.now(UTC)
+            withdrawn_at = None
+        elif (
+            request.release_status == ContentPackageReleaseDecision.WITHDRAWN
+            and current_status == "RELEASED"
+        ):
+            released_at = content_package.released_at
+            withdrawn_at = datetime.now(UTC)
+        else:
+            raise ResourceConflictError(
+                f"ContentPackage {content_package_id} cannot transition "
+                f"from {current_status} to {requested_status}"
+            )
+
+        self._commit_content_package_release(
+            content_package,
+            requested_status,
+            released_at,
+            withdrawn_at,
+            request.release_note,
+        )
+        stored_package = self.repository.get_content_package(content_package_id)
+        if stored_package is None:
+            raise RuntimeError(
+                f"ContentPackage {content_package_id} missing after successful release"
             )
         return self._content_package_response(stored_package)
 
@@ -974,6 +1043,27 @@ class KnowledgeService:
             self.session.rollback()
             raise
 
+    def _commit_content_package_release(
+        self,
+        content_package: ContentPackage,
+        release_status: str,
+        released_at: datetime | None,
+        withdrawn_at: datetime | None,
+        release_note: str | None,
+    ) -> None:
+        try:
+            self.repository.update_content_package_release(
+                content_package,
+                release_status,
+                released_at,
+                withdrawn_at,
+                release_note,
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
     def _commit_question_bank_item(
         self,
         question_bank_item: QuestionBankItem,
@@ -1007,6 +1097,10 @@ class KnowledgeService:
             approval_status=content_package.approval_status,
             approval_decided_at=content_package.approval_decided_at,
             reviewer_note=content_package.reviewer_note,
+            release_status=content_package.release_status,
+            released_at=content_package.released_at,
+            withdrawn_at=content_package.withdrawn_at,
+            release_note=content_package.release_note,
         )
 
     @staticmethod

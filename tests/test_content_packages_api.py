@@ -966,6 +966,10 @@ def test_get_content_package_uses_stored_positions_and_retains_snapshot(
         "approval_status": "DRAFT",
         "approval_decided_at": None,
         "reviewer_note": None,
+        "release_status": "UNRELEASED",
+        "released_at": None,
+        "withdrawn_at": None,
+        "release_note": None,
     }
     assert package_row_before.id == expected["id"]
     assert package_row_before.content_version_id == expected["content_version_id"]
@@ -1710,4 +1714,309 @@ def test_database_rejects_invalid_content_package_review_states(
             .values(**values),
         )
 
+    assert client.get(f"/api/v1/content-packages/{package['id']}").json() == package
+
+
+def test_content_package_release_defaults_and_validation_are_non_mutating(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "package-release-defaults")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    _approved_claim(client, topic_id, "package-release-defaults")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+
+    assert package["release_status"] == "UNRELEASED"
+    assert package["released_at"] is None
+    assert package["withdrawn_at"] is None
+    assert package["release_note"] is None
+    assert client.get(f"/api/v1/content-packages/{package['id']}").json() == package
+    expanded = client.get(f"/api/v1/content-packages/{package['id']}/content")
+    assert expanded.json()["content_package"] == package
+
+    counts_before = _content_snapshot_row_counts(db_connection)
+    missing = client.post(
+        "/api/v1/content-packages/999999/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "ContentPackage 999999 not found"}
+    for payload in ({}, {"release_status": "UNRELEASED"}, {"release_status": "BAD"}):
+        response = client.post(
+            f"/api/v1/content-packages/{package['id']}/release", json=payload
+        )
+        assert response.status_code == 422
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+    assert client.get(f"/api/v1/content-packages/{package['id']}").json() == package
+
+
+def test_content_package_release_lifecycle_locks_and_preserves_snapshot(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "package-release-lifecycle")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    claim_id = _approved_claim(client, topic_id, "package-release-lifecycle")
+    draft = _create_draft(client, topic_id, version_id)
+    item = _create_item(client, version_id, [claim_id], "package-release-lifecycle")
+    _approve_and_release_draft(client, draft["id"])
+    _approve_and_release_item(client, item["id"])
+    package = _create_package(client, version_id)
+    immutable = {
+        key: package[key]
+        for key in (
+            "id",
+            "content_version_id",
+            "created_at",
+            "note_draft_ids",
+            "question_bank_item_ids",
+        )
+    }
+    counts_before = _content_snapshot_row_counts(db_connection)
+
+    draft_conflict = client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert draft_conflict.status_code == 409
+    assert draft_conflict.json() == {
+        "detail": f"ContentPackage {package['id']} must be approved before release"
+    }
+    unreleased_withdrawal = client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert unreleased_withdrawal.status_code == 409
+    assert unreleased_withdrawal.json() == {
+        "detail": f"ContentPackage {package['id']} cannot transition from UNRELEASED to WITHDRAWN"
+    }
+    rejected_package = client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    )
+    assert rejected_package.status_code == 200
+    rejected_conflict = client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert rejected_conflict.status_code == 409
+    assert rejected_conflict.json() == {
+        "detail": f"ContentPackage {package['id']} must be approved before release"
+    }
+    approved = client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Reviewed"},
+    ).json()
+    assert approved["release_status"] == "UNRELEASED"
+    for resource, resource_id in (
+        ("note-drafts", draft["id"]),
+        ("question-bank-items", item["id"]),
+    ):
+        assert client.post(
+            f"/api/v1/{resource}/{resource_id}/release",
+            json={"release_status": "WITHDRAWN"},
+        ).status_code == 200
+        assert client.post(
+            f"/api/v1/{resource}/{resource_id}/approval",
+            json={"approval_status": "REJECTED"},
+        ).status_code == 200
+    assert client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+
+    statements: list[str] = []
+
+    def record_sql(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    try:
+        release = client.post(
+            f"/api/v1/content-packages/{package['id']}/release",
+            json={"release_status": "RELEASED", "release_note": "Ship package"},
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+    assert release.status_code == 200
+    released = release.json()
+    assert {key: released[key] for key in immutable} == immutable
+    assert released["approval_status"] == "APPROVED"
+    assert released["release_status"] == "RELEASED"
+    assert released["release_note"] == "Ship package"
+    assert datetime.fromisoformat(released["released_at"]).utcoffset() == UTC.utcoffset(
+        None
+    )
+    assert released["withdrawn_at"] is None
+    package_locks = [
+        statement
+        for statement in statements
+        if "FROM content_packages" in statement and "FOR UPDATE" in statement.upper()
+    ]
+    assert len(package_locks) == 1
+    assert "FOR UPDATE OF content_packages" in package_locks[0]
+    assert all(
+        "FOR UPDATE" not in statement.upper()
+        or (
+            "note_drafts" not in statement
+            and "question_bank_items" not in statement
+            and "content_package_note_drafts" not in statement
+            and "content_package_question_bank_items" not in statement
+        )
+        for statement in statements
+    )
+
+    for approval_status in ("DRAFT", "REJECTED"):
+        blocked = client.post(
+            f"/api/v1/content-packages/{package['id']}/approval",
+            json={"approval_status": approval_status},
+        )
+        assert blocked.status_code == 409
+        assert blocked.json() == {
+            "detail": f"ContentPackage {package['id']} must be withdrawn before changing approval"
+        }
+        assert client.get(f"/api/v1/content-packages/{package['id']}").json() == released
+
+    duplicate = client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {
+        "detail": f"ContentPackage {package['id']} cannot transition from RELEASED to RELEASED"
+    }
+    withdrawal = client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "WITHDRAWN", "release_note": "Withdraw package"},
+    )
+    assert withdrawal.status_code == 200
+    withdrawn = withdrawal.json()
+    assert withdrawn["released_at"] == released["released_at"]
+    assert datetime.fromisoformat(withdrawn["withdrawn_at"]).utcoffset() == UTC.utcoffset(
+        None
+    )
+    assert withdrawn["release_note"] == "Withdraw package"
+    assert {key: withdrawn[key] for key in immutable} == immutable
+
+    rejected = client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "After withdrawal"},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["release_status"] == "WITHDRAWN"
+    assert rejected.json()["released_at"] == withdrawn["released_at"]
+    assert rejected.json()["withdrawn_at"] == withdrawn["withdrawn_at"]
+    assert rejected.json()["release_note"] == "Withdraw package"
+    for decision in ("WITHDRAWN", "RELEASED"):
+        conflict = client.post(
+            f"/api/v1/content-packages/{package['id']}/release",
+            json={"release_status": decision},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {
+            "detail": f"ContentPackage {package['id']} cannot transition from WITHDRAWN to {decision}"
+        }
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+
+
+def test_empty_approved_content_package_cannot_release(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "package-release-empty")
+    version_id = foundation["first_version"]["id"]
+    package_id = db_connection.scalar(
+        insert(ContentPackage)
+        .values(
+            content_version_id=version_id,
+            approval_status="APPROVED",
+            approval_decided_at=datetime.now(UTC),
+        )
+        .returning(ContentPackage.id)
+    )
+    before = client.get(f"/api/v1/content-packages/{package_id}").json()
+    response = client.post(
+        f"/api/v1/content-packages/{package_id}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"ContentPackage {package_id} has no retained members to release"
+    }
+    assert client.get(f"/api/v1/content-packages/{package_id}").json() == before
+
+
+def test_content_package_release_failure_rolls_back(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "package-release-rollback")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    _approved_claim(client, topic_id, "package-release-rollback")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    before = client.get(f"/api/v1/content-packages/{package['id']}").json()
+    original = KnowledgeRepository.update_content_package_release
+
+    def fail_after_update(repository, content_package, *args):
+        original(repository, content_package, *args)
+        raise RuntimeError("injected package release failure")
+
+    monkeypatch.setattr(
+        KnowledgeRepository, "update_content_package_release", fail_after_update
+    )
+    with pytest.raises(RuntimeError, match="injected package release failure"):
+        client.post(
+            f"/api/v1/content-packages/{package['id']}/release",
+            json={"release_status": "RELEASED"},
+        )
+    assert client.get(f"/api/v1/content-packages/{package['id']}").json() == before
+
+
+def test_database_rejects_invalid_content_package_release_states(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "package-release-constraints")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    _approved_claim(client, topic_id, "package-release-constraints")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    now = datetime.now(UTC)
+    for values in (
+        {"release_status": "INVALID"},
+        {"release_status": "UNRELEASED", "released_at": now},
+        {"release_status": "UNRELEASED", "withdrawn_at": now},
+        {"release_status": "UNRELEASED", "release_note": "Invalid"},
+        {"release_status": "RELEASED", "released_at": None},
+        {"release_status": "RELEASED", "released_at": now},
+        {
+            "release_status": "RELEASED",
+            "released_at": now,
+            "withdrawn_at": now,
+            "approval_status": "APPROVED",
+            "approval_decided_at": now,
+        },
+        {"release_status": "WITHDRAWN", "released_at": None, "withdrawn_at": now},
+        {"release_status": "WITHDRAWN", "released_at": now, "withdrawn_at": None},
+    ):
+        _assert_integrity_error(
+            db_connection,
+            update(ContentPackage)
+            .where(ContentPackage.id == package["id"])
+            .values(**values),
+        )
     assert client.get(f"/api/v1/content-packages/{package['id']}").json() == package

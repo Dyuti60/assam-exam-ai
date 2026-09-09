@@ -1317,3 +1317,15 @@ flowchart LR
 - Package review is independent of member review/release, Claims, Verification, priority, T-030, other packages, and other ContentVersions. Ordinary package reads remain lock-free.
 - Developer-recorded evidence is 5 focused T-034 tests, 22 complete ContentPackage tests, and 210 full-suite tests, each with one existing warning, plus focused regressions, successful Ruff, fresh and seeded migration cycles, PostgreSQL constraint probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - No package approved/released collection, package release, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-035 implementation was included.
+
+
+### T-035 Controlled ContentPackage release lifecycle
+
+- Migration `a8c4e2f9b671` follows `f7b3d1a8c529` and adds UNRELEASED/RELEASED/WITHDRAWN state with retained release and withdrawal timestamps plus an optional decision note. Existing packages become UNRELEASED with null metadata; approval never infers release.
+- PostgreSQL enforces allowed status and timestamp/note consistency, and requires a currently RELEASED package to remain APPROVED. Non-empty cross-table membership eligibility is checked transactionally without triggers.
+- `POST /api/v1/content-packages/{content_package_id}/release` accepts only RELEASED or WITHDRAWN. Release requires the package's own APPROVED review and at least one retained member; it does not re-evaluate member state or the dynamic T-030 manifest.
+- UNRELEASED can move only to RELEASED, and RELEASED only to WITHDRAWN. Withdrawal preserves `released_at`, records a UTC `withdrawn_at`, replaces the note, and prevents in-place re-release. RELEASED blocks DRAFT/REJECTED package review until withdrawal.
+- Release and approval lock only the package row. Release validates before mutation, updates only four release fields, commits once, rolls back persistence failures, and reloads the shared stored response with immutable membership order.
+- Focused T-035 selection: 5 passed, 22 deselected, 1 warning in 1.37s. Complete ContentPackage suite: 27 passed, 1 warning in 5.59s. Required focused regressions: 112 passed, 1 warning in 7.09s. Full suite: 215 passed, 1 warning in 14.09s.
+- Fresh upgrade reached `a8c4e2f9b671`. A seeded `f7b3d1a8c529 -> a8c4e2f9b671 -> f7b3d1a8c529 -> a8c4e2f9b671` cycle preserved package identity, ContentVersion, creation time, APPROVED review metadata, and both membership IDs/positions; each upgrade produced UNRELEASED/null release metadata.
+- No released-package collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, or infrastructure behavior was added.

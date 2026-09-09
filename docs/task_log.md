@@ -1047,3 +1047,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Controlled Package Release |
 | Scope | Package release fields, constraints, migration, and one decision endpoint only; no released-package collection, publication transport, rendering, PDF/export, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-035 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only controlled UNRELEASED/RELEASED/WITHDRAWN ContentPackage state and `POST /api/v1/content-packages/{content_package_id}/release`, preserving independent review and immutable ordered membership |
+| Migration | `a8c4e2f9b671` after `f7b3d1a8c529`; existing packages become UNRELEASED with null release metadata and no inferred release |
+| Tests | T-035 selection: 5 passed, 22 deselected, 1 warning in 1.37s. Complete ContentPackage suite: 27 passed, 1 warning in 5.59s. Required focused regressions: 112 passed, 1 warning in 7.09s. Full suite: 215 passed, 1 warning in 14.09s. |
+| Validation | Fresh upgrade and seeded upgrade/downgrade/re-upgrade passed on dedicated `_test` databases, preserving package review, identity, creation time, and both member IDs/positions while producing UNRELEASED/null release metadata on each upgrade. PostgreSQL probes, changed-file Ruff, Alembic head/check, diff, and whitespace checks passed. |
+| Notes | Release and conflicting approval decisions lock only the package row. Eligibility uses only stored package approval and retained membership; member state is not re-evaluated. Withdrawal retains release time and prevents re-release. No released-package collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-036 work was added. |

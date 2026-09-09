@@ -10,6 +10,7 @@ from app.schemas.knowledge import (
     ClaimResponse,
     ContentPackageApprovalCreate,
     ContentPackageContentResponse,
+    ContentPackageReleaseCreate,
     ContentPackageResponse,
     ContentVersionCreate,
     ContentVersionReleasedAssetsResponse,
@@ -209,6 +210,28 @@ def record_content_package_approval(
         )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.post(
+    "/content-packages/{content_package_id}/release",
+    response_model=ContentPackageResponse,
+)
+def record_content_package_release(
+    content_package_id: int,
+    request: ContentPackageReleaseCreate,
+    db: DatabaseSession,
+) -> ContentPackageResponse:
+    try:
+        return KnowledgeService(db).record_content_package_release(
+            content_package_id,
+            request,
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.post(

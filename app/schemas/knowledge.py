@@ -296,6 +296,17 @@ class ContentVersionReleasedAssetsResponse(BaseModel):
     question_bank_items: list[QuestionBankItemResponse]
 
 
+class ContentPackageReleaseStatus(StrEnum):
+    UNRELEASED = "UNRELEASED"
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
+class ContentPackageReleaseDecision(StrEnum):
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
 class ContentPackageResponse(BaseModel):
     id: int
     content_version_id: int
@@ -305,11 +316,20 @@ class ContentPackageResponse(BaseModel):
     approval_status: ClaimApprovalStatus
     approval_decided_at: datetime | None
     reviewer_note: str | None
+    release_status: ContentPackageReleaseStatus
+    released_at: datetime | None
+    withdrawn_at: datetime | None
+    release_note: str | None
 
 
 class ContentPackageApprovalCreate(BaseModel):
     approval_status: ClaimApprovalStatus
     reviewer_note: str | None = None
+
+
+class ContentPackageReleaseCreate(BaseModel):
+    release_status: ContentPackageReleaseDecision
+    release_note: str | None = None
 
 
 class ContentPackageContentResponse(BaseModel):

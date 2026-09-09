@@ -201,6 +201,19 @@ class KnowledgeRepository:
         content_package.approval_decided_at = decided_at
         content_package.reviewer_note = reviewer_note
 
+    def update_content_package_release(
+        self,
+        content_package: ContentPackage,
+        release_status: str,
+        released_at: datetime | None,
+        withdrawn_at: datetime | None,
+        release_note: str | None,
+    ) -> None:
+        content_package.release_status = release_status
+        content_package.released_at = released_at
+        content_package.withdrawn_at = withdrawn_at
+        content_package.release_note = release_note
+
     def get_content_package_note_drafts(
         self,
         content_package_id: int,

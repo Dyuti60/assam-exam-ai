@@ -4969,3 +4969,5 @@ Do not self-approve.
 Do not implement T-036.
 
 Leave T-035 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only the controlled ContentPackage UNRELEASED/RELEASED/WITHDRAWN lifecycle through migration `a8c4e2f9b671` and `POST /api/v1/content-packages/{content_package_id}/release`. Existing and new packages begin UNRELEASED with null release metadata. Release requires the package's own APPROVED review plus retained membership, records UTC release time and an optional note, and never re-evaluates member state. Withdrawal preserves release time, records UTC withdrawal time, replaces the note, and prevents in-place re-release. Release and conflicting approval decisions lock only the package row; immutable membership remains unchanged. T-035 is Ready for review, not approved. No released-package collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, or T-036 behavior was added.
