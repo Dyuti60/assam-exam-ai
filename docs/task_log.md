@@ -1356,3 +1356,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | Focused T-042: 16 passed, 1 warning in 3.89s. Complete ContentPackage/ContentDocument: 61 passed, 1 warning in 10.45s. T-041 selection: 2 passed, 59 deselected, 1 warning in 1.30s. Required regressions: 112 passed, 1 warning in 7.46s. Full suite: 265 passed, 1 warning in 21.50s. |
 | Validation | Fresh upgrade, seeded upgrade/downgrade/re-upgrade with zero inferred artifacts, direct PostgreSQL probes, changed-file Ruff, Alembic head/check, and diff checks passed against dedicated `_test` databases. |
 | Notes | Creation validates missing/release/ordinary duplicate state before rendering, locks only the target document, persists copied ownership plus exact bytes/size/SHA-256, commits once, reloads stored metadata, and rolls back renderer or persistence failures. T-042 is Ready for review, not approved. No dependency, API key, external service, storage/download, publication, delivery, learner, AI, source discovery, mock assembly, personalization, or T-043 work was added. |
+
+
+---
+
+## T-042 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-042` |
+| Implementation commit | `e41ab090ee9b715e473a72c25474f8ca58deb424` |
+| Base/task-issuance commit | `896cc7069a70faf1af31c37824019bcf2ffc6c1b` |
+| Review state | **APPROVED** |
+| Approved capability | Atomic persistence of at most one immutable deterministic database-backed PDF artifact from one exact currently RELEASED ContentDocument |
+| Migration | `e7b4c9d2a615` after `d1a7c4e9f263` |
+| Validation evidence | Developer-recorded: 16 focused T-042 tests, 61 complete ContentPackage/ContentDocument tests, 2 T-041 selection tests, 112 required regressions, and 265 full-suite tests, each with one existing warning; Ruff; dependency-lock verification; Alembic head/check; fresh upgrade; seeded migration cycle; direct PostgreSQL probes; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The immutable commit is exactly one commit over the issued base. Persistence constraints, ownership, deterministic rendering, release eligibility, narrow locking, duplicate handling, one-commit atomicity, rollback behavior, migration safety, tests, documentation, and exclusions match the canonical task with no blocking finding. |
+| Boundaries | No artifact retrieval/download, publication, external storage, public/learner delivery, dependency, API key, AI, source discovery, mock assembly, personalization, or T-043 behavior was included. |
+
+---
+
+## T-043 issued — Retrieve PDF artifact metadata and download exact stored bytes
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add internal read-only retrieval of one PdfArtifact's stored metadata and exact immutable PDF bytes |
+| Architectural phase | Canonical Content / Deterministic PDF Artifact |
+| Scope | Metadata lookup and exact byte download only; no regeneration, lifecycle, publication, external storage, learner delivery, AI, or personalization |
+| Full implementation prompt | Appended to `docs/next_task.md` |
