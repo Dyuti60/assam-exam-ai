@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
+from hashlib import sha256
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
     Claim,
+    ContentDocument,
     ContentPackage,
     ContentPackageNoteDraft,
     ContentPackageQuestionBankItem,
@@ -31,6 +33,7 @@ from app.schemas.knowledge import (
     ClaimApprovalStatus,
     ClaimCreate,
     ClaimResponse,
+    ContentDocumentResponse,
     ContentPackageApprovalCreate,
     ContentPackageContentResponse,
     ContentPackageReleaseCreate,
@@ -518,6 +521,80 @@ class KnowledgeService:
                 f"ContentPackage {content_package_id} missing after successful release"
             )
         return self._content_package_response(stored_package)
+
+    def create_content_document(
+        self,
+        content_package_id: int,
+    ) -> ContentDocumentResponse:
+        content_package = self.repository.get_content_package_for_update(
+            content_package_id
+        )
+        if content_package is None:
+            raise ResourceNotFoundError("ContentPackage", content_package_id)
+        if content_package.release_status != "RELEASED":
+            raise ResourceConflictError(
+                f"ContentPackage {content_package_id} must be released "
+                "before document creation"
+            )
+        if self.repository.get_content_document_by_package_id(content_package_id):
+            raise ResourceConflictError(
+                f"ContentPackage {content_package_id} already has a ContentDocument"
+            )
+
+        package_response = self._content_package_response(content_package)
+        note_drafts = self.repository.get_content_package_note_drafts(
+            content_package_id
+        )
+        question_bank_items = (
+            self.repository.get_content_package_question_bank_items(
+                content_package_id
+            )
+        )
+        if package_response.note_draft_ids != [
+            note_draft.id for note_draft in note_drafts
+        ] or package_response.question_bank_item_ids != [
+            question_bank_item.id for question_bank_item in question_bank_items
+        ]:
+            raise RuntimeError(
+                f"ContentPackage {content_package_id} membership could not be resolved"
+            )
+
+        markdown = self._render_content_document_markdown(
+            content_package_id,
+            note_drafts,
+            question_bank_items,
+        )
+        content_document = ContentDocument(
+            content_package_id=content_package_id,
+            content_version_id=content_package.content_version_id,
+            title=f"Content Package {content_package_id}",
+            markdown=markdown,
+            sha256=sha256(markdown.encode("utf-8")).hexdigest(),
+        )
+        try:
+            self.repository.add_content_document(content_document)
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            constraint_name = getattr(error.orig.diag, "constraint_name", None)
+            if constraint_name == "uq_content_documents_content_package_id":
+                raise ResourceConflictError(
+                    f"ContentPackage {content_package_id} already has a ContentDocument"
+                ) from error
+            raise
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_document = self.repository.get_content_document_by_package_id(
+            content_package_id
+        )
+        if stored_document is None:
+            raise RuntimeError(
+                f"ContentDocument for ContentPackage {content_package_id} "
+                "missing after successful commit"
+            )
+        return self._content_document_response(stored_document)
 
     def create_question_bank_item(
         self,
@@ -1108,6 +1185,72 @@ class KnowledgeService:
             withdrawn_at=content_package.withdrawn_at,
             release_note=content_package.release_note,
         )
+
+    @staticmethod
+    def _content_document_response(
+        content_document: ContentDocument,
+    ) -> ContentDocumentResponse:
+        return ContentDocumentResponse(
+            id=content_document.id,
+            content_package_id=content_document.content_package_id,
+            content_version_id=content_document.content_version_id,
+            title=content_document.title,
+            markdown=content_document.markdown,
+            sha256=content_document.sha256,
+            created_at=content_document.created_at,
+        )
+
+    @staticmethod
+    def _render_content_document_markdown(
+        content_package_id: int,
+        note_drafts: list[NoteDraft],
+        question_bank_items: list[QuestionBankItem],
+    ) -> str:
+        sections = [f"# Content Package {content_package_id}"]
+        if note_drafts:
+            sections.append("## Notes")
+            sections.extend(note_draft.markdown.rstrip("\n") for note_draft in note_drafts)
+        if question_bank_items:
+            sections.append("## Practice Questions")
+            for question_number, question_bank_item in enumerate(
+                question_bank_items,
+                start=1,
+            ):
+                if len(question_bank_item.options) > 26:
+                    raise RuntimeError(
+                        f"QuestionBankItem {question_bank_item.id} has more than "
+                        "26 options"
+                    )
+                option_lines = [
+                    f"{chr(ord('A') + position)}. {option.option_text}"
+                    for position, option in enumerate(question_bank_item.options)
+                ]
+                correct_position = next(
+                    (
+                        position
+                        for position, option in enumerate(
+                            question_bank_item.options
+                        )
+                        if option.id == question_bank_item.correct_option_id
+                    ),
+                    None,
+                )
+                if correct_position is None:
+                    raise RuntimeError(
+                        f"QuestionBankItem {question_bank_item.id} has no resolvable "
+                        "correct option"
+                    )
+                correct_option = question_bank_item.options[correct_position]
+                answer_label = chr(ord("A") + correct_position)
+                question_lines = [
+                    f"### Question {question_number}",
+                    question_bank_item.question_text,
+                    "\n".join(option_lines),
+                    f"**Answer:** {answer_label}. {correct_option.option_text}",
+                    f"**Explanation:** {question_bank_item.explanation}",
+                ]
+                sections.append("\n\n".join(question_lines))
+        return "\n\n".join(sections) + "\n"
 
     @staticmethod
     def _render_note_markdown(topic_name: str, claims: list[Claim]) -> str:

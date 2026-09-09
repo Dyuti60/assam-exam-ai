@@ -1362,3 +1362,12 @@ flowchart LR
 - Reads perform no row locks, writes, flushes, commits, transitions, membership rebuilding, member-body expansion, regeneration, or inference. Withdrawing one package removes only that package from later collection results.
 - Developer-recorded evidence is 2 focused T-036 tests, 29 complete ContentPackage tests, 112 combined regressions, and 217 full-suite tests, each with one existing warning, plus Ruff, fresh database upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - No approved-package list, expanded collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-037 implementation was included.
+
+### T-037 Render-ready ContentDocument snapshot
+
+- Migration `c4d8f2a6b731` adds only `content_documents`, with one row per ContentPackage, exact composite package/ContentVersion ownership, non-blank title/Markdown, lowercase 64-character SHA-256, UTC-capable creation time, and restricted package deletion.
+- `POST /api/v1/content-packages/{content_package_id}/content-documents` accepts no body and returns `ContentDocumentResponse` with HTTP 201. Missing packages return the established 404; non-RELEASED packages and packages with an existing document return stable 409 details.
+- The service locks only the package, resolves retained NoteDraft and QuestionBankItem members in their independent membership orders, verifies complete resolution, renders deterministic Markdown with A-Z option/answer labels and one final newline, hashes the exact UTF-8 bytes, and commits once. Current member, Claim, Verification, priority, or manifest state is not re-evaluated.
+- Focused T-037 selection: 10 passed, 29 deselected, 1 warning in 1.95s. Complete ContentPackage suite: 39 passed, 1 warning in 7.26s. Required focused regressions: 112 passed, 1 warning in 6.84s. Full suite: 227 passed, 1 warning in 14.71s.
+- Fresh upgrade and seeded `a8c4e2f9b671 -> c4d8f2a6b731 -> a8c4e2f9b671 -> c4d8f2a6b731` validation preserved a package and both membership types and inferred no document. PostgreSQL probes, Ruff, Alembic head/check, and diff checks passed.
+- ContentDocument retrieval/list/review/release, PDF/HTML rendering, publication, files/storage/download, public or learner delivery, AI, source discovery, mock assembly, and personalization remain absent.

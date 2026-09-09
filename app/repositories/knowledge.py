@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models import (
     Claim,
+    ContentDocument,
     ContentPackage,
     ContentPackageNoteDraft,
     ContentPackageQuestionBankItem,
@@ -163,6 +164,23 @@ class KnowledgeRepository:
         self.session.add(content_package)
         self.session.flush()
         return content_package
+
+    def get_content_document_by_package_id(
+        self,
+        content_package_id: int,
+    ) -> ContentDocument | None:
+        statement = select(ContentDocument).where(
+            ContentDocument.content_package_id == content_package_id
+        )
+        return self.session.scalar(statement)
+
+    def add_content_document(
+        self,
+        content_document: ContentDocument,
+    ) -> ContentDocument:
+        self.session.add(content_document)
+        self.session.flush()
+        return content_document
 
     def get_content_package(self, content_package_id: int) -> ContentPackage | None:
         statement = (

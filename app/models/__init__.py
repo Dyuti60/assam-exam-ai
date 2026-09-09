@@ -1,6 +1,7 @@
 from app.models.base import Base
 from app.models.claim import Claim
 from app.models.claim_evidence import claim_evidence
+from app.models.content_document import ContentDocument
 from app.models.content_package import ContentPackage
 from app.models.content_package_note_draft import ContentPackageNoteDraft
 from app.models.content_package_question_bank_item import (
@@ -26,6 +27,7 @@ from app.models.verification_evidence import VerificationEvidence
 __all__ = [
     "Base",
     "Claim",
+    "ContentDocument",
     "ContentPackage",
     "ContentPackageNoteDraft",
     "ContentPackageQuestionBankItem",

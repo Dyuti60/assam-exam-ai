@@ -16,6 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.content_document import ContentDocument
     from app.models.content_package_note_draft import ContentPackageNoteDraft
     from app.models.content_package_question_bank_item import (
         ContentPackageQuestionBankItem,
@@ -103,4 +104,8 @@ class ContentPackage(Base):
         back_populates="content_package",
         cascade="all, delete-orphan",
         order_by="ContentPackageQuestionBankItem.position",
+    )
+    content_document: Mapped["ContentDocument | None"] = relationship(
+        back_populates="content_package",
+        uselist=False,
     )

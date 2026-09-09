@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from datetime import UTC, datetime
+from hashlib import sha256
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +13,7 @@ from app.core.database import engine, get_db
 from app.main import app
 from app.models import (
     Claim,
+    ContentDocument,
     ContentPackage,
     ContentPackageNoteDraft,
     ContentPackageQuestionBankItem,
@@ -21,6 +23,7 @@ from app.models import (
     PreviousPaper,
     PreviousQuestion,
     QuestionBankItem,
+    QuestionBankOption,
     Verification,
 )
 from app.repositories import KnowledgeRepository
@@ -201,6 +204,20 @@ def _create_package(client: TestClient, version_id: int) -> dict:
     )
     assert response.status_code == 201
     return response.json()
+
+
+def _approve_and_release_package(client: TestClient, package_id: int) -> dict:
+    approval = client.post(
+        f"/api/v1/content-packages/{package_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Document review"},
+    )
+    assert approval.status_code == 200
+    release = client.post(
+        f"/api/v1/content-packages/{package_id}/release",
+        json={"release_status": "RELEASED", "release_note": "Document release"},
+    )
+    assert release.status_code == 200
+    return release.json()
 
 
 def _row_counts(connection: Connection) -> tuple[int, int, int]:
@@ -2238,3 +2255,393 @@ def test_released_content_packages_preserve_order_snapshot_and_are_read_only(
         set(released_ids) - {second_package["id"]}
     )
     assert by_id[ordered_package["id"]] in after
+
+
+def test_content_document_missing_and_unreleased_package_fail_without_rows(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    missing = client.post(
+        "/api/v1/content-packages/999999/content-documents"
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "ContentPackage 999999 not found"}
+
+    foundation = _foundation(client, "document-ineligible")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    _approved_claim(client, topic_id, "document-ineligible")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+
+    response = client.post(
+        f"/api/v1/content-packages/{package['id']}/content-documents"
+    )
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": (
+            f"ContentPackage {package['id']} must be released before document creation"
+        )
+    }
+    approved = client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert approved.status_code == 200
+    approved_unreleased = client.post(
+        f"/api/v1/content-packages/{package['id']}/content-documents"
+    )
+    assert approved_unreleased.status_code == 409
+    assert approved_unreleased.json() == response.json()
+    assert client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "RELEASED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    withdrawn = client.post(
+        f"/api/v1/content-packages/{package['id']}/content-documents"
+    )
+    assert withdrawn.status_code == 409
+    assert withdrawn.json() == response.json()
+    assert db_connection.scalar(select(func.count()).select_from(ContentDocument)) == 0
+
+
+def test_content_document_renders_retained_members_and_is_immutable(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "document-render")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    claim_id = _approved_claim(client, topic_id, "document-render")
+    draft = _create_draft(client, topic_id, version_id)
+    item = _create_item(client, version_id, [claim_id], "document-render")
+    _approve_and_release_draft(client, draft["id"])
+    _approve_and_release_item(client, item["id"])
+    package = _create_package(client, version_id)
+    _approve_and_release_package(client, package["id"])
+
+    assert client.post(
+        f"/api/v1/note-drafts/{draft['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/question-bank-items/{item['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+
+    statements: list[str] = []
+
+    def record_sql(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    commit_count = 0
+    original_commit = Session.commit
+
+    def count_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        return original_commit(session)
+
+    monkeypatch.setattr(Session, "commit", count_commit)
+    try:
+        response = client.post(
+            f"/api/v1/content-packages/{package['id']}/content-documents"
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+    assert response.status_code == 201
+    assert commit_count == 1
+    body = response.json()
+    expected_markdown = (
+        f"# Content Package {package['id']}\n\n"
+        "## Notes\n\n"
+        f"# {foundation['topic']['name']}\n\n"
+        "- Package grounded fact document-render.\n\n"
+        "## Practice Questions\n\n"
+        "### Question 1\n\n"
+        "Package question document-render?\n\n"
+        "A. Option A document-render\n"
+        "B. Option B document-render\n\n"
+        "**Answer:** B. Option B document-render\n\n"
+        "**Explanation:** Package explanation document-render.\n"
+    )
+    assert body == {
+        "id": body["id"],
+        "content_package_id": package["id"],
+        "content_version_id": version_id,
+        "title": f"Content Package {package['id']}",
+        "markdown": expected_markdown,
+        "sha256": sha256(expected_markdown.encode("utf-8")).hexdigest(),
+        "created_at": body["created_at"],
+    }
+    assert datetime.fromisoformat(body["created_at"]).utcoffset() == UTC.utcoffset(None)
+    assert body["markdown"].endswith("\n")
+    assert not body["markdown"].endswith("\n\n")
+    locking_sql = [statement.upper() for statement in statements if "FOR UPDATE" in statement.upper()]
+    assert len(locking_sql) == 1
+    assert "CONTENT_PACKAGES" in locking_sql[0]
+    assert "NOTE_DRAFTS" not in locking_sql[0]
+    assert "QUESTION_BANK_ITEMS" not in locking_sql[0]
+
+    stored = db_connection.execute(
+        select(
+            ContentDocument.markdown,
+            ContentDocument.sha256,
+            ContentDocument.content_version_id,
+        ).where(ContentDocument.id == body["id"])
+    ).one()
+    assert stored.markdown == expected_markdown
+    assert stored.sha256 == body["sha256"]
+    assert stored.content_version_id == version_id
+
+    duplicate = client.post(
+        f"/api/v1/content-packages/{package['id']}/content-documents"
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {
+        "detail": f"ContentPackage {package['id']} already has a ContentDocument"
+    }
+    assert db_connection.scalar(select(func.count()).select_from(ContentDocument)) == 1
+
+    package_withdrawal = client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert package_withdrawal.status_code == 200
+    package_rejection = client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    )
+    assert package_rejection.status_code == 200
+    unchanged = db_connection.execute(
+        select(ContentDocument.markdown, ContentDocument.sha256).where(
+            ContentDocument.id == body["id"]
+        )
+    ).one()
+    assert unchanged.markdown == expected_markdown
+    assert unchanged.sha256 == body["sha256"]
+
+
+def test_content_document_note_only_and_question_only_sections(
+    client: TestClient,
+) -> None:
+    note_foundation = _foundation(client, "document-note-only")
+    note_claim = _approved_claim(
+        client, note_foundation["topic"]["id"], "document-note-only"
+    )
+    assert note_claim > 0
+    draft = _create_draft(
+        client,
+        note_foundation["topic"]["id"],
+        note_foundation["first_version"]["id"],
+    )
+    _approve_and_release_draft(client, draft["id"])
+    note_package = _create_package(client, note_foundation["first_version"]["id"])
+    _approve_and_release_package(client, note_package["id"])
+    note_document = client.post(
+        f"/api/v1/content-packages/{note_package['id']}/content-documents"
+    ).json()
+    assert "## Notes" in note_document["markdown"]
+    assert "## Practice Questions" not in note_document["markdown"]
+
+    item_foundation = _foundation(client, "document-question-only")
+    item_claim = _approved_claim(
+        client, item_foundation["topic"]["id"], "document-question-only"
+    )
+    item = _create_item(
+        client,
+        item_foundation["first_version"]["id"],
+        [item_claim],
+        "document-question-only",
+    )
+    _approve_and_release_item(client, item["id"])
+    item_package = _create_package(client, item_foundation["first_version"]["id"])
+    _approve_and_release_package(client, item_package["id"])
+    item_document = client.post(
+        f"/api/v1/content-packages/{item_package['id']}/content-documents"
+    ).json()
+    assert "## Notes" not in item_document["markdown"]
+    assert "## Practice Questions" in item_document["markdown"]
+
+
+def test_content_document_persistence_failure_rolls_back(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "document-rollback")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    _approved_claim(client, topic_id, "document-rollback")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    _approve_and_release_package(client, package["id"])
+
+    original = KnowledgeRepository.add_content_document
+
+    def fail_after_add(repository, content_document):
+        original(repository, content_document)
+        raise RuntimeError("injected content document failure")
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "add_content_document",
+        fail_after_add,
+    )
+    with pytest.raises(RuntimeError, match="injected content document failure"):
+        client.post(
+            f"/api/v1/content-packages/{package['id']}/content-documents"
+        )
+    assert db_connection.scalar(select(func.count()).select_from(ContentDocument)) == 0
+
+
+def test_content_document_rejects_unresolved_members_and_more_than_26_options(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "document-integrity")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    claim_id = _approved_claim(client, topic_id, "document-integrity")
+    item = _create_item(client, version_id, [claim_id], "document-integrity")
+    _approve_and_release_item(client, item["id"])
+    package = _create_package(client, version_id)
+    _approve_and_release_package(client, package["id"])
+
+    original = KnowledgeRepository.get_content_package_question_bank_items
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "get_content_package_question_bank_items",
+        lambda repository, content_package_id: [],
+    )
+    with pytest.raises(
+        RuntimeError,
+        match=f"ContentPackage {package['id']} membership could not be resolved",
+    ):
+        client.post(
+            f"/api/v1/content-packages/{package['id']}/content-documents"
+        )
+    assert db_connection.scalar(select(func.count()).select_from(ContentDocument)) == 0
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "get_content_package_question_bank_items",
+        original,
+    )
+
+    db_connection.execute(
+        insert(QuestionBankOption),
+        [
+            {
+                "question_bank_item_id": item["id"],
+                "position": position,
+                "option_text": f"Extra option {position}",
+            }
+            for position in range(2, 27)
+        ],
+    )
+    with pytest.raises(
+        RuntimeError,
+        match=f"QuestionBankItem {item['id']} has more than 26 options",
+    ):
+        client.post(
+            f"/api/v1/content-packages/{package['id']}/content-documents"
+        )
+    assert db_connection.scalar(select(func.count()).select_from(ContentDocument)) == 0
+
+
+@pytest.mark.parametrize(
+    ("values", "constraint_name"),
+    [
+        ({"title": "   "}, "ck_content_documents_title_non_blank"),
+        ({"markdown": "\t"}, "ck_content_documents_markdown_non_blank"),
+        ({"sha256": "A" * 64}, "ck_content_documents_sha256_lower_hex"),
+        ({"sha256": "a" * 63}, "ck_content_documents_sha256_lower_hex"),
+    ],
+)
+def test_database_rejects_invalid_content_document_values(
+    client: TestClient,
+    db_connection: Connection,
+    values: dict,
+    constraint_name: str,
+) -> None:
+    foundation = _foundation(client, "document-constraint")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    _approved_claim(client, topic_id, constraint_name)
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    document_values = {
+        "content_package_id": package["id"],
+        "content_version_id": version_id,
+        "title": "Content Package",
+        "markdown": "# Document\n",
+        "sha256": "a" * 64,
+        **values,
+    }
+    with pytest.raises(IntegrityError) as error, db_connection.begin_nested():
+        db_connection.execute(insert(ContentDocument).values(**document_values))
+    assert error.value.orig.diag.constraint_name == constraint_name
+
+
+def test_database_enforces_content_document_package_identity_and_uniqueness(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "document-database")
+    topic_id = foundation["topic"]["id"]
+    first_version_id = foundation["first_version"]["id"]
+    second_version_id = foundation["second_version"]["id"]
+    _approved_claim(client, topic_id, "document-database")
+    draft = _create_draft(client, topic_id, first_version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, first_version_id)
+    valid_values = {
+        "content_package_id": package["id"],
+        "content_version_id": first_version_id,
+        "title": "Content Package",
+        "markdown": "# Document\n",
+        "sha256": "a" * 64,
+    }
+
+    with pytest.raises(IntegrityError) as mismatch, db_connection.begin_nested():
+        db_connection.execute(
+            insert(ContentDocument).values(
+                **{**valid_values, "content_version_id": second_version_id}
+            )
+        )
+    assert (
+        mismatch.value.orig.diag.constraint_name
+        == "fk_content_documents_package_version"
+    )
+
+    document_id = db_connection.execute(
+        insert(ContentDocument).values(**valid_values).returning(ContentDocument.id)
+    ).scalar_one()
+    with pytest.raises(IntegrityError) as duplicate, db_connection.begin_nested():
+        db_connection.execute(insert(ContentDocument).values(**valid_values))
+    assert (
+        duplicate.value.orig.diag.constraint_name
+        == "uq_content_documents_content_package_id"
+    )
+    with pytest.raises(IntegrityError), db_connection.begin_nested():
+        db_connection.execute(
+            delete(ContentPackage).where(ContentPackage.id == package["id"])
+        )
+    assert db_connection.get_transaction() is not None
+    assert db_connection.scalar(
+        select(ContentDocument.id).where(ContentDocument.id == document_id)
+    ) == document_id

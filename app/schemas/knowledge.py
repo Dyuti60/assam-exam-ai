@@ -338,6 +338,16 @@ class ContentPackageContentResponse(BaseModel):
     question_bank_items: list[QuestionBankItemResponse]
 
 
+class ContentDocumentResponse(BaseModel):
+    id: int
+    content_package_id: int
+    content_version_id: int
+    title: str
+    markdown: str
+    sha256: str
+    created_at: datetime
+
+
 class EvidenceCreate(BaseModel):
     source_id: int = Field(gt=0)
     content: str = Field(min_length=1)

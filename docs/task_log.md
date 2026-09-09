@@ -1133,3 +1133,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Render-Ready Document Foundation |
 | Scope | Internal document snapshot identity, deterministic Markdown, checksum, creation and response only; no PDF, HTML, publication, download, storage backend, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-037 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only immutable deterministic ContentDocument creation for one currently RELEASED ContentPackage through `POST /api/v1/content-packages/{content_package_id}/content-documents` |
+| Migration | `c4d8f2a6b731` after `a8c4e2f9b671`; creates only `content_documents` and infers no documents |
+| Tests | T-037 selection: 10 passed, 29 deselected, 1 warning in 1.95s. Complete ContentPackage suite: 39 passed, 1 warning in 7.26s. Required regressions: 112 passed, 1 warning in 6.84s. Full suite: 227 passed, 1 warning in 14.71s. |
+| Validation | Fresh upgrade and seeded upgrade/downgrade/re-upgrade preserved package identity and both membership types with no inferred document. PostgreSQL constraints, changed-file Ruff, Alembic head/check, and diff checks passed. |
+| Notes | Rendering uses retained membership order, stored snapshots, A-Z option/answer labels, one final newline, and SHA-256 of exact UTF-8 Markdown. Package-only locking, one successful commit, duplicate protection, and rollback are covered. No retrieval/list/lifecycle, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-038 work was added. |

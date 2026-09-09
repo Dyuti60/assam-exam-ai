@@ -5428,3 +5428,5 @@ Do not self-approve.
 Do not implement T-038.
 
 Leave T-037 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/content-packages/{content_package_id}/content-documents` and migration `c4d8f2a6b731`. A currently RELEASED package is locked and its retained, independently ordered members are resolved into one deterministic Markdown snapshot with A-Z option/answer labels, exactly one final newline, and a lowercase SHA-256 digest of the exact UTF-8 content. PostgreSQL enforces one document per package, exact ContentVersion agreement, non-blank content, checksum format, and restricted package deletion. Creation commits once and rolls back fully on failure; current member and Claim state is not re-evaluated. T-037 is Ready for review, not approved. No ContentDocument retrieval/list/lifecycle, PDF/HTML, publication, file/storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-038 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
