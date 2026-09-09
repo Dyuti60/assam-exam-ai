@@ -1018,3 +1018,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-034 selection: 5 passed, 17 deselected, 1 warning in 1.80s. Complete ContentPackage suite: 22 passed, 1 warning in 4.40s. Required focused regressions passed: ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2. Full suite: 210 passed, 1 warning in 12.75s. |
 | Validation | Changed-file Ruff passed. Fresh upgrade and seeded upgrade/downgrade/re-upgrade passed on dedicated `_test` databases. Package identity, creation time, member IDs, and positions were preserved; each upgrade produced DRAFT/null review metadata. PostgreSQL probes, Alembic head/check, diff, and whitespace checks passed. |
 | Notes | Approval locks only the package row, commits once, and rolls back failures. APPROVED/REJECTED record UTC decision time and optional note; DRAFT clears both. Review is independent of member state and cannot mutate membership. No package release/list, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-035 work was added. |
+
+
+---
+
+## T-034 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-034` |
+| Implementation commit | `8bdd96a1931be638ad4c5a40ab22a34382e66812` |
+| Base/task-issuance commit | `bf65890e89752624c93e9cfd355240dea6499fc9` |
+| Review state | **APPROVED** |
+| Approved capability | Independent DRAFT/APPROVED/REJECTED human review for ContentPackage with UTC/reset semantics and immutable ordered membership |
+| Migration | `f7b3d1a8c529` follows `e2c6f8a1d943` and safely migrates existing packages to DRAFT with null decision metadata |
+| Validation evidence | Developer-recorded: 5 focused T-034 tests, 22 complete ContentPackage tests, and 210 full-suite tests, each with one existing warning; focused regressions; Ruff; fresh and seeded migration cycles; PostgreSQL probes; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. Schema, model, migration, row locking, transaction rollback, fresh retrieval, response compatibility, database invariants, membership preservation, state independence, and scope match the task with no blocking finding. |
+| Boundaries | No package list, release/withdrawal, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-035 behavior was included. |
+
+---
+
+## T-035 issued — Add controlled ContentPackage release lifecycle
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add an explicit UNRELEASED/RELEASED/WITHDRAWN lifecycle to an approved immutable ContentPackage while retaining release provenance and preventing in-place re-release |
+| Architectural phase | Canonical Content / Controlled Package Release |
+| Scope | Package release fields, constraints, migration, and one decision endpoint only; no released-package collection, publication transport, rendering, PDF/export, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |

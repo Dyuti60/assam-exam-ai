@@ -4732,3 +4732,240 @@ Do not implement T-035.
 Leave T-034 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added independent DRAFT/APPROVED/REJECTED human review to ContentPackage through migration `f7b3d1a8c529` and exactly `POST /api/v1/content-packages/{content_package_id}/approval`. Existing and new packages begin DRAFT with null decision metadata. APPROVED and REJECTED record the current UTC decision time and optional note; DRAFT clears both. The decision locks and changes only the target package review fields, commits once, and preserves immutable ordered membership and every member. Package creation, ID-only retrieval, and expanded-content retrieval now expose the same stored review metadata. T-034 is Ready for review, not approved. No package release/list, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, or T-035 behavior was added.
+
+
+---
+
+## T-034 independent review outcome
+
+T-034 is **APPROVED** at implementation commit `8bdd96a1931be638ad4c5a40ab22a34382e66812`, whose parent is the T-034 task-issuance commit `bf65890e89752624c93e9cfd355240dea6499fc9`.
+
+The immutable diff adds only independent ContentPackage DRAFT/APPROVED/REJECTED review fields, migration `f7b3d1a8c529`, response compatibility, row-locked review persistence, one approval endpoint, focused tests, and accurate documentation. PostgreSQL constrains valid state/metadata combinations. Existing packages become DRAFT with null decision metadata and no inferred approval.
+
+The approval path locks only the target package, updates only its three review fields, commits once, rolls back persistence errors, freshly retrieves stored ordered membership, and remains independent of member, Claim, Verification, priority, T-030, other package, and other ContentVersion state. Package creation, ID-only retrieval, and expanded-content retrieval consistently expose the stored review metadata and remain otherwise compatible.
+
+Developer-recorded validation reported 5 focused T-034 tests, 22 complete ContentPackage tests, and 210 full-suite tests, each with one existing warning, plus required focused regressions, Ruff, fresh and seeded migration upgrade/downgrade/re-upgrade, PostgreSQL probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+
+No blocking finding remains. No approved/released package collection, package release, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-035 implementation was included.
+
+---
+
+# T-035 — Add controlled ContentPackage release lifecycle
+
+## Role and synchronization gate
+
+You are the implementation engineer for `Dyuti60/assam-exam-ai`. Implement only T-035 using the live repository, `AGENTS.md`, and the established route → schema → service → repository → PostgreSQL layering.
+
+Before editing:
+
+1. fetch `origin` and fast-forward local `main`;
+2. record `git rev-parse HEAD` and confirm it equals `origin/main`;
+3. confirm the working tree is clean;
+4. confirm approved T-034 commit `8bdd96a1931be638ad4c5a40ab22a34382e66812` and the documentation commit issuing T-035 exist in history;
+5. read the complete live repository and this prompt.
+
+Stop without changing files if synchronization, history, branch, or working tree is unexpected. The live repository is authoritative.
+
+## Current context and exact goal
+
+ContentPackage already retains immutable ordered membership under one exact ContentVersion and has independent DRAFT/APPROVED/REJECTED review.
+
+Add only its controlled release lifecycle:
+
+- `UNRELEASED`
+- `RELEASED`
+- `WITHDRAWN`
+
+Every existing and new package starts UNRELEASED with null release metadata. Approval must never imply release.
+
+Add exactly:
+
+`POST /api/v1/content-packages/{content_package_id}/release`
+
+It accepts an explicit RELEASED or WITHDRAWN decision and optional release note. Do not add a released-package collection; that is a later task.
+
+## API and response contract
+
+Add:
+
+- `ContentPackageReleaseStatus` for persisted UNRELEASED/RELEASED/WITHDRAWN state;
+- `ContentPackageReleaseDecision` permitting only RELEASED/WITHDRAWN requests;
+- `ContentPackageReleaseCreate` with required `release_status` and optional `release_note`.
+
+Extend the shared `ContentPackageResponse` with:
+
+- `release_status`;
+- `released_at`;
+- `withdrawn_at`;
+- `release_note`.
+
+Package creation, ID retrieval, expanded-content retrieval, approval responses, and release responses must expose identical stored release metadata without duplicating schemas.
+
+Missing package returns HTTP 404 with `{"detail": "ContentPackage <id> not found"}`. Missing/invalid/UNRELEASED decisions return normal 422.
+
+Use deterministic 409 details for rejected transitions and eligibility failures. At minimum:
+
+- `ContentPackage <id> must be approved before release`;
+- `ContentPackage <id> has no retained members to release`;
+- `ContentPackage <id> cannot transition from <CURRENT> to <REQUESTED>`;
+- `ContentPackage <id> must be withdrawn before changing approval`.
+
+Do not mutate on 404, 409, or 422. Generic persistence exceptions must roll back and be re-raised, not mislabeled as conflicts.
+
+## Transition and eligibility semantics
+
+Allow only:
+
+1. UNRELEASED → RELEASED;
+2. RELEASED → WITHDRAWN.
+
+UNRELEASED → RELEASED requires:
+
+- the package's own `approval_status == APPROVED`;
+- at least one retained NoteDraft or QuestionBankItem membership link.
+
+Eligibility depends only on the package's stored review and retained membership. Do not re-evaluate current member approval/release, Claims, Verification, Topic priority, T-030 manifest, another package, or another ContentVersion.
+
+On release:
+
+- set RELEASED;
+- record current UTC `released_at`;
+- keep `withdrawn_at` null;
+- store the optional release note.
+
+On withdrawal:
+
+- set WITHDRAWN;
+- preserve the original `released_at`;
+- record current UTC `withdrawn_at`;
+- replace `release_note` with the withdrawal note.
+
+Reject without mutation:
+
+- UNRELEASED → WITHDRAWN;
+- RELEASED → RELEASED;
+- WITHDRAWN → WITHDRAWN;
+- WITHDRAWN → RELEASED.
+
+A withdrawn package cannot be re-released in place.
+
+While RELEASED, DRAFT or REJECTED package-review decisions return 409 and do not mutate. After withdrawal, review decisions work again and preserve all release metadata. Approval and release remain independent.
+
+## Persistence and PostgreSQL invariants
+
+Extend `ContentPackage` with exactly:
+
+- `release_status`: non-null string, default UNRELEASED;
+- `released_at`: nullable timezone-aware timestamp;
+- `withdrawn_at`: nullable timezone-aware timestamp;
+- `release_note`: nullable text.
+
+Model and database constraints must enforce:
+
+1. release status is exactly UNRELEASED, RELEASED, or WITHDRAWN;
+2. UNRELEASED has null released_at, withdrawn_at, and release_note;
+3. RELEASED has non-null released_at, null withdrawn_at, and APPROVED package review;
+4. WITHDRAWN has non-null released_at and withdrawn_at.
+
+Cross-table non-empty membership cannot be encoded by a simple check constraint; enforce it transactionally in the service. Do not add triggers.
+
+Create exactly one Alembic revision whose parent is `f7b3d1a8c529`. It adds only these fields and constraints, migrates existing packages to UNRELEASED/null without inference, preserves all review/membership/content/provenance data, and edits no historical migration. Keep defaults aligned with model metadata and `alembic check`.
+
+Downgrade removes only T-035 constraints and columns, preserving every pre-T-035 package, review decision, membership, ordering, asset, ContentVersion, timestamp, and provenance row.
+
+Validate a seeded cycle:
+
+`f7b3d1a8c529 → T-035 head → f7b3d1a8c529 → T-035 head`.
+
+Prove package review, membership IDs/positions, identity, ContentVersion, and creation time survive; each upgrade yields UNRELEASED/null with no inferred release.
+
+## Locking, transactions, and repository behavior
+
+Both package release and potentially conflicting package approval decisions must load the package using `SELECT ... FOR UPDATE` on the package row.
+
+Do not lock or rewrite member assets. Membership links may be loaded to check non-empty retained membership but must not be mutated.
+
+Release must:
+
+- validate before field mutation;
+- update only package release fields;
+- commit exactly once;
+- roll back the session on persistence failure;
+- freshly retrieve and return the stored shared package response.
+
+Ordinary ID-only and expanded-content reads remain lock-free.
+
+## Required tests
+
+Add PostgreSQL-backed tests proving:
+
+- new and migrated packages default UNRELEASED with null release metadata;
+- package approval does not imply release;
+- all package response boundaries expose consistent stored release metadata;
+- DRAFT and REJECTED packages cannot release and remain unchanged;
+- an approved package with retained members can release even if members were later withdrawn or review-changed;
+- Claims, Verification, priority, T-030, other packages, and member states cannot substitute for package approval;
+- a directly seeded empty approved package receives the stable no-members 409 without mutation;
+- successful release records exact UTC offset, optional note, and preserves identity/review/membership/order;
+- withdrawal preserves released_at, records exact UTC withdrawn_at, and replaces the note;
+- all invalid transitions return deterministic 409 with no mutation;
+- WITHDRAWN cannot be re-released;
+- RELEASED blocks DRAFT/REJECTED package review until withdrawal;
+- post-withdrawal review changes preserve release metadata;
+- missing package returns exact 404;
+- missing/invalid/UNRELEASED requests return 422;
+- PostgreSQL rejects invalid release status and every invalid timestamp/note/review combination;
+- persistence failure rolls back and leaves the package unchanged;
+- release and approval SQL lock only the package row;
+- ordinary retrieval and expanded content remain lock-free;
+- all T-030 through T-034 and member review/release behavior remain compatible.
+
+Use exact UTC offset assertions. Do not weaken, delete, reorder, or silently skip existing tests.
+
+## Required validation
+
+Use dedicated PostgreSQL databases ending in `_test`. Run and report:
+
+- focused T-035 and complete ContentPackage tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft/released-NoteDraft tests;
+- QuestionBankItem/released-QuestionBankItem tests;
+- full suite;
+- Ruff on all changed Python;
+- `uv run alembic heads` and `uv run alembic check`;
+- fresh upgrade;
+- seeded upgrade/downgrade/re-upgrade;
+- direct PostgreSQL constraint probes;
+- `git diff --check`, untracked-file whitespace checks, and final `git status --short`.
+
+Confirm one head whose parent is `f7b3d1a8c529`, no schema drift or historical migration edits, and no dependency/config/environment/Docker/API-key/infrastructure change.
+
+## Affected components
+
+Update only where required: `app/models/content_package.py`; shared schemas; repository; service; knowledge routes; exactly one new migration; focused ContentPackage tests; architecture/workflow; append-only task log and next task.
+
+Inspect but otherwise leave unchanged: membership models; other domain models and historical migrations; T-030 through T-034 behavior; `pyproject.toml`; `uv.lock`; `.env.example`; `app/core/config.py`; `docker-compose.yml`; `AGENTS.md`; `README.md`.
+
+## Documentation and scope gate
+
+Document only implemented behavior. Keep `docs/task_log.md` and `docs/next_task.md` append-only. Record T-035 only as `Ready for review` and do not define or implement T-036.
+
+State explicitly that package release does not publish, render, export, deliver, or expose a released-package collection.
+
+T-035 needs no external API key, dependency, secret, environment variable, configuration, Docker service, storage backend, or infrastructure change. Stop and report if one appears necessary.
+
+Do not add package list/released collection; publication transport; rendering, HTML, PDF, export, files, storage, CDN, email; public/learner APIs; users/auth/reviewer/releaser identity/history; membership mutation/rebuild/reorder; package clone/delete/backfill; learner sessions/scoring/analytics/recommendations/mocks/personalization; AI/LLM providers, keys, prompts, source discovery, ingestion, RAG, embeddings, vectors, scraping; automatic version inference; content regeneration; new member transitions; PreviousQuestion conversion; predictions; dependencies; configuration; Docker services; payments; or unrelated infrastructure.
+
+Preserve trust, provenance, explicit human review, controlled release, exact ContentVersion ownership, immutable ordered membership, and Generate Once/Personalize Later.
+
+## Final report and handoff
+
+Report starting HEAD; changed/created files; migration revision/parent; fields/constraints; request/response; transitions/errors; empty-membership behavior; locking/rollback; immutable membership/state independence; compatibility; focused/full tests; migration cycles/probes; Alembic/Ruff/diff; dependency/config inspection; retained boundaries; final status; and explicit confirmation of no commit, push, PR, self-approval, T-036, released-package collection, publication, rendering, PDF/export, delivery, AI, source discovery, mock assembly, or personalization.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-036.
+
+Leave T-035 uncommitted and unpushed in the working tree for independent review.

@@ -1306,3 +1306,14 @@ flowchart LR
 - Focused T-034 selection: 5 passed, 17 deselected, 1 warning in 1.80s. Complete ContentPackage suite: 22 passed, 1 warning in 4.40s. Required focused regressions passed: ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests.
 - Full suite: 210 passed, 1 warning in 12.75s. Changed-file Ruff passed. Fresh upgrade and the seeded `e2c6f8a1d943 -> f7b3d1a8c529 -> e2c6f8a1d943 -> f7b3d1a8c529` cycle passed with package identity and both ordered memberships preserved; direct PostgreSQL constraint probes passed.
 - ContentPackage has no approved/released collection, package release, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, or infrastructure behavior.
+
+
+### T-034 post-push review
+
+- **APPROVED** at implementation commit `8bdd96a1931be638ad4c5a40ab22a34382e66812`, whose parent is the T-034 issuance head `bf65890e89752624c93e9cfd355240dea6499fc9`.
+- The immutable commit adds only independent ContentPackage DRAFT/APPROVED/REJECTED review metadata, migration `f7b3d1a8c529`, response compatibility, and `POST /api/v1/content-packages/{content_package_id}/approval`.
+- Model and migration constraints agree: DRAFT requires null decision metadata, while APPROVED and REJECTED require a UTC decision timestamp and allow an optional note. Existing packages migrate to DRAFT without inferred approval.
+- Decisions lock only the target package row, update only its three review fields, commit once, roll back persistence failures, and freshly reload both retained membership lists in stored order.
+- Package review is independent of member review/release, Claims, Verification, priority, T-030, other packages, and other ContentVersions. Ordinary package reads remain lock-free.
+- Developer-recorded evidence is 5 focused T-034 tests, 22 complete ContentPackage tests, and 210 full-suite tests, each with one existing warning, plus focused regressions, successful Ruff, fresh and seeded migration cycles, PostgreSQL constraint probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No package approved/released collection, package release, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-035 implementation was included.
