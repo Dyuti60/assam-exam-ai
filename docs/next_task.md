@@ -6650,3 +6650,269 @@ Do not implement or define T-044.
 Leave T-043 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/pdf-artifacts/{pdf_artifact_id}` and `GET /api/v1/pdf-artifacts/{pdf_artifact_id}/download`. Both resolve one artifact by its own ID through a PdfArtifact-only, no-autoflush, lock-free query. Metadata reuses the stored response and excludes raw bytes; download returns the exact persisted bytes with stored media type, size, and deterministic attachment filename. Missing artifacts use the stable 404, and later document withdrawal or unrelated upstream state changes do not affect retrieval. No rendering, hashing, related-state evaluation, write, model/schema/migration change, dependency, external storage, publication, learner delivery, AI, personalization, or T-044 work was added. T-043 is Ready for review, not approved; exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-043 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-043` |
+| Implementation commit | `b6ef5943536380ed8cf18a09133ad5cd68f603ad` |
+| Base/task-issuance commit | `45f4c71ed41d4dabc56278281182bed45d1800c0` |
+| Review result | **APPROVED** |
+| Approved capability | Read-only internal retrieval of one PdfArtifact's stored metadata and exact immutable PDF bytes by artifact ID, with stored headers and no regeneration or related-state evaluation |
+| Independent review | The exact parent/diff, routes, response behavior, repository query, service boundary, tests, documentation, unchanged persistence/dependency/configuration files, and excluded scope were inspected. No blocking finding was identified. |
+| CI evidence | GitHub exposes no status contexts or workflow runs for the implementation commit. Developer-recorded local validation is retained as evidence and is not described as CI. |
+
+# T-044 — Add independent PdfArtifact human review
+
+## Role
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read the live repository before editing and follow `AGENTS.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt.
+
+Repository code is authoritative. Preserve the append-only history in `docs/task_log.md` and `docs/next_task.md`.
+
+## Starting-state verification
+
+Before editing:
+
+1. Confirm branch `main`, fetch `origin/main`, and confirm a clean working tree.
+2. Confirm the checked-out HEAD is the documentation commit that approves T-043 and issues T-044.
+3. Confirm T-043 implementation commit `b6ef5943536380ed8cf18a09133ad5cd68f603ad` is its implementation ancestor and its exact base is `45f4c71ed41d4dabc56278281182bed45d1800c0`.
+4. Read the current PdfArtifact and ContentDocument models, model registration, migration `e7b4c9d2a615`, PdfArtifact schemas, repository/service/routes, renderer, and complete PdfArtifact tests.
+5. Inspect the existing independent human-review implementations for QuestionBankItem, NoteDraft, ContentPackage, and ContentDocument. Reuse established vocabulary and transition/error conventions where they remain correct.
+6. Confirm Alembic currently has one head: `e7b4c9d2a615`.
+7. Stop and report any repository divergence that materially changes this task.
+
+## Objective
+
+Add an independent human-review lifecycle to each immutable PdfArtifact:
+
+`DRAFT -> APPROVED`
+`DRAFT -> REJECTED`
+`APPROVED or REJECTED -> DRAFT`
+`APPROVED <-> REJECTED`
+
+Review applies to the stored artifact itself. It must not mutate or regenerate its PDF bytes, filename, media type, byte size, checksum, document/package/ContentVersion ownership, or creation time.
+
+Verification, upstream approval, ContentDocument release, and PdfArtifact human approval remain distinct concepts. Do not infer artifact approval from any upstream state.
+
+## Data model and PostgreSQL invariants
+
+Add PdfArtifact review fields consistent with the approved repository patterns:
+
+- `approval_status`: non-null, default `DRAFT`, allowed values exactly `DRAFT`, `APPROVED`, `REJECTED`;
+- `approval_decided_at`: timezone-aware nullable timestamp;
+- `reviewer_note`: nullable text.
+
+PostgreSQL must independently enforce:
+
+- only the three allowed approval states;
+- `DRAFT` requires `approval_decided_at IS NULL` and `reviewer_note IS NULL`;
+- `APPROVED` and `REJECTED` require a non-null `approval_decided_at`;
+- the existing immutable payload, ownership, uniqueness, byte-size, checksum, and deletion constraints remain intact.
+
+Use explicit named constraints following repository conventions. Application validation complements these constraints; it does not replace them.
+
+Existing PdfArtifact rows must migrate to `DRAFT` with null decision time and null reviewer note. Do not infer review from ContentDocument approval/release or any other related state.
+
+## Migration
+
+Add exactly one Alembic revision whose parent is `e7b4c9d2a615`.
+
+The migration must:
+
+- add only the T-044 review columns and constraints;
+- preserve every existing artifact byte-for-byte, including exact ownership, filename, media type, byte size, SHA-256, and creation timestamp;
+- seed existing rows only as `DRAFT`/null/null;
+- use safe upgrade and downgrade ordering;
+- downgrade by removing only T-044 constraints/columns;
+- never edit a historical migration.
+
+Validate a seeded cycle:
+
+`e7b4c9d2a615 -> T-044 head -> e7b4c9d2a615 -> T-044 head`
+
+Prove existing artifacts retain their exact pre-T-044 fields and return to DRAFT/null/null on each upgrade.
+
+## API contract
+
+Add exactly:
+
+`POST /api/v1/pdf-artifacts/{pdf_artifact_id}/approval`
+
+Request body:
+
+```json
+{
+  "approval_status": "APPROVED",
+  "reviewer_note": "Optional reviewer note"
+}
+```
+
+Use the existing approval enum/schema conventions where appropriate. Do not create duplicate concepts merely to rename them.
+
+Behavior:
+
+- Missing artifact: HTTP 404 with exact detail `PdfArtifact <id> not found`.
+- `DRAFT`: clear `approval_decided_at` and clear `reviewer_note`, regardless of request note.
+- `APPROVED` or `REJECTED`: set `approval_decided_at` to the current UTC time and store the optional reviewer note.
+- A repeated or changed decision is allowed and records a fresh decision time for non-DRAFT states.
+- Return the complete stored PdfArtifact metadata response including the new review fields, never raw PDF bytes.
+- Invalid approval values use the established request-validation response.
+
+Keep the route thin:
+
+`Route -> Pydantic schema -> Service -> Repository -> PostgreSQL`
+
+## Locking and atomicity
+
+The decision operation must:
+
+- lock only the target PdfArtifact row with a narrowly scoped `FOR UPDATE OF pdf_artifacts` query;
+- update only the three review fields;
+- commit exactly once on success;
+- roll back every failure;
+- reload and return stored metadata after commit using the ordinary lock-free PdfArtifact lookup.
+
+Do not lock or mutate ContentDocument, ContentPackage, memberships, NoteDraft, QuestionBankItem, Claim, Evidence, Source, Verification, Exam, SyllabusVersion, Topic, or ContentVersion.
+
+Do not re-evaluate document/package/member/Claim/Verification/current-release state. A stored PdfArtifact can be reviewed even if related state later changes.
+
+## Existing API compatibility
+
+Extend the existing PdfArtifact metadata response additively with:
+
+- `approval_status`;
+- `approval_decided_at`;
+- `reviewer_note`.
+
+The following must continue working:
+
+- T-042 creation still returns HTTP 201 metadata, now with `DRAFT`, null, null;
+- T-043 metadata retrieval returns the stored review fields and no raw bytes;
+- T-043 download returns the exact unchanged bytes and existing headers regardless of review state;
+- missing retrieval/download errors remain unchanged.
+
+Review status must not gate download in T-044. Release/publication is a separate future boundary.
+
+## Repository and service requirements
+
+Add the smallest repository method needed to lock one PdfArtifact by ID for a decision. Reuse the existing ordinary PdfArtifact lookup after commit.
+
+Business transition behavior belongs in the service. Persistence query construction belongs in the repository. Do not place review logic in the route.
+
+Use the repository's established failure handling. Do not translate unrelated database/programming errors into 404 or 409.
+
+## Required tests
+
+Add focused PostgreSQL-backed tests proving at minimum:
+
+- newly created artifacts are `DRAFT` with null decision time/note;
+- migrated existing artifacts become `DRAFT`/null/null without payload or ownership changes;
+- APPROVED records UTC decision time and optional note;
+- REJECTED records UTC decision time and optional note;
+- resetting to DRAFT clears both decision time and note;
+- switching/repeating non-DRAFT decisions records the requested state and a fresh decision time;
+- missing artifact returns the stable 404;
+- invalid status is rejected by request validation;
+- only the target PdfArtifact is locked and only its three review fields change;
+- successful review commits exactly once;
+- persistence failure rolls back without a partial decision;
+- related ContentDocument/package/member/Claim/Verification state is neither loaded, locked, changed, nor used for eligibility;
+- artifact bytes, byte size, SHA-256, filename, media type, ownership, and creation time never change;
+- metadata retrieval exposes stored review fields without bytes;
+- download bytes and headers remain identical in DRAFT, APPROVED, and REJECTED states;
+- direct PostgreSQL writes violating allowed-state or temporal/note consistency constraints fail;
+- existing T-042 creation and T-043 retrieval/download tests remain valid;
+- all earlier content and provenance boundaries remain compatible.
+
+Use a dedicated PostgreSQL database whose name ends in `_test`. Do not use SQLite as a substitute for PostgreSQL behavior.
+
+## Validation
+
+Run and report:
+
+- focused T-044 review tests;
+- complete PdfArtifact suite, including T-042 and T-043;
+- complete ContentPackage/ContentDocument suite;
+- T-041 released-document tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft and released-NoteDraft tests;
+- QuestionBankItem and released-QuestionBankItem tests;
+- full test suite;
+- Ruff on every changed Python file;
+- `uv lock --check` or repository-equivalent lock verification;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh upgrade through the new head;
+- seeded upgrade/downgrade/re-upgrade evidence;
+- direct PostgreSQL constraint probes;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Confirm one Alembic head whose parent is `e7b4c9d2a615`, no schema drift, no historical migration edit, and no unrelated dependency/configuration/infrastructure change.
+
+## Affected components
+
+Inspect and modify only where required:
+
+- PdfArtifact model;
+- shared PdfArtifact/approval schemas;
+- model metadata/registration only if actually required;
+- knowledge repository;
+- knowledge service;
+- knowledge routes;
+- exactly one new migration;
+- focused PdfArtifact tests;
+- `docs/architecture.md` and `docs/workflow.md` for implemented current state;
+- append-only implementation records in `docs/task_log.md` and `docs/next_task.md`.
+
+Inspect and leave unchanged unless a genuine inconsistency requires otherwise:
+
+- ContentDocument, ContentPackage, membership, NoteDraft, QuestionBankItem, Claim, Evidence, Verification, exam/syllabus/topic models;
+- deterministic PDF renderer;
+- every historical migration;
+- `pyproject.toml` and `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+No new dependency, API key, environment variable, secret, configuration value, Docker service, renderer change, external storage, or infrastructure is required. Leave those files unchanged and explicitly report that.
+
+## Scope exclusions
+
+Do not add PdfArtifact release/withdrawal/publication lifecycle; released/approved artifact collections; public/learner APIs; authentication; ContentDocument-keyed artifact lookup; artifact list; object/file/blob/CDN storage; presigned URLs; range/conditional requests; artifact update/delete/replacement/regeneration/repair; HTML artifacts; background jobs/queues; AI/LLM/API keys/source discovery/ingestion/RAG/embeddings/scraping; mock assembly/sessions/scoring/analytics/recommendations/personalization; payments; production infrastructure; end-to-end public delivery; or T-045.
+
+Do not make artifact approval automatic. Human review is an explicit trust boundary.
+
+## Documentation and handoff
+
+Document only implemented behavior. Keep `docs/task_log.md` and `docs/next_task.md` append-only. Record T-044 only as `Ready for review`; do not approve it and do not define or implement T-045.
+
+Report:
+
+- starting and final Git state;
+- exact files changed;
+- migration revision and parent;
+- model fields and PostgreSQL constraints;
+- endpoint, request/response, and stable errors;
+- locking, one-commit atomicity, and rollback behavior;
+- immutable payload/ownership evidence;
+- migration cycle and direct constraint evidence;
+- focused/regression/full-suite results;
+- unchanged dependencies/configuration/Docker/renderer state;
+- explicit excluded scope.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-045.
+
+Leave T-044 uncommitted and unpushed in the working tree for independent review.
