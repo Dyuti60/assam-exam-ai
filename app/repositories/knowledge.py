@@ -174,6 +174,16 @@ class KnowledgeRepository:
         )
         return self.session.scalar(statement)
 
+    def get_content_document(
+        self,
+        content_document_id: int,
+    ) -> ContentDocument | None:
+        statement = select(ContentDocument).where(
+            ContentDocument.id == content_document_id
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
     def add_content_document(
         self,
         content_document: ContentDocument,

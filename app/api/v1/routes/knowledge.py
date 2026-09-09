@@ -262,6 +262,20 @@ def create_content_document(
         raise _conflict(error) from error
 
 
+@router.get(
+    "/content-documents/{content_document_id}",
+    response_model=ContentDocumentResponse,
+)
+def get_content_document(
+    content_document_id: int,
+    db: DatabaseSession,
+) -> ContentDocumentResponse:
+    try:
+        return KnowledgeService(db).get_content_document(content_document_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
 @router.post(
     "/question-bank-items",
     response_model=QuestionBankItemResponse,

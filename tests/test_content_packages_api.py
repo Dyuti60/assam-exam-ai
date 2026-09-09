@@ -2645,3 +2645,142 @@ def test_database_enforces_content_document_package_identity_and_uniqueness(
     assert db_connection.scalar(
         select(ContentDocument.id).where(ContentDocument.id == document_id)
     ) == document_id
+
+
+def test_content_document_retrieval_missing_returns_404_without_mutation(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    counts_before = (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    )
+
+    response = client.get("/api/v1/content-documents/999999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "ContentDocument 999999 not found"}
+    assert (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    ) == counts_before
+
+
+def test_content_document_retrieval_preserves_stored_snapshot_and_is_read_only(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "document-retrieval")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    claim_id = _approved_claim(client, topic_id, "document-retrieval")
+    draft = _create_draft(client, topic_id, version_id)
+    item = _create_item(client, version_id, [claim_id], "document-retrieval")
+    _approve_and_release_draft(client, draft["id"])
+    _approve_and_release_item(client, item["id"])
+    package = _create_package(client, version_id)
+    _approve_and_release_package(client, package["id"])
+    creation = client.post(
+        f"/api/v1/content-packages/{package['id']}/content-documents"
+    )
+    assert creation.status_code == 201
+    created = creation.json()
+    assert created["markdown"].endswith("\n")
+    assert not created["markdown"].endswith("\n\n")
+    assert created["sha256"] == sha256(
+        created["markdown"].encode("utf-8")
+    ).hexdigest()
+    assert created["sha256"] == created["sha256"].lower()
+    assert len(created["sha256"]) == 64
+    assert created["content_package_id"] == package["id"]
+    assert created["content_version_id"] == version_id
+    assert datetime.fromisoformat(created["created_at"]).utcoffset() == UTC.utcoffset(
+        None
+    )
+
+    assert client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    for resource, resource_id in (
+        ("note-drafts", draft["id"]),
+        ("question-bank-items", item["id"]),
+    ):
+        assert client.post(
+            f"/api/v1/{resource}/{resource_id}/release",
+            json={"release_status": "WITHDRAWN"},
+        ).status_code == 200
+        assert client.post(
+            f"/api/v1/{resource}/{resource_id}/approval",
+            json={"approval_status": "REJECTED"},
+        ).status_code == 200
+    assert client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+
+    counts_before = (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    )
+    statements: list[str] = []
+    commit_count = 0
+    flush_count = 0
+    original_commit = Session.commit
+    original_flush = Session.flush
+
+    def record_sql(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    def count_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        return original_commit(session)
+
+    def count_flush(session, objects=None):
+        nonlocal flush_count
+        flush_count += 1
+        return original_flush(session, objects)
+
+    monkeypatch.setattr(Session, "commit", count_commit)
+    monkeypatch.setattr(Session, "flush", count_flush)
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    try:
+        first = client.get(f"/api/v1/content-documents/{created['id']}")
+        second = client.get(f"/api/v1/content-documents/{created['id']}")
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == created
+    assert second.json() == created
+    assert commit_count == 0
+    assert flush_count == 0
+    select_statements = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+    ]
+    assert len(select_statements) == 2
+    assert all("CONTENT_DOCUMENTS" in statement.upper() for statement in select_statements)
+    assert all("CONTENT_PACKAGES" not in statement.upper() for statement in select_statements)
+    assert all("NOTE_DRAFTS" not in statement.upper() for statement in select_statements)
+    assert all(
+        "QUESTION_BANK_ITEMS" not in statement.upper()
+        for statement in select_statements
+    )
+    assert all(
+        not statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        for statement in statements
+    )
+    assert all("FOR UPDATE" not in statement.upper() for statement in statements)
+    assert (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    ) == counts_before

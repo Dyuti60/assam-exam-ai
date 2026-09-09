@@ -596,6 +596,15 @@ class KnowledgeService:
             )
         return self._content_document_response(stored_document)
 
+    def get_content_document(
+        self,
+        content_document_id: int,
+    ) -> ContentDocumentResponse:
+        content_document = self.repository.get_content_document(content_document_id)
+        if content_document is None:
+            raise ResourceNotFoundError("ContentDocument", content_document_id)
+        return self._content_document_response(content_document)
+
     def create_question_bank_item(
         self,
         request: QuestionBankItemCreate,

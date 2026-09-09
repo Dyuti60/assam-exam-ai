@@ -1175,3 +1175,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Stored Document Read Boundary |
 | Scope | Exact stored ContentDocument response and missing-resource handling only; no regeneration, checksum recomputation, lifecycle, list, PDF/HTML, publication, storage/download, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-038 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/content-documents/{content_document_id}`, returning one exact immutable stored ContentDocument response by its own ID |
+| Migration | None; models, schemas, constraints, registration, and Alembic head `c4d8f2a6b731` remain unchanged |
+| Tests | T-038 selection: 2 passed, 39 deselected, 1 warning in 0.81s. Complete ContentPackage/ContentDocument suite: 41 passed, 1 warning in 7.14s. Required regressions: 112 passed, 1 warning in 6.55s. Full suite: 229 passed, 1 warning in 15.71s. |
+| Validation | Fresh dedicated `_test` upgrade reached `c4d8f2a6b731`. Changed-file Ruff, Alembic head/check, diff, and whitespace checks passed. |
+| Notes | Retrieval performs one no-autoflush ContentDocument SELECT, reuses the stored serializer, and does not load package members, lock, write, commit, regenerate Markdown, recalculate SHA-256, or inspect current related state. T-038 is Ready for review, not approved. No list/lifecycle, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-039 work was added. |

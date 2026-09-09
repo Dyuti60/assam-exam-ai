@@ -5613,3 +5613,5 @@ Do not self-approve.
 Do not implement T-039.
 
 Leave T-038 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-documents/{content_document_id}` through one focused repository lookup, read-only service method, thin route, tests, and current-state documentation. It returns the existing stored ContentDocument response exactly and uses no autoflush, related-object loading, lock, write, commit, member resolution, regeneration, checksum calculation/repair, ownership inference, or current-state evaluation. Missing documents return the stable `ContentDocument <id> not found` 404. T-038 is Ready for review, not approved. Alembic remains `c4d8f2a6b731`; no model, schema, registration, migration, dependency, configuration, Docker, list/lifecycle, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-039 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

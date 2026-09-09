@@ -1382,3 +1382,11 @@ flowchart LR
 - Only the package-document uniqueness constraint is translated to the stable duplicate 409. Other persistence and internal-integrity failures remain internal rather than being mislabeled or partially persisted.
 - Later member/Claim changes and package withdrawal/review changes do not alter the stored document. No document retrieval/list/lifecycle, PDF/HTML, publication, file/storage/download, public/learner delivery, AI, source discovery, mock assembly, or personalization was included.
 - Developer-recorded evidence is 10 focused T-037 tests, 39 complete ContentPackage tests, 112 required regressions, and 227 full-suite tests, each with one existing warning, plus successful Ruff, fresh and seeded migration cycles, PostgreSQL constraint probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+
+### T-038 Individual ContentDocument retrieval boundary
+
+- `GET /api/v1/content-documents/{content_document_id}` returns the existing `ContentDocumentResponse` from one exact stored ContentDocument row. A missing row returns `ContentDocument <id> not found` with HTTP 404.
+- The thin route delegates to a read-only service method and focused repository lookup. The repository uses `no_autoflush`, selects only `content_documents` by primary ID, and performs no eager loading, member expansion, row lock, commit, or related-state eligibility query.
+- Retrieval reuses the T-037 stored serializer and therefore preserves title, exact Markdown including its final newline, stored lowercase SHA-256, package/ContentVersion IDs, and UTC creation timestamp without normalization, regeneration, checksum repair, or inference.
+- Focused T-038 selection: 2 passed, 39 deselected, 1 warning in 0.81s. Complete ContentPackage/ContentDocument suite: 41 passed, 1 warning in 7.14s. Required regressions: 112 passed, 1 warning in 6.55s. Full suite: 229 passed, 1 warning in 15.71s.
+- Fresh upgrade reached unchanged head `c4d8f2a6b731`; Ruff, Alembic head/check, diff, and whitespace checks passed. No schema, migration, dependency, configuration, environment, Docker, API-key, storage, or infrastructure change was required.
