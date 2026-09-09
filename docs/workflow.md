@@ -1475,3 +1475,15 @@ flowchart LR
 - Focused T-042 tests: 16 passed, 1 warning in 3.89s. Complete ContentPackage/ContentDocument suite: 61 passed, 1 warning in 10.45s. T-041 selection: 2 passed, 59 deselected, 1 warning in 1.30s. Required regressions: 112 passed, 1 warning in 7.46s. Full suite: 265 passed, 1 warning in 21.50s.
 - Fresh upgrade reached `e7b4c9d2a615`. The seeded `d1a7c4e9f263 -> e7b4c9d2a615 -> d1a7c4e9f263 -> e7b4c9d2a615` cycle preserved exact document ownership, payload, checksum, creation/review/release metadata and inferred zero artifacts on each upgrade. Direct PostgreSQL constraint probes, Ruff, Alembic head/check, and diff checks passed.
 - No renderer dependency, API key, external service, configuration, environment, Docker, runtime binary, or storage backend was added. T-042 is Ready for review, not approved; no retrieval/download, publication, delivery, learner, AI, source discovery, mock assembly, personalization, or T-043 behavior exists.
+
+
+### T-042 post-push independent review and T-043 issuance
+
+- **APPROVED** at immutable implementation commit `e41ab090ee9b715e473a72c25474f8ca58deb424`, whose parent is the T-042 issuance head `896cc7069a70faf1af31c37824019bcf2ffc6c1b`.
+- The commit is exactly one implementation commit over the issued base and changes only the expected model/registration, migration, schema, repository, service, route, renderer, focused tests, and current-state documentation.
+- PostgreSQL independently enforces one artifact per ContentDocument, exact document/package/ContentVersion ownership, valid PDF metadata, positive exact byte size, lowercase SHA-256, and restricted document deletion. Migration `e7b4c9d2a615` follows `d1a7c4e9f263`, and its downgrade removes T-042 objects in dependency-safe order.
+- Creation requires the ContentDocument's current RELEASED state, locks only that row, checks an ordinary duplicate before rendering, renders only the stored title and Markdown in memory, persists the exact bytes/size/checksum, commits once, and rolls back failures. Only the named uniqueness constraint is translated for a concurrent duplicate.
+- The isolated dependency-free `deterministic-pdf-v1` renderer is byte-deterministic for supported input and rejects unsupported characters before persistence rather than silently corrupting content.
+- Developer-recorded evidence is 16 focused T-042 tests, 61 complete ContentPackage/ContentDocument tests, 2 T-041 selection tests, 112 required regressions, and 265 full-suite tests, each with one existing warning, plus successful Ruff, lock, Alembic head/check, fresh upgrade, seeded migration cycle, PostgreSQL constraint, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No retrieval/download, publication, external storage, learner delivery, dependency, API key, AI, source discovery, mock assembly, personalization, or T-043 implementation was included.
+- T-043 is issued as the smallest next increment: retrieve one artifact's stored metadata and download its exact persisted bytes through internal read-only endpoints, without regeneration or lifecycle expansion.
