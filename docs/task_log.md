@@ -1004,3 +1004,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Independent Package Review |
 | Scope | Package review fields, constraints, migration, and one decision endpoint only; no package release, publication, rendering, PDF/export, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-034 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only independent DRAFT/APPROVED/REJECTED ContentPackage review metadata and `POST /api/v1/content-packages/{content_package_id}/approval`, preserving immutable ordered membership |
+| Migration | `f7b3d1a8c529` after `e2c6f8a1d943`; existing packages become DRAFT with null decision metadata and no inferred approval |
+| Tests | T-034 selection: 5 passed, 17 deselected, 1 warning in 1.80s. Complete ContentPackage suite: 22 passed, 1 warning in 4.40s. Required focused regressions passed: ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2. Full suite: 210 passed, 1 warning in 12.75s. |
+| Validation | Changed-file Ruff passed. Fresh upgrade and seeded upgrade/downgrade/re-upgrade passed on dedicated `_test` databases. Package identity, creation time, member IDs, and positions were preserved; each upgrade produced DRAFT/null review metadata. PostgreSQL probes, Alembic head/check, diff, and whitespace checks passed. |
+| Notes | Approval locks only the package row, commits once, and rolls back failures. APPROVED/REJECTED record UTC decision time and optional note; DRAFT clears both. Review is independent of member state and cannot mutate membership. No package release/list, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-035 work was added. |

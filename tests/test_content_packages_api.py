@@ -963,6 +963,9 @@ def test_get_content_package_uses_stored_positions_and_retains_snapshot(
         "created_at": package["created_at"],
         "note_draft_ids": [second_draft["id"], first_draft["id"]],
         "question_bank_item_ids": [second_item["id"], first_item["id"]],
+        "approval_status": "DRAFT",
+        "approval_decided_at": None,
+        "reviewer_note": None,
     }
     assert package_row_before.id == expected["id"]
     assert package_row_before.content_version_id == expected["content_version_id"]
@@ -1348,3 +1351,363 @@ def test_get_content_package_content_rejects_unresolved_membership(
         client.get(f"/api/v1/content-packages/{package['id']}/content")
 
     assert _content_snapshot_row_counts(db_connection) == counts_before
+
+
+def test_content_package_review_defaults_are_exposed_on_all_boundaries(
+    client: TestClient,
+) -> None:
+    foundation = _foundation(client, "package-review-defaults")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    claim_id = _approved_claim(client, topic_id, "package-review-defaults")
+    draft = _create_draft(client, topic_id, version_id)
+    item = _create_item(client, version_id, [claim_id], "package-review-defaults")
+    _approve_and_release_draft(client, draft["id"])
+    _approve_and_release_item(client, item["id"])
+
+    package = _create_package(client, version_id)
+    retrieved = client.get(f"/api/v1/content-packages/{package['id']}")
+    expanded = client.get(f"/api/v1/content-packages/{package['id']}/content")
+
+    assert package["approval_status"] == "DRAFT"
+    assert package["approval_decided_at"] is None
+    assert package["reviewer_note"] is None
+    assert retrieved.status_code == 200
+    assert retrieved.json() == package
+    assert expanded.status_code == 200
+    assert expanded.json()["content_package"] == package
+
+
+def test_content_package_review_missing_and_invalid_requests_do_not_mutate(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    counts_before = _content_snapshot_row_counts(db_connection)
+
+    missing = client.post(
+        "/api/v1/content-packages/999999/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Missing"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "ContentPackage 999999 not found"}
+
+    for payload in (
+        {},
+        {"approval_status": "INVALID"},
+        {"approval_status": "UNRELEASED"},
+        {"approval_status": 1},
+        {"approval_status": None},
+    ):
+        response = client.post(
+            "/api/v1/content-packages/999999/approval",
+            json=payload,
+        )
+        assert response.status_code == 422
+
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+
+
+def test_content_package_review_records_resets_locks_and_preserves_membership(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "package-review-lifecycle")
+    version_id = foundation["first_version"]["id"]
+    other_version_id = foundation["second_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    first_claim_id = _approved_claim(client, topic_id, "package-review-first")
+    second_claim_id = _approved_claim(client, topic_id, "package-review-second")
+    draft = _create_draft(client, topic_id, version_id)
+    item = _create_item(
+        client,
+        version_id,
+        [second_claim_id, first_claim_id],
+        "package-review",
+    )
+    _approve_and_release_draft(client, draft["id"])
+    _approve_and_release_item(client, item["id"])
+    package = _create_package(client, version_id)
+
+    other_draft = _create_draft(client, topic_id, other_version_id)
+    _approve_and_release_draft(client, other_draft["id"])
+    other_package = _create_package(client, other_version_id)
+
+    source = _post(
+        client,
+        "/api/v1/sources",
+        {
+            "title": "Package review verification",
+            "source_type": "official",
+            "authority_tier": 1,
+            "location": "https://example.gov/package-review",
+            "license_status": "UNKNOWN",
+        },
+    )
+    evidence = _post(
+        client,
+        "/api/v1/evidence",
+        {"source_id": source["id"], "content": "Package review evidence."},
+    )
+    verification = _post(
+        client,
+        "/api/v1/verifications",
+        {
+            "claim_id": first_claim_id,
+            "verdict": "SUPPORTED",
+            "confidence": 0.9,
+            "evidence": [
+                {
+                    "evidence_id": evidence["id"],
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    claim_change = client.post(
+        f"/api/v1/claims/{second_claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    )
+    for resource, resource_id in (
+        ("note-drafts", draft["id"]),
+        ("question-bank-items", item["id"]),
+    ):
+        withdrawal = client.post(
+            f"/api/v1/{resource}/{resource_id}/release",
+            json={"release_status": "WITHDRAWN", "release_note": "Review test"},
+        )
+        assert withdrawal.status_code == 200
+        member_review = client.post(
+            f"/api/v1/{resource}/{resource_id}/approval",
+            json={"approval_status": "REJECTED"},
+        )
+        assert member_review.status_code == 200
+    assert verification["claim"]["id"] == first_claim_id
+    assert claim_change.status_code == 200
+    assert other_package["approval_status"] == "DRAFT"
+
+    immutable_fields = {
+        key: package[key]
+        for key in (
+            "id",
+            "content_version_id",
+            "created_at",
+            "note_draft_ids",
+            "question_bank_item_ids",
+        )
+    }
+    note_links_before = db_connection.execute(
+        select(
+            ContentPackageNoteDraft.note_draft_id,
+            ContentPackageNoteDraft.position,
+        )
+        .where(ContentPackageNoteDraft.content_package_id == package["id"])
+        .order_by(ContentPackageNoteDraft.position)
+    ).all()
+    item_links_before = db_connection.execute(
+        select(
+            ContentPackageQuestionBankItem.question_bank_item_id,
+            ContentPackageQuestionBankItem.position,
+        )
+        .where(ContentPackageQuestionBankItem.content_package_id == package["id"])
+        .order_by(ContentPackageQuestionBankItem.position)
+    ).all()
+    counts_before = _content_snapshot_row_counts(db_connection)
+    approval_statements: list[str] = []
+
+    def record_approval_sql(
+        connection,
+        cursor,
+        statement: str,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        approval_statements.append(statement)
+
+    event.listen(db_connection, "before_cursor_execute", record_approval_sql)
+    try:
+        approved = client.post(
+            f"/api/v1/content-packages/{package['id']}/approval",
+            json={
+                "approval_status": "APPROVED",
+                "reviewer_note": "Package approved",
+            },
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_approval_sql)
+
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert {key: approved_body[key] for key in immutable_fields} == immutable_fields
+    assert approved_body["approval_status"] == "APPROVED"
+    assert approved_body["reviewer_note"] == "Package approved"
+    assert (
+        datetime.fromisoformat(approved_body["approval_decided_at"]).utcoffset()
+        == UTC.utcoffset(None)
+    )
+    package_locks = [
+        statement
+        for statement in approval_statements
+        if "FROM content_packages" in statement and "FOR UPDATE" in statement.upper()
+    ]
+    assert len(package_locks) == 1
+    assert "FOR UPDATE OF content_packages" in package_locks[0]
+    assert all(
+        not (
+            "FOR UPDATE" in statement.upper()
+            and (
+                "content_package_note_drafts" in statement
+                or "content_package_question_bank_items" in statement
+                or "note_drafts" in statement
+                or "question_bank_items" in statement
+            )
+        )
+        for statement in approval_statements
+    )
+
+    rejected = client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": None},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["approval_status"] == "REJECTED"
+    assert rejected.json()["reviewer_note"] is None
+    assert (
+        datetime.fromisoformat(
+            rejected.json()["approval_decided_at"]
+        ).utcoffset()
+        == UTC.utcoffset(None)
+    )
+
+    reset = client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "DRAFT", "reviewer_note": "Discarded"},
+    )
+    assert reset.status_code == 200
+    assert reset.json() == package
+    assert reset.json()["approval_decided_at"] is None
+    assert reset.json()["reviewer_note"] is None
+
+    read_statements: list[str] = []
+
+    def record_read_sql(
+        connection,
+        cursor,
+        statement: str,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        read_statements.append(statement)
+
+    event.listen(db_connection, "before_cursor_execute", record_read_sql)
+    try:
+        retrieved = client.get(f"/api/v1/content-packages/{package['id']}")
+        expanded = client.get(
+            f"/api/v1/content-packages/{package['id']}/content"
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_read_sql)
+
+    assert retrieved.status_code == 200
+    assert retrieved.json() == package
+    assert expanded.status_code == 200
+    assert expanded.json()["content_package"] == package
+    assert all("FOR UPDATE" not in statement.upper() for statement in read_statements)
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+    assert db_connection.execute(
+        select(
+            ContentPackageNoteDraft.note_draft_id,
+            ContentPackageNoteDraft.position,
+        )
+        .where(ContentPackageNoteDraft.content_package_id == package["id"])
+        .order_by(ContentPackageNoteDraft.position)
+    ).all() == note_links_before
+    assert db_connection.execute(
+        select(
+            ContentPackageQuestionBankItem.question_bank_item_id,
+            ContentPackageQuestionBankItem.position,
+        )
+        .where(ContentPackageQuestionBankItem.content_package_id == package["id"])
+        .order_by(ContentPackageQuestionBankItem.position)
+    ).all() == item_links_before
+    assert client.get(f"/api/v1/content-packages/{other_package['id']}").json() == (
+        other_package
+    )
+
+
+def test_content_package_review_persistence_failure_rolls_back(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "package-review-rollback")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    _approved_claim(client, topic_id, "package-review-rollback")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    counts_before = _content_snapshot_row_counts(db_connection)
+    original = KnowledgeRepository.update_content_package_approval
+
+    def fail_after_update(
+        repository: KnowledgeRepository,
+        content_package: ContentPackage,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        original(
+            repository,
+            content_package,
+            approval_status,
+            reviewer_note,
+            decided_at,
+        )
+        raise RuntimeError("injected package approval failure")
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "update_content_package_approval",
+        fail_after_update,
+    )
+    with pytest.raises(RuntimeError, match="injected package approval failure"):
+        client.post(
+            f"/api/v1/content-packages/{package['id']}/approval",
+            json={"approval_status": "APPROVED", "reviewer_note": "Rollback"},
+        )
+
+    assert client.get(f"/api/v1/content-packages/{package['id']}").json() == package
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+
+
+def test_database_rejects_invalid_content_package_review_states(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "package-review-constraints")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    _approved_claim(client, topic_id, "package-review-constraints")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    decided_at = datetime.now(UTC)
+
+    for values in (
+        {"approval_status": "INVALID"},
+        {"approval_status": "DRAFT", "approval_decided_at": decided_at},
+        {"approval_status": "DRAFT", "reviewer_note": "Invalid"},
+        {"approval_status": "APPROVED", "approval_decided_at": None},
+        {"approval_status": "REJECTED", "approval_decided_at": None},
+    ):
+        _assert_integrity_error(
+            db_connection,
+            update(ContentPackage)
+            .where(ContentPackage.id == package["id"])
+            .values(**values),
+        )
+
+    assert client.get(f"/api/v1/content-packages/{package['id']}").json() == package

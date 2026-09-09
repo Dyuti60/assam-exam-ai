@@ -31,6 +31,7 @@ from app.schemas.knowledge import (
     ClaimApprovalStatus,
     ClaimCreate,
     ClaimResponse,
+    ContentPackageApprovalCreate,
     ContentPackageContentResponse,
     ContentPackageResponse,
     ContentVersionCreate,
@@ -417,6 +418,31 @@ class KnowledgeService:
                 for question_bank_item in question_bank_items
             ],
         )
+
+    def record_content_package_approval(
+        self,
+        content_package_id: int,
+        request: ContentPackageApprovalCreate,
+    ) -> ContentPackageResponse:
+        content_package = self.repository.get_content_package_for_update(
+            content_package_id
+        )
+        if content_package is None:
+            raise ResourceNotFoundError("ContentPackage", content_package_id)
+
+        is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
+        self._commit_content_package_approval(
+            content_package,
+            request.approval_status.value,
+            None if is_draft else request.reviewer_note,
+            None if is_draft else datetime.now(UTC),
+        )
+        stored_package = self.repository.get_content_package(content_package_id)
+        if stored_package is None:
+            raise RuntimeError(
+                f"ContentPackage {content_package_id} missing after successful review"
+            )
+        return self._content_package_response(stored_package)
 
     def create_question_bank_item(
         self,
@@ -929,6 +955,25 @@ class KnowledgeService:
             self.session.rollback()
             raise
 
+    def _commit_content_package_approval(
+        self,
+        content_package: ContentPackage,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        try:
+            self.repository.update_content_package_approval(
+                content_package,
+                approval_status,
+                reviewer_note,
+                decided_at,
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
     def _commit_question_bank_item(
         self,
         question_bank_item: QuestionBankItem,
@@ -959,6 +1004,9 @@ class KnowledgeService:
                 link.question_bank_item_id
                 for link in content_package.question_bank_item_links
             ],
+            approval_status=content_package.approval_status,
+            approval_decided_at=content_package.approval_decided_at,
+            reviewer_note=content_package.reviewer_note,
         )
 
     @staticmethod

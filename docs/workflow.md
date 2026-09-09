@@ -1286,3 +1286,23 @@ flowchart LR
 - The endpoint is read-only: no row locks, writes, flushes, commits, transitions, regeneration, copying, inference, repair, or current-state eligibility evaluation were added.
 - Developer-recorded evidence is 4 focused T-033 tests, 17 complete ContentPackage tests, and 205 full-suite tests, each with one existing warning, plus required focused regressions, successful Ruff, a fresh database upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs for the implementation commit, so no CI pass is claimed.
 - No model, relationship, migration, dependency, configuration, Docker, package list/mutation/lifecycle, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-034 implementation was included.
+
+
+### T-034 Independent ContentPackage human review
+
+```mermaid
+flowchart LR
+    REQUEST["POST /content-packages/{id}/approval"] --> LOCK["Lock only ContentPackage row"]
+    LOCK --> DECISION["Apply DRAFT / APPROVED / REJECTED semantics"]
+    DECISION --> COMMIT["One commit; rollback on failure"]
+    COMMIT --> RESPONSE["Reload stored package + ordered membership IDs"]
+```
+
+- Migration `f7b3d1a8c529` extends ContentPackage with independent review status, nullable timezone-aware decision time, and nullable reviewer note. Existing packages become DRAFT with null decision metadata; no approval is inferred.
+- PostgreSQL checks restrict status to DRAFT, APPROVED, or REJECTED. DRAFT requires null timestamp and note; APPROVED and REJECTED require a decision timestamp while the note remains optional.
+- The approval route delegates through schema, service, repository, and PostgreSQL. It locks only the target package, changes only its three review fields, commits once, and rolls back generic persistence failures.
+- APPROVED and REJECTED record the current UTC time and supplied optional note. DRAFT clears both fields. Package identity, ContentVersion ownership, creation time, membership IDs, association positions, and members remain unchanged.
+- Package review is independent of member review/release, Claim, Verification, priority, T-030 manifest, other ContentVersions, and other packages. Normal ID-only and expanded-content retrieval remain lock-free.
+- Focused T-034 selection: 5 passed, 17 deselected, 1 warning in 1.80s. Complete ContentPackage suite: 22 passed, 1 warning in 4.40s. Required focused regressions passed: ContentVersion manifest 3, ContentVersion 12, NoteDraft 41, released NoteDraft 2, QuestionBankItem 52, and released QuestionBankItem 2 tests.
+- Full suite: 210 passed, 1 warning in 12.75s. Changed-file Ruff passed. Fresh upgrade and the seeded `e2c6f8a1d943 -> f7b3d1a8c529 -> e2c6f8a1d943 -> f7b3d1a8c529` cycle passed with package identity and both ordered memberships preserved; direct PostgreSQL constraint probes passed.
+- ContentPackage has no approved/released collection, package release, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, or infrastructure behavior.

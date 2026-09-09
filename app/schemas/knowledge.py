@@ -302,6 +302,14 @@ class ContentPackageResponse(BaseModel):
     created_at: datetime
     note_draft_ids: list[int]
     question_bank_item_ids: list[int]
+    approval_status: ClaimApprovalStatus
+    approval_decided_at: datetime | None
+    reviewer_note: str | None
+
+
+class ContentPackageApprovalCreate(BaseModel):
+    approval_status: ClaimApprovalStatus
+    reviewer_note: str | None = None
 
 
 class ContentPackageContentResponse(BaseModel):

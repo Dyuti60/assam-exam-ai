@@ -4730,3 +4730,5 @@ Do not self-approve.
 Do not implement T-035.
 
 Leave T-034 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added independent DRAFT/APPROVED/REJECTED human review to ContentPackage through migration `f7b3d1a8c529` and exactly `POST /api/v1/content-packages/{content_package_id}/approval`. Existing and new packages begin DRAFT with null decision metadata. APPROVED and REJECTED record the current UTC decision time and optional note; DRAFT clears both. The decision locks and changes only the target package review fields, commits once, and preserves immutable ordered membership and every member. Package creation, ID-only retrieval, and expanded-content retrieval now expose the same stored review metadata. T-034 is Ready for review, not approved. No package release/list, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, or T-035 behavior was added.

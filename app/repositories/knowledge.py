@@ -175,6 +175,32 @@ class KnowledgeRepository:
         )
         return self.session.scalar(statement)
 
+    def get_content_package_for_update(
+        self,
+        content_package_id: int,
+    ) -> ContentPackage | None:
+        statement = (
+            select(ContentPackage)
+            .options(
+                selectinload(ContentPackage.note_draft_links),
+                selectinload(ContentPackage.question_bank_item_links),
+            )
+            .where(ContentPackage.id == content_package_id)
+            .with_for_update(of=ContentPackage)
+        )
+        return self.session.scalar(statement)
+
+    def update_content_package_approval(
+        self,
+        content_package: ContentPackage,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        content_package.approval_status = approval_status
+        content_package.approval_decided_at = decided_at
+        content_package.reviewer_note = reviewer_note
+
     def get_content_package_note_drafts(
         self,
         content_package_id: int,

@@ -1,7 +1,16 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -16,6 +25,18 @@ if TYPE_CHECKING:
 class ContentPackage(Base):
     __tablename__ = "content_packages"
     __table_args__ = (
+        CheckConstraint(
+            "approval_status IN ('DRAFT', 'APPROVED', 'REJECTED')",
+            name="ck_content_packages_approval_status",
+        ),
+        CheckConstraint(
+            "(approval_status = 'DRAFT' "
+            "AND approval_decided_at IS NULL "
+            "AND reviewer_note IS NULL) "
+            "OR (approval_status IN ('APPROVED', 'REJECTED') "
+            "AND approval_decided_at IS NOT NULL)",
+            name="ck_content_packages_approval_lifecycle",
+        ),
         UniqueConstraint(
             "id",
             "content_version_id",
@@ -33,6 +54,16 @@ class ContentPackage(Base):
         server_default=func.now(),
         nullable=False,
     )
+    approval_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="DRAFT",
+        server_default="DRAFT",
+    )
+    approval_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+    )
+    reviewer_note: Mapped[str | None] = mapped_column(Text)
 
     note_draft_links: Mapped[list["ContentPackageNoteDraft"]] = relationship(
         back_populates="content_package",

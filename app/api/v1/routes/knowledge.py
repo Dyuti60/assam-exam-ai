@@ -8,6 +8,7 @@ from app.schemas.knowledge import (
     ClaimApprovalCreate,
     ClaimCreate,
     ClaimResponse,
+    ContentPackageApprovalCreate,
     ContentPackageContentResponse,
     ContentPackageResponse,
     ContentVersionCreate,
@@ -188,6 +189,24 @@ def get_content_package(
 ) -> ContentPackageResponse:
     try:
         return KnowledgeService(db).get_content_package(content_package_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.post(
+    "/content-packages/{content_package_id}/approval",
+    response_model=ContentPackageResponse,
+)
+def record_content_package_approval(
+    content_package_id: int,
+    request: ContentPackageApprovalCreate,
+    db: DatabaseSession,
+) -> ContentPackageResponse:
+    try:
+        return KnowledgeService(db).record_content_package_approval(
+            content_package_id,
+            request,
+        )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
 
