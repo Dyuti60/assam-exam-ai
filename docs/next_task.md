@@ -5174,3 +5174,257 @@ Do not implement T-037.
 Leave T-036 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-packages/released` through the existing route, service, repository, and shared `ContentPackageResponse` flow. It filters exactly current RELEASED package state in PostgreSQL, orders by ascending package ID, and eagerly loads both retained membership lists in persisted association-position order using a fixed three-query strategy. It returns `[]` when none qualify and performs no locks, writes, transitions, membership rebuilding, member expansion, or current-state re-evaluation. T-036 is Ready for review, not approved. No model, schema, migration, approved-package list, expanded collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, or T-037 behavior was added.
+
+
+---
+
+## T-036 independent review outcome
+
+T-036 is **APPROVED** at implementation commit `44446303944e946a1834b714ac02009bcd22e3b1`, whose parent is the T-036 task-issuance commit `0838f2c37b79b37380f7f1013df4e1b4d94625b0`.
+
+The immutable diff adds only `GET /api/v1/content-packages/released` through the existing route, service, repository, tests, and documentation. The static route precedes the dynamic ID route. PostgreSQL filters exactly current RELEASED state, orders packages by ID, and uses two select-in loads for fixed-query retrieval of both persisted-position membership lists.
+
+The shared serializer preserves package identity, ContentVersion, membership, review, and release metadata. Member withdrawal/review changes and Claim, Verification, priority, T-030, other package, or other ContentVersion state do not affect eligibility. Requests perform no locks, writes, flushes, commits, transitions, rebuilding, expansion, regeneration, or inference.
+
+Developer-recorded validation reported 2 focused T-036 tests, 29 complete ContentPackage tests, 112 combined regressions, and 217 full-suite tests, each with one existing warning, plus Ruff, a fresh upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+
+No blocking finding remains. No schema/model/migration change, approved-package list, expanded collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-037 implementation was included.
+
+---
+
+# T-037 — Persist immutable render-ready ContentDocument snapshot
+
+## Role and synchronization gate
+
+You are the implementation engineer for `Dyuti60/assam-exam-ai`. Implement only T-037 using the live repository, `AGENTS.md`, and the established route → schema → service → repository → PostgreSQL layering.
+
+Before editing:
+
+1. fetch `origin` and fast-forward local `main`;
+2. record `git rev-parse HEAD` and confirm it equals `origin/main`;
+3. confirm the working tree is clean;
+4. confirm approved T-036 commit `44446303944e946a1834b714ac02009bcd22e3b1` and the documentation commit issuing T-037 exist in history;
+5. read the complete live repository and this prompt.
+
+Stop without changing files if synchronization, history, branch, or working tree is unexpected. The live repository is authoritative.
+
+## Current context
+
+The system has exact ContentVersion identity; version-owned reviewed/released NoteDraft and QuestionBankItem snapshots; immutable ordered ContentPackage membership; package review/release; individual package ID and expanded-content reads; and a collection of currently RELEASED packages.
+
+There is no render-ready document identity or persisted assembled body. There is no HTML/PDF renderer, file or object storage, publication, download, public/learner delivery, AI generation, or personalization.
+
+## Exact bounded goal
+
+Add atomic creation of exactly one immutable internal ContentDocument snapshot for one currently RELEASED ContentPackage.
+
+Add exactly:
+
+`POST /api/v1/content-packages/{content_package_id}/content-documents`
+
+The endpoint accepts no request body.
+
+It must:
+
+1. lock and resolve the exact ContentPackage;
+2. require its current `release_status == RELEASED`;
+3. resolve exactly all retained NoteDraft and QuestionBankItem members in stored membership-position order;
+4. fail internally rather than omit, reorder, or rebuild unresolved membership;
+5. deterministically assemble a title and Markdown body from those stored member snapshots;
+6. compute a lowercase SHA-256 checksum of the exact UTF-8 Markdown bytes;
+7. persist one immutable ContentDocument linked to the exact package and ContentVersion;
+8. commit once and return the freshly stored response.
+
+Only one ContentDocument may exist per ContentPackage. Do not regenerate or overwrite an existing document.
+
+This is internal render-ready persistence, not PDF creation, publication, export, delivery, or learner access.
+
+## Data model and API response
+
+Add model/table `ContentDocument` / `content_documents` with exactly:
+
+- `id`: integer primary key;
+- `content_package_id`: non-null integer;
+- `content_version_id`: non-null integer;
+- `title`: non-null text;
+- `markdown`: non-null text;
+- `sha256`: non-null string of exactly 64 lowercase hexadecimal characters;
+- `created_at`: non-null timezone-aware stored timestamp.
+
+Required constraints:
+
+- unique `content_package_id`, permitting only one document per package;
+- composite foreign key `(content_package_id, content_version_id)` → `content_packages(id, content_version_id)`;
+- deletion of a referenced package is restricted;
+- non-blank title and Markdown checks;
+- checksum format check equivalent to exactly 64 lowercase hexadecimal characters.
+
+Reuse the existing supporting package uniqueness; add no unrelated constraints. Register the model for Alembic metadata.
+
+Add `ContentDocumentResponse`:
+
+- `id: int`;
+- `content_package_id: int`;
+- `content_version_id: int`;
+- `title: str`;
+- `markdown: str`;
+- `sha256: str`;
+- `created_at: datetime`.
+
+Return HTTP 201.
+
+Errors:
+
+- missing package: HTTP 404, `{"detail": "ContentPackage <id> not found"}`;
+- package not currently released: HTTP 409, `{"detail": "ContentPackage <id> must be released before document creation"}`;
+- existing document: HTTP 409, `{"detail": "ContentPackage <id> already has a ContentDocument"}`;
+- impossible retained-member resolution: internal error, not a 404/409 and not partial persistence.
+
+Generic database exceptions must roll back and be re-raised.
+
+## Deterministic document contract
+
+Use no LLM and no external template engine.
+
+Title must be exactly:
+
+`Content Package <content_package_id>`
+
+Markdown must be deterministic and end with exactly one newline.
+
+Use this structure:
+
+1. `# Content Package <content_package_id>`
+2. blank line;
+3. when NoteDraft members exist, `## Notes`, then each retained NoteDraft's stored Markdown in package order, separated predictably;
+4. when QuestionBankItem members exist, `## Practice Questions`, then each item in package order as:
+   - `### Question <1-based position>`;
+   - stored question text;
+   - options in stored option-position order labelled `A.`, `B.`, and so on;
+   - `**Answer:** <label>. <stored correct option text>`;
+   - `**Explanation:** <stored explanation>`;
+5. omit a section only when that member type is absent.
+
+Define the exact whitespace/newline joining in one small deterministic service helper and assert the complete expected Markdown in tests. Do not silently support more than 26 options; if stored data makes a deterministic label impossible, raise an internal integrity error before persistence.
+
+Use only retained package membership for top-level ordering and only stored Claim/option/answer snapshots. Do not query current release or approval eligibility of members. Do not include reviewer notes, release notes, timestamps, internal IDs other than the package ID in the title, Claim IDs, source internals, confidence, predictions, or hidden metadata in Markdown.
+
+Compute `sha256` from the final exact Markdown string encoded as UTF-8.
+
+## Eligibility, integrity, locking, and atomicity
+
+Package eligibility is its own current RELEASED state only. PostgreSQL already requires released packages to be approved and package creation already captured non-empty membership.
+
+Member withdrawal, member review changes, Claim changes, Verification, priority, T-030, global collections, other packages, and other ContentVersions must not affect document creation.
+
+Use one transaction:
+
+- lock only the ContentPackage row with `SELECT ... FOR UPDATE`;
+- do not lock or modify member assets or membership rows;
+- check for an existing ContentDocument within the transaction;
+- load exact members with the established eager-loading queries;
+- verify resolved IDs exactly equal both retained membership lists;
+- build and hash before adding the document;
+- add, flush, and commit once;
+- roll back on any exception;
+- freshly retrieve the stored document for the response.
+
+The database unique constraint is the concurrency-safe authority for one document per package. Translate only that specific uniqueness conflict to the stable existing-document 409 after rollback; re-raise other persistence errors.
+
+Later package withdrawal or review changes must not alter, delete, or regenerate an existing ContentDocument.
+
+## Migration requirements
+
+Create exactly one Alembic revision whose parent is `a8c4e2f9b671`.
+
+It must create only `content_documents` and its constraints, preserve all existing rows, infer/create no document, use no permanent default absent from model metadata, and edit no historical migration.
+
+Downgrade drops only `content_documents` and leaves packages, review/release metadata, memberships, assets, ContentVersions, and provenance unchanged.
+
+Validate:
+
+`a8c4e2f9b671 → T-037 head → a8c4e2f9b671 → T-037 head`
+
+with seeded packages and both membership types preserved and no inferred document on either upgrade.
+
+## Required tests
+
+Add PostgreSQL-backed tests proving:
+
+- missing package returns exact 404 with no rows;
+- DRAFT/APPROVED UNRELEASED and WITHDRAWN packages return the stable 409 without documents;
+- a RELEASED NoteDraft-only package produces exact title, exact Markdown, checksum, IDs, and stored UTC timestamp;
+- a RELEASED QuestionBankItem-only package produces exact labelled options, answer, explanation, ordering, checksum, and empty Notes section omission;
+- a mixed package preserves independent package membership order and nested option order;
+- complete Markdown equality including final newline;
+- SHA-256 equals the exact UTF-8 Markdown digest;
+- current member/Claim/Verification/priority/T-030/other state does not affect creation;
+- later package withdrawal and review changes do not alter the stored document;
+- repeated creation returns the stable existing-document 409 and does not overwrite;
+- a concurrent duplicate is rejected through the database uniqueness authority;
+- cross-ContentVersion document ownership, blank title/Markdown, malformed checksum, and duplicate package ownership are rejected by PostgreSQL;
+- impossible membership resolution and more than 26 options fail before persistence;
+- injected persistence failure rolls back all document rows;
+- package row is locked while members/memberships are not;
+- exactly one commit occurs on success;
+- existing T-030 through T-036 behavior remains compatible.
+
+Do not weaken, remove, reorder, or silently skip existing tests.
+
+## Validation
+
+Use dedicated PostgreSQL databases ending in `_test`. Run and report:
+
+- focused ContentDocument tests;
+- complete ContentPackage tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft/released-NoteDraft tests;
+- QuestionBankItem/released-QuestionBankItem tests;
+- full suite;
+- Ruff on changed Python;
+- `uv run alembic heads` and `uv run alembic check`;
+- fresh upgrade;
+- seeded upgrade/downgrade/re-upgrade;
+- direct PostgreSQL constraint probes;
+- `git diff --check`, untracked whitespace checks, and final `git status --short`.
+
+Confirm one Alembic head whose parent is `a8c4e2f9b671`, no schema drift or historical migration edits, and no dependency/config/environment/Docker/API-key/storage/infrastructure change.
+
+## Affected components
+
+Update only where required:
+
+- new ContentDocument model;
+- model registration;
+- shared schemas;
+- repository;
+- service;
+- knowledge routes;
+- exactly one new migration;
+- focused ContentDocument tests and necessary package regressions;
+- architecture/workflow;
+- append-only task log and next task.
+
+Inspect but otherwise leave unchanged: existing ContentPackage/membership and asset models; historical migrations; T-030 through T-036 behavior; `pyproject.toml`; `uv.lock`; `.env.example`; `app/core/config.py`; `docker-compose.yml`; `AGENTS.md`; `README.md`.
+
+## Documentation and scope gate
+
+Document only implemented behavior. Keep task history append-only. Record T-037 only as `Ready for review` and do not define or implement T-038.
+
+T-037 needs no API key, external service, dependency, template engine, secret, configuration, Docker service, file/object storage, or infrastructure change. Stop and report if one appears necessary.
+
+Do not add ContentDocument retrieval/list/review/release; PDF/HTML rendering; files, downloads, storage, CDN, email; package publication/delivery; public/learner APIs; users/auth/identity/history; membership mutation; learner sessions/scoring/analytics/recommendations/mocks/personalization; AI/LLM providers, keys, prompts, source discovery, ingestion, RAG, embeddings, vectors, scraping; automatic version inference; new package/member transitions; PreviousQuestion conversion; predictions; dependencies; configuration; Docker services; payments; or unrelated infrastructure.
+
+Preserve trust, provenance, independent review, controlled release, exact ContentVersion ownership, immutable package membership, deterministic reproducibility, and Generate Once/Personalize Later.
+
+## Final report and handoff
+
+Report starting HEAD; files changed/created; migration revision/parent; model/constraints; endpoint/response/errors; exact deterministic Markdown and checksum; ordering; eligibility/state independence; locking/concurrency/rollback; migration cycles/probes; focused/full tests; Alembic/Ruff/diff; unchanged dependency/config inspection; boundaries; final status; and explicit confirmation of no commit, push, PR, self-approval, T-038, document retrieval/lifecycle, PDF/HTML, publication, download/storage, delivery, AI, source discovery, mock assembly, or personalization.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-038.
+
+Leave T-037 uncommitted and unpushed in the working tree for independent review.

@@ -1351,3 +1351,14 @@ flowchart LR
 - The route, service, and repository perform no row locks, writes, flushes, commits, transitions, rebuilding, expansion, or regeneration.
 - Focused T-036 tests: 2 passed, 27 deselected, 1 warning in 1.79s. Complete ContentPackage suite: 29 passed, 1 warning in 6.09s. Required focused regressions: 112 passed, 1 warning in 6.56s. Full suite: 217 passed, 1 warning in 14.18s.
 - A fresh dedicated `_test` database upgrade reached the unchanged Alembic head `a8c4e2f9b671`. No model, schema, migration, dependency, configuration, environment, Docker, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, or T-037 behavior was added.
+
+
+### T-036 post-push review
+
+- **APPROVED** at implementation commit `44446303944e946a1834b714ac02009bcd22e3b1`, whose parent is the T-036 issuance head `0838f2c37b79b37380f7f1013df4e1b4d94625b0`.
+- The immutable commit adds only `GET /api/v1/content-packages/released` through the expected route, service, repository, focused tests, and documentation. No schema, model, migration, dependency, or configuration changed.
+- The static route precedes the dynamic package-ID route. PostgreSQL filters exactly current RELEASED state and orders packages by ascending ID; two select-in loads preserve both stored membership-position orders with a fixed three-query request.
+- The shared package serializer returns stored identity, ContentVersion, membership, review, and release metadata. Member, Claim, Verification, priority, T-030, other package, and other ContentVersion state do not affect eligibility.
+- Reads perform no row locks, writes, flushes, commits, transitions, membership rebuilding, member-body expansion, regeneration, or inference. Withdrawing one package removes only that package from later collection results.
+- Developer-recorded evidence is 2 focused T-036 tests, 29 complete ContentPackage tests, 112 combined regressions, and 217 full-suite tests, each with one existing warning, plus Ruff, fresh database upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No approved-package list, expanded collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-037 implementation was included.

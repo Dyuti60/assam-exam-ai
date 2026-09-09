@@ -1104,3 +1104,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-036 selection: 2 passed, 27 deselected, 1 warning in 1.79s. Complete ContentPackage suite: 29 passed, 1 warning in 6.09s. Required focused regressions: 112 passed, 1 warning in 6.56s. Full suite: 217 passed, 1 warning in 14.18s. |
 | Validation | Fresh dedicated `_test` database upgrade reached unchanged head `a8c4e2f9b671`. Changed-file Ruff, Alembic head/check, diff, and whitespace checks passed. |
 | Notes | PostgreSQL filters exactly current RELEASED package state and orders by package ID. Two select-in loads preserve both stored membership orders with a fixed three-query read. The endpoint performs no lock or write and does not inspect member or unrelated domain state. No approved-package list, expanded collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-037 work was added. |
+
+
+---
+
+## T-036 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-036` |
+| Implementation commit | `44446303944e946a1834b714ac02009bcd22e3b1` |
+| Base/task-issuance commit | `0838f2c37b79b37380f7f1013df4e1b4d94625b0` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only collection of currently RELEASED ContentPackage snapshots in ascending package-ID order with retained membership order |
+| Migration | None; Alembic remains at `a8c4e2f9b671` |
+| Validation evidence | Developer-recorded: 2 focused T-036 tests, 29 complete ContentPackage tests, 112 combined regressions, and 217 full-suite tests, each with one existing warning; Ruff; fresh upgrade; unchanged Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | Exact release filtering, static-route precedence, stable ordering, fixed-query eager loading, shared serialization, stored membership preservation, member-state independence, withdrawal behavior, no-lock/no-write execution, compatibility, and exclusions match the task with no blocking finding. |
+| Boundaries | No schema/model/migration change, approved-package list, expanded collection, publication, rendering, PDF/export, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-037 behavior was included. |
+
+---
+
+## T-037 issued — Persist immutable render-ready ContentDocument snapshot
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Deterministically assemble and persist one immutable Markdown ContentDocument snapshot from exactly one currently RELEASED ContentPackage |
+| Architectural phase | Canonical Content / Render-Ready Document Foundation |
+| Scope | Internal document snapshot identity, deterministic Markdown, checksum, creation and response only; no PDF, HTML, publication, download, storage backend, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |
