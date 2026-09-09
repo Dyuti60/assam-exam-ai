@@ -6450,3 +6450,201 @@ Do not implement T-043.
 Leave T-042 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/content-documents/{content_document_id}/pdf-artifacts`. Dependency-free renderer `deterministic-pdf-v1` creates fixed-layout A4 bytes solely from the exact stored title and Markdown; identical supported inputs are byte-identical and unsupported characters fail before persistence. `PdfArtifact` retains exact document/package/ContentVersion ownership, raw bytes, positive matching size, lowercase SHA-256, fixed PDF media type, filename, and creation time under named PostgreSQL constraints. Creation requires current RELEASED state, locks only the target document, rejects ordinary/concurrent duplicates deterministically, commits once, and rolls back renderer or persistence failure. T-042 is Ready for review, not approved. No artifact retrieval/download, publication, external storage, learner delivery, dependency, API key, AI, source discovery, mock assembly, personalization, or T-043 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-042 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-042` |
+| Implementation commit | `e41ab090ee9b715e473a72c25474f8ca58deb424` |
+| Base/task-issuance commit | `896cc7069a70faf1af31c37824019bcf2ffc6c1b` |
+| Review result | **APPROVED** |
+| Approved capability | One currently RELEASED ContentDocument can atomically create at most one immutable deterministic database-backed PdfArtifact with exact copied ownership, stored bytes, size, SHA-256, filename, media type, and creation time. |
+| Independent review | Exact commit diff, model/registration, migration, renderer, schema, repository, service, route, tests, documentation, transaction behavior, constraints, exclusions, and developer-recorded validation were inspected. No blocking finding was identified. |
+| CI evidence | GitHub exposes no status contexts or workflow runs for the implementation commit; local results recorded by the developer are evidence, not a claimed CI pass. |
+
+# T-043 — Retrieve PDF artifact metadata and download exact stored bytes
+
+## Role
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read the repository before editing and follow `AGENTS.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt.
+
+Do not rely on handoff summaries when repository code differs. Preserve append-only history in `docs/task_log.md` and `docs/next_task.md`.
+
+## Starting-state verification
+
+Before editing:
+
+1. Confirm branch `main` and a clean working tree.
+2. Fetch and confirm `origin/main` is the documentation commit that approves T-042 and issues T-043.
+3. Read the immutable T-042 implementation commit `e41ab090ee9b715e473a72c25474f8ca58deb424` and its base `896cc7069a70faf1af31c37824019bcf2ffc6c1b`.
+4. Read the current PdfArtifact model, ContentDocument relationship, migration `e7b4c9d2a615`, schemas, knowledge repository/service/routes, deterministic renderer, and focused PDF tests.
+5. Verify Alembic has one head, expected to remain `e7b4c9d2a615`.
+6. Stop and report any repository divergence that materially changes this task.
+
+## Goal
+
+Add internal, read-only access to one already persisted immutable PdfArtifact:
+
+- retrieve its stored metadata by artifact ID;
+- download its exact stored PDF bytes by artifact ID with correct HTTP headers.
+
+This task exposes the artifact persisted by T-042. It must never regenerate, transform, repair, replace, approve, release, publish, or re-evaluate the artifact.
+
+## Required API
+
+Add exactly these endpoints under `/api/v1`:
+
+1. `GET /pdf-artifacts/{pdf_artifact_id}`
+   - Return HTTP 200 using the existing PdfArtifact metadata response contract.
+   - Do not include raw `pdf_bytes` in JSON.
+
+2. `GET /pdf-artifacts/{pdf_artifact_id}/download`
+   - Return HTTP 200 with the exact stored `pdf_bytes`, byte-for-byte.
+   - Set `Content-Type` from the stored media type, which T-042 constrains to `application/pdf`.
+   - Set `Content-Length` to the stored positive byte size.
+   - Set `Content-Disposition` to attachment using the exact stored deterministic filename.
+   - Do not render, encode, decode, normalize, stream from another store, or recalculate the payload.
+
+For either endpoint, a missing artifact must return exactly:
+
+`404 PdfArtifact <id> not found`
+
+Use the repository's established FastAPI detail shape and error translation.
+
+Ensure the `/download` route cannot be captured by the metadata route. Keep routes thin:
+
+`Route -> Schema/response adaptation -> Service -> Repository -> PostgreSQL`
+
+## Read semantics and invariants
+
+- Query by `PdfArtifact.id`, not by ContentDocument ID.
+- Return the exact stored artifact even if its ContentDocument or ContentPackage is later withdrawn or otherwise changes state.
+- Do not check current ContentDocument approval/release state, package state, member state, Claim state, Verification state, Topic priority, or a dynamic manifest.
+- Do not load or lock ContentDocument, ContentPackage, package memberships, NoteDraft, QuestionBankItem, Claim, Evidence, Source, or Verification rows.
+- Use a PdfArtifact-only read query with `no_autoflush` and no row locks.
+- Perform no insert, update, delete, flush, commit, refresh, regeneration, checksum recalculation, or related-state evaluation.
+- Preserve the exact stored ownership and metadata returned by T-042.
+- Do not add an endpoint keyed by ContentDocument ID.
+
+The service may use a small internal immutable value object for download data if that keeps HTTP response construction out of the repository. Do not expose raw bytes through a Pydantic metadata schema.
+
+## Header safety
+
+The stored filename is created internally by T-042 and constrained to a non-blank `.pdf` value. Build a standards-compatible attachment header without accepting any user-supplied filename in T-043.
+
+Do not add range requests, conditional requests, caching policy, ETag behavior, inline disposition, filename overrides, streaming infrastructure, or content negotiation.
+
+## Persistence and migration boundary
+
+No model, model registration, database constraint, or Alembic migration should be required. Alembic head must remain `e7b4c9d2a615`.
+
+Do not edit any historical migration. If implementation appears to require a schema change, stop and report why instead of expanding T-043.
+
+## Repository and service behavior
+
+Add the smallest repository lookup needed to load one PdfArtifact by ID. Reuse it from both service operations where cleanly possible.
+
+Metadata retrieval must serialize stored metadata only. Download retrieval must carry the exact stored bytes plus only the stored metadata needed for response headers.
+
+Missing artifacts use the stable 404 above. Do not translate unrelated database or programming errors into 404 or 409 responses.
+
+## Tests
+
+Add focused PostgreSQL-backed API/service/repository tests that prove at minimum:
+
+- metadata retrieval returns every stored metadata field exactly and excludes raw bytes;
+- download returns byte-for-byte identical stored PDF data;
+- download headers have exact stored media type, byte size, and attachment filename;
+- a missing artifact returns the stable 404 from both endpoints;
+- metadata and download remain available and unchanged after the owning ContentDocument is withdrawn;
+- changes to package/member/Claim/Verification or other upstream state do not affect stored retrieval;
+- neither endpoint invokes the PDF renderer or recalculates SHA-256;
+- reads use no `FOR UPDATE`, flush, commit, or writes;
+- the repository issues only a PdfArtifact query and does not load related rows;
+- route ordering keeps `/download` reachable;
+- existing T-042 creation behavior and all earlier ContentDocument, ContentPackage, NoteDraft, QuestionBankItem, and released-asset boundaries remain compatible.
+
+Use a dedicated PostgreSQL database whose name ends in `_test`. Do not substitute SQLite for PostgreSQL constraint/query behavior.
+
+## Validation
+
+Run and report:
+
+- focused T-043 PdfArtifact retrieval/download tests;
+- complete PdfArtifact tests, including T-042 creation tests;
+- complete ContentPackage/ContentDocument tests;
+- T-041 released-document tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft and released-NoteDraft tests;
+- QuestionBankItem and released-QuestionBankItem tests;
+- full suite;
+- Ruff on every changed Python file;
+- `uv lock --check` or the repository-equivalent lock verification;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- a fresh upgrade through unchanged head `e7b4c9d2a615`;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Report developer-run results accurately. Do not describe them as GitHub CI.
+
+## Affected components
+
+Inspect and modify only where required:
+
+- shared PdfArtifact schemas only if the existing metadata response cannot be reused unchanged;
+- knowledge repository;
+- knowledge service;
+- knowledge routes;
+- focused PdfArtifact tests;
+- `docs/architecture.md` and `docs/workflow.md` for implemented current state;
+- append-only implementation records in `docs/task_log.md` and `docs/next_task.md`.
+
+Inspect but leave unchanged unless a genuine inconsistency is found:
+
+- all models and model registration;
+- migration `e7b4c9d2a615` and every historical migration;
+- deterministic PDF renderer;
+- `pyproject.toml` and `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`; 
+- `AGENTS.md`;
+- `README.md`.
+
+No dependency, API key, environment variable, secret, configuration value, Docker service, renderer change, or storage backend is required. Leave those files unchanged and explicitly report that.
+
+## Scope exclusions
+
+Do not add artifact listing; lookup by ContentDocument ID; artifact review/approval/release/withdrawal/publication lifecycle; public or learner access; object/file/blob/CDN storage; presigned URLs; range or conditional downloads; HTML artifacts; artifact update/delete/replacement/regeneration/repair; background jobs/queues; users/auth/history; AI/LLM/API keys/source discovery/ingestion/RAG/embeddings/scraping; mock assembly/sessions/scoring/analytics/recommendations/personalization; payments; production infrastructure; or T-044.
+
+Preserve trust, provenance, exact ContentVersion ownership, immutable package/document/artifact snapshots, stored checksums, controlled release boundaries, deterministic reproducibility, and Generate Once/Personalize Later.
+
+## Documentation and handoff
+
+Document only behavior actually implemented. Keep `docs/task_log.md` and `docs/next_task.md` append-only. Record T-043 only as `Ready for review`; do not approve it and do not define or implement T-044.
+
+Report:
+
+- starting and final Git state;
+- exact files changed;
+- both endpoints and stable errors;
+- repository query and no-lock/no-write behavior;
+- exact byte and header evidence;
+- independence from current related state;
+- tests and validation results;
+- unchanged migration/dependency/configuration/Docker state;
+- explicit scope exclusions.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement or define T-044.
+
+Leave T-043 uncommitted and unpushed in the working tree for independent review.
