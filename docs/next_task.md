@@ -5891,3 +5891,5 @@ Do not self-approve.
 Do not implement T-040.
 
 Leave T-039 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only independent DRAFT/APPROVED/REJECTED ContentDocument review metadata, migration `b6f1d3a8e942`, and `POST /api/v1/content-documents/{content_document_id}/approval`. Approval decisions lock only the target document row, update only the three review fields, commit once, roll back failures, and freshly return the stored immutable document response. APPROVED/REJECTED record a UTC decision timestamp and optional note; DRAFT clears both. Existing documents migrate to DRAFT/null without inferred approval. T-039 is Ready for review, not approved. No approved-document collection, release, list, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-040 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

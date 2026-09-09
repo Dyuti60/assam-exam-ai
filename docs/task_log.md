@@ -1217,3 +1217,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Document Trust Boundary |
 | Scope | Review metadata, one decision endpoint, response compatibility, database constraints, migration, and tests only; no release, list, PDF/HTML, publication, storage/download, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-039 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only independent DRAFT/APPROVED/REJECTED ContentDocument review metadata and `POST /api/v1/content-documents/{content_document_id}/approval`, preserving the immutable stored document payload |
+| Migration | `b6f1d3a8e942` follows `c4d8f2a6b731`; existing documents become DRAFT with null decision metadata and no inferred approval |
+| Tests | T-039 selection: 8 passed, 41 deselected, 1 warning in 1.25s. Complete ContentPackage/ContentDocument suite: 49 passed, 1 warning in 8.32s. Required regressions: 112 passed, 1 warning in 6.81s. Full suite: 237 passed, 1 warning in 15.71s. |
+| Validation | Fresh and seeded upgrade/downgrade/re-upgrade, PostgreSQL constraints, changed-file Ruff, Alembic head/check, and diff checks passed against the dedicated T-039 PostgreSQL test database. |
+| Notes | Approval locks only the target document, changes only review fields, commits once, rolls back failures, and preserves all stored content and related state. T-039 is Ready for review, not approved. No approved-document collection, release, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-040 work was added. |

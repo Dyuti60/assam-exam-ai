@@ -184,6 +184,28 @@ class KnowledgeRepository:
         with self.session.no_autoflush:
             return self.session.scalar(statement)
 
+    def get_content_document_for_update(
+        self,
+        content_document_id: int,
+    ) -> ContentDocument | None:
+        statement = (
+            select(ContentDocument)
+            .where(ContentDocument.id == content_document_id)
+            .with_for_update(of=ContentDocument)
+        )
+        return self.session.scalar(statement)
+
+    def update_content_document_approval(
+        self,
+        content_document: ContentDocument,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        content_document.approval_status = approval_status
+        content_document.approval_decided_at = decided_at
+        content_document.reviewer_note = reviewer_note
+
     def add_content_document(
         self,
         content_document: ContentDocument,

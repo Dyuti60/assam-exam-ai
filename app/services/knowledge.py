@@ -33,6 +33,7 @@ from app.schemas.knowledge import (
     ClaimApprovalStatus,
     ClaimCreate,
     ClaimResponse,
+    ContentDocumentApprovalCreate,
     ContentDocumentResponse,
     ContentPackageApprovalCreate,
     ContentPackageContentResponse,
@@ -604,6 +605,37 @@ class KnowledgeService:
         if content_document is None:
             raise ResourceNotFoundError("ContentDocument", content_document_id)
         return self._content_document_response(content_document)
+
+    def record_content_document_approval(
+        self,
+        content_document_id: int,
+        request: ContentDocumentApprovalCreate,
+    ) -> ContentDocumentResponse:
+        content_document = self.repository.get_content_document_for_update(
+            content_document_id
+        )
+        if content_document is None:
+            raise ResourceNotFoundError("ContentDocument", content_document_id)
+
+        is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
+        try:
+            self.repository.update_content_document_approval(
+                content_document,
+                request.approval_status.value,
+                None if is_draft else request.reviewer_note,
+                None if is_draft else datetime.now(UTC),
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_document = self.repository.get_content_document(content_document_id)
+        if stored_document is None:
+            raise RuntimeError(
+                f"ContentDocument {content_document_id} missing after successful review"
+            )
+        return self._content_document_response(stored_document)
 
     def create_question_bank_item(
         self,
@@ -1207,6 +1239,9 @@ class KnowledgeService:
             markdown=content_document.markdown,
             sha256=content_document.sha256,
             created_at=content_document.created_at,
+            approval_status=content_document.approval_status,
+            approval_decided_at=content_document.approval_decided_at,
+            reviewer_note=content_document.reviewer_note,
         )
 
     @staticmethod

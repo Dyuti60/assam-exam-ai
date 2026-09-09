@@ -346,6 +346,14 @@ class ContentDocumentResponse(BaseModel):
     markdown: str
     sha256: str
     created_at: datetime
+    approval_status: ClaimApprovalStatus
+    approval_decided_at: datetime | None
+    reviewer_note: str | None
+
+
+class ContentDocumentApprovalCreate(BaseModel):
+    approval_status: ClaimApprovalStatus
+    reviewer_note: str | None = None
 
 
 class EvidenceCreate(BaseModel):

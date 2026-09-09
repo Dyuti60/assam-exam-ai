@@ -2384,6 +2384,9 @@ def test_content_document_renders_retained_members_and_is_immutable(
         "markdown": expected_markdown,
         "sha256": sha256(expected_markdown.encode("utf-8")).hexdigest(),
         "created_at": body["created_at"],
+        "approval_status": "DRAFT",
+        "approval_decided_at": None,
+        "reviewer_note": None,
     }
     assert datetime.fromisoformat(body["created_at"]).utcoffset() == UTC.utcoffset(None)
     assert body["markdown"].endswith("\n")
@@ -2784,3 +2787,228 @@ def test_content_document_retrieval_preserves_stored_snapshot_and_is_read_only(
         *_content_snapshot_row_counts(db_connection),
         db_connection.scalar(select(func.count()).select_from(ContentDocument)),
     ) == counts_before
+
+
+def test_content_document_review_decisions_lock_only_document_and_preserve_payload(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "document-review")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    _approved_claim(client, topic_id, "document-review")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    _approve_and_release_package(client, package["id"])
+    created = client.post(
+        f"/api/v1/content-packages/{package['id']}/content-documents"
+    ).json()
+    assert created["approval_status"] == "DRAFT"
+    assert created["approval_decided_at"] is None
+    assert created["reviewer_note"] is None
+    immutable = {
+        key: created[key]
+        for key in (
+            "id",
+            "content_package_id",
+            "content_version_id",
+            "title",
+            "markdown",
+            "sha256",
+            "created_at",
+        )
+    }
+    assert client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/note-drafts/{draft['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/note-drafts/{draft['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    counts_before = _content_snapshot_row_counts(db_connection)
+    statements: list[str] = []
+    commit_count = 0
+    original_commit = Session.commit
+
+    def record_sql(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    def count_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        return original_commit(session)
+
+    monkeypatch.setattr(Session, "commit", count_commit)
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    try:
+        approved_response = client.post(
+            f"/api/v1/content-documents/{created['id']}/approval",
+            json={"approval_status": "APPROVED", "reviewer_note": "Reviewed"},
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+    assert approved_response.status_code == 200
+    approved = approved_response.json()
+    assert {key: approved[key] for key in immutable} == immutable
+    assert approved["approval_status"] == "APPROVED"
+    assert datetime.fromisoformat(
+        approved["approval_decided_at"]
+    ).utcoffset() == UTC.utcoffset(None)
+    assert approved["reviewer_note"] == "Reviewed"
+    assert commit_count == 1
+    locking = [statement for statement in statements if "FOR UPDATE" in statement.upper()]
+    assert len(locking) == 1
+    assert "CONTENT_DOCUMENTS" in locking[0].upper()
+    assert "CONTENT_PACKAGES" not in locking[0].upper()
+    assert "NOTE_DRAFTS" not in locking[0].upper()
+    assert "QUESTION_BANK_ITEMS" not in locking[0].upper()
+
+    rejected = client.post(
+        f"/api/v1/content-documents/{created['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).json()
+    assert {key: rejected[key] for key in immutable} == immutable
+    assert rejected["approval_status"] == "REJECTED"
+    assert datetime.fromisoformat(
+        rejected["approval_decided_at"]
+    ).utcoffset() == UTC.utcoffset(None)
+    assert rejected["reviewer_note"] is None
+
+    reset = client.post(
+        f"/api/v1/content-documents/{created['id']}/approval",
+        json={"approval_status": "DRAFT", "reviewer_note": "Must clear"},
+    ).json()
+    assert {key: reset[key] for key in immutable} == immutable
+    assert reset["approval_status"] == "DRAFT"
+    assert reset["approval_decided_at"] is None
+    assert reset["reviewer_note"] is None
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+    assert client.get(f"/api/v1/content-documents/{created['id']}").json() == reset
+
+
+def test_content_document_review_validation_and_missing_do_not_mutate(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    counts_before = (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    )
+    missing = client.post(
+        "/api/v1/content-documents/999999/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "ContentDocument 999999 not found"}
+    for payload in ({}, {"approval_status": "INVALID"}, {"approval_status": None}):
+        response = client.post(
+            "/api/v1/content-documents/999999/approval",
+            json=payload,
+        )
+        assert response.status_code == 422
+    assert (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    ) == counts_before
+
+
+def test_content_document_review_failure_rolls_back(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foundation = _foundation(client, "document-review-rollback")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    _approved_claim(client, topic_id, "document-review-rollback")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    _approve_and_release_package(client, package["id"])
+    created = client.post(
+        f"/api/v1/content-packages/{package['id']}/content-documents"
+    ).json()
+    original = KnowledgeRepository.update_content_document_approval
+
+    def fail_after_update(repository, document, status, note, decided_at):
+        original(repository, document, status, note, decided_at)
+        raise RuntimeError("injected content document review failure")
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "update_content_document_approval",
+        fail_after_update,
+    )
+    with pytest.raises(RuntimeError, match="injected content document review failure"):
+        client.post(
+            f"/api/v1/content-documents/{created['id']}/approval",
+            json={"approval_status": "APPROVED", "reviewer_note": "Rollback"},
+        )
+    stored = db_connection.execute(
+        select(
+            ContentDocument.approval_status,
+            ContentDocument.approval_decided_at,
+            ContentDocument.reviewer_note,
+        ).where(ContentDocument.id == created["id"])
+    ).one()
+    assert stored == ("DRAFT", None, None)
+
+
+@pytest.mark.parametrize(
+    ("values", "constraint_name"),
+    [
+        ({"approval_status": "INVALID"}, "ck_content_documents_approval_status"),
+        (
+            {"approval_status": "DRAFT", "approval_decided_at": datetime.now(UTC)},
+            "ck_content_documents_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "DRAFT", "reviewer_note": "Invalid"},
+            "ck_content_documents_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "APPROVED", "approval_decided_at": None},
+            "ck_content_documents_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "REJECTED", "approval_decided_at": None},
+            "ck_content_documents_approval_lifecycle",
+        ),
+    ],
+)
+def test_database_rejects_invalid_content_document_review_state(
+    client: TestClient,
+    db_connection: Connection,
+    values: dict,
+    constraint_name: str,
+) -> None:
+    foundation = _foundation(client, "document-review-constraint")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    _approved_claim(client, topic_id, "document-review-constraint")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    document_values = {
+        "content_package_id": package["id"],
+        "content_version_id": version_id,
+        "title": "Content Package",
+        "markdown": "# Document\n",
+        "sha256": "a" * 64,
+        "approval_status": "DRAFT",
+        **values,
+    }
+    with pytest.raises(IntegrityError) as error, db_connection.begin_nested():
+        db_connection.execute(insert(ContentDocument).values(**document_values))
+    assert error.value.orig.diag.constraint_name == constraint_name
