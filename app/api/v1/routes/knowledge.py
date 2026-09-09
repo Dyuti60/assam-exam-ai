@@ -9,6 +9,7 @@ from app.schemas.knowledge import (
     ClaimCreate,
     ClaimResponse,
     ContentDocumentApprovalCreate,
+    ContentDocumentReleaseCreate,
     ContentDocumentResponse,
     ContentPackageApprovalCreate,
     ContentPackageContentResponse,
@@ -293,6 +294,28 @@ def record_content_document_approval(
         )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.post(
+    "/content-documents/{content_document_id}/release",
+    response_model=ContentDocumentResponse,
+)
+def record_content_document_release(
+    content_document_id: int,
+    request: ContentDocumentReleaseCreate,
+    db: DatabaseSession,
+) -> ContentDocumentResponse:
+    try:
+        return KnowledgeService(db).record_content_document_release(
+            content_document_id,
+            request,
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.post(

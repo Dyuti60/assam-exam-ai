@@ -206,6 +206,19 @@ class KnowledgeRepository:
         content_document.approval_decided_at = decided_at
         content_document.reviewer_note = reviewer_note
 
+    def update_content_document_release(
+        self,
+        content_document: ContentDocument,
+        release_status: str,
+        released_at: datetime | None,
+        withdrawn_at: datetime | None,
+        release_note: str | None,
+    ) -> None:
+        content_document.release_status = release_status
+        content_document.released_at = released_at
+        content_document.withdrawn_at = withdrawn_at
+        content_document.release_note = release_note
+
     def add_content_document(
         self,
         content_document: ContentDocument,

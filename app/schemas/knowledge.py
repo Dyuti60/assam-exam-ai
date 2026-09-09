@@ -307,6 +307,17 @@ class ContentPackageReleaseDecision(StrEnum):
     WITHDRAWN = "WITHDRAWN"
 
 
+class ContentDocumentReleaseStatus(StrEnum):
+    UNRELEASED = "UNRELEASED"
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
+class ContentDocumentReleaseDecision(StrEnum):
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
 class ContentPackageResponse(BaseModel):
     id: int
     content_version_id: int
@@ -349,11 +360,20 @@ class ContentDocumentResponse(BaseModel):
     approval_status: ClaimApprovalStatus
     approval_decided_at: datetime | None
     reviewer_note: str | None
+    release_status: ContentDocumentReleaseStatus
+    released_at: datetime | None
+    withdrawn_at: datetime | None
+    release_note: str | None
 
 
 class ContentDocumentApprovalCreate(BaseModel):
     approval_status: ClaimApprovalStatus
     reviewer_note: str | None = None
+
+
+class ContentDocumentReleaseCreate(BaseModel):
+    release_status: ContentDocumentReleaseDecision
+    release_note: str | None = None
 
 
 class EvidenceCreate(BaseModel):

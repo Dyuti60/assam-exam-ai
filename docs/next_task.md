@@ -6051,3 +6051,5 @@ Do not self-approve.
 Do not implement T-041.
 
 Leave T-040 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only controlled UNRELEASED/RELEASED/WITHDRAWN ContentDocument metadata, migration `d1a7c4e9f263`, and `POST /api/v1/content-documents/{content_document_id}/release`. Only the document's own APPROVED review state permits initial release; withdrawal retains the original release time, records a UTC withdrawal time, and prevents in-place re-release. Release and conflicting approval decisions lock only the target document row, commit once, roll back failures, and preserve the immutable payload and related state. Existing documents migrate to UNRELEASED/null without inferred release. T-040 is Ready for review, not approved. No approved/released document collection, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-041 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

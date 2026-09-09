@@ -1259,3 +1259,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Controlled Document Release |
 | Scope | Release metadata, one decision endpoint, response compatibility, approval lock, database constraints, migration, and tests only; no released list, PDF/HTML, publication, storage/download, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-040 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only controlled UNRELEASED/RELEASED/WITHDRAWN ContentDocument state and `POST /api/v1/content-documents/{content_document_id}/release`, preserving independent review and immutable document payload |
+| Migration | `d1a7c4e9f263` follows `b6f1d3a8e942`; existing documents become UNRELEASED with null release metadata and no inferred release |
+| Tests | T-040 selection: 10 passed, 49 deselected, 1 warning in 1.86s. Complete ContentPackage/ContentDocument suite: 59 passed, 1 warning in 8.89s. Required regressions: 112 passed, 1 warning in 6.87s. Full suite: 247 passed, 1 warning in 17.49s. |
+| Validation | Fresh and seeded upgrade/downgrade/re-upgrade, PostgreSQL constraints, changed-file Ruff, Alembic head/check, and diff checks passed against the dedicated T-040 PostgreSQL test database. |
+| Notes | Release and conflicting approval decisions lock only the target document, commit once, roll back failures, and preserve the immutable stored payload and related state. T-040 is Ready for review, not approved. No document collection, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-041 work was added. |

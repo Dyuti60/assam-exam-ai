@@ -220,6 +220,28 @@ def _approve_and_release_package(client: TestClient, package_id: int) -> dict:
     return release.json()
 
 
+def _create_content_document_fixture(client: TestClient, suffix: str) -> dict:
+    foundation = _foundation(client, suffix)
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    claim_id = _approved_claim(client, topic_id, suffix)
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    _approve_and_release_package(client, package["id"])
+    response = client.post(
+        f"/api/v1/content-packages/{package['id']}/content-documents"
+    )
+    assert response.status_code == 201
+    return {
+        "foundation": foundation,
+        "claim_id": claim_id,
+        "draft": draft,
+        "package": package,
+        "document": response.json(),
+    }
+
+
 def _row_counts(connection: Connection) -> tuple[int, int, int]:
     return (
         connection.scalar(select(func.count()).select_from(ContentPackage)),
@@ -2387,6 +2409,10 @@ def test_content_document_renders_retained_members_and_is_immutable(
         "approval_status": "DRAFT",
         "approval_decided_at": None,
         "reviewer_note": None,
+        "release_status": "UNRELEASED",
+        "released_at": None,
+        "withdrawn_at": None,
+        "release_note": None,
     }
     assert datetime.fromisoformat(body["created_at"]).utcoffset() == UTC.utcoffset(None)
     assert body["markdown"].endswith("\n")
@@ -3012,3 +3038,390 @@ def test_database_rejects_invalid_content_document_review_state(
     with pytest.raises(IntegrityError) as error, db_connection.begin_nested():
         db_connection.execute(insert(ContentDocument).values(**document_values))
     assert error.value.orig.diag.constraint_name == constraint_name
+
+
+def test_content_document_release_lifecycle_locks_only_document_and_preserves_state(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _create_content_document_fixture(client, "document-release")
+    document = fixture["document"]
+    package = fixture["package"]
+    draft = fixture["draft"]
+    claim_id = fixture["claim_id"]
+    assert document["release_status"] == "UNRELEASED"
+    assert document["released_at"] is None
+    assert document["withdrawn_at"] is None
+    assert document["release_note"] is None
+
+    immutable = {
+        key: document[key]
+        for key in (
+            "id",
+            "content_package_id",
+            "content_version_id",
+            "title",
+            "markdown",
+            "sha256",
+            "created_at",
+        )
+    }
+    counts_before = (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    )
+    before = client.get(f"/api/v1/content-documents/{document['id']}").json()
+    for status in ("DRAFT", "REJECTED"):
+        if status == "REJECTED":
+            decision = client.post(
+                f"/api/v1/content-documents/{document['id']}/approval",
+                json={"approval_status": "REJECTED", "reviewer_note": "Rejected"},
+            )
+            assert decision.status_code == 200
+            before = decision.json()
+        conflict = client.post(
+            f"/api/v1/content-documents/{document['id']}/release",
+            json={"release_status": "RELEASED"},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {
+            "detail": f"ContentDocument {document['id']} must be approved before release"
+        }
+        assert client.get(
+            f"/api/v1/content-documents/{document['id']}"
+        ).json() == before
+
+    approval = client.post(
+        f"/api/v1/content-documents/{document['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Document review"},
+    )
+    assert approval.status_code == 200
+    approved = approval.json()
+    assert approved["release_status"] == "UNRELEASED"
+    assert approved["released_at"] is None
+
+    assert client.post(
+        f"/api/v1/content-packages/{package['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{package['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/note-drafts/{draft['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/note-drafts/{draft['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/claims/{claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+
+    statements: list[str] = []
+    commit_count = 0
+    original_commit = Session.commit
+
+    def record_sql(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    def count_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        return original_commit(session)
+
+    monkeypatch.setattr(Session, "commit", count_commit)
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    try:
+        release = client.post(
+            f"/api/v1/content-documents/{document['id']}/release",
+            json={"release_status": "RELEASED", "release_note": "Release note"},
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+    assert release.status_code == 200
+    released = release.json()
+    assert commit_count == 1
+    assert {key: released[key] for key in immutable} == immutable
+    assert released["approval_status"] == "APPROVED"
+    assert released["approval_decided_at"] == approved["approval_decided_at"]
+    assert released["reviewer_note"] == "Document review"
+    assert released["release_status"] == "RELEASED"
+    assert datetime.fromisoformat(
+        released["released_at"]
+    ).utcoffset() == UTC.utcoffset(None)
+    assert released["withdrawn_at"] is None
+    assert released["release_note"] == "Release note"
+    locking = [statement for statement in statements if "FOR UPDATE" in statement.upper()]
+    assert len(locking) == 1
+    assert "FOR UPDATE OF content_documents" in locking[0]
+    assert "content_packages" not in locking[0]
+    assert "note_drafts" not in locking[0]
+    assert "question_bank_items" not in locking[0]
+    select_statements = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+    ]
+    assert len(select_statements) == 2
+    assert all("content_documents" in statement for statement in select_statements)
+    assert all("content_packages" not in statement for statement in select_statements)
+    assert all("claims" not in statement for statement in select_statements)
+    assert all("verifications" not in statement for statement in select_statements)
+
+    reapproved = client.post(
+        f"/api/v1/content-documents/{document['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Still approved"},
+    )
+    assert reapproved.status_code == 200
+    assert reapproved.json()["release_status"] == "RELEASED"
+    assert reapproved.json()["released_at"] == released["released_at"]
+    released = reapproved.json()
+    blocked_statements: list[str] = []
+    statements.clear()
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    for approval_status in ("DRAFT", "REJECTED"):
+        try:
+            blocked = client.post(
+                f"/api/v1/content-documents/{document['id']}/approval",
+                json={"approval_status": approval_status},
+            )
+            blocked_statements.extend(statements)
+            statements.clear()
+        finally:
+            if approval_status == "REJECTED":
+                event.remove(db_connection, "before_cursor_execute", record_sql)
+        assert blocked.status_code == 409
+        assert blocked.json() == {
+            "detail": f"ContentDocument {document['id']} must be withdrawn before changing approval"
+        }
+        assert client.get(
+            f"/api/v1/content-documents/{document['id']}"
+        ).json() == released
+    blocked_locks = [
+        statement
+        for statement in blocked_statements
+        if "FOR UPDATE" in statement.upper()
+    ]
+    assert len(blocked_locks) == 2
+    assert all("FOR UPDATE OF content_documents" in statement for statement in blocked_locks)
+    assert all("content_packages" not in statement for statement in blocked_locks)
+
+    duplicate = client.post(
+        f"/api/v1/content-documents/{document['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {
+        "detail": f"ContentDocument {document['id']} cannot transition from RELEASED to RELEASED"
+    }
+    commits_before_withdrawal = commit_count
+    withdrawal = client.post(
+        f"/api/v1/content-documents/{document['id']}/release",
+        json={"release_status": "WITHDRAWN", "release_note": "Withdrawal note"},
+    )
+    assert withdrawal.status_code == 200
+    assert commit_count == commits_before_withdrawal + 1
+    withdrawn = withdrawal.json()
+    assert withdrawn["released_at"] == released["released_at"]
+    assert datetime.fromisoformat(
+        withdrawn["withdrawn_at"]
+    ).utcoffset() == UTC.utcoffset(None)
+    assert withdrawn["release_note"] == "Withdrawal note"
+    assert {key: withdrawn[key] for key in immutable} == immutable
+
+    after_withdrawal_review = client.post(
+        f"/api/v1/content-documents/{document['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "After withdrawal"},
+    )
+    assert after_withdrawal_review.status_code == 200
+    reviewed = after_withdrawal_review.json()
+    assert reviewed["release_status"] == "WITHDRAWN"
+    assert reviewed["released_at"] == withdrawn["released_at"]
+    assert reviewed["withdrawn_at"] == withdrawn["withdrawn_at"]
+    assert reviewed["release_note"] == "Withdrawal note"
+    for decision in ("WITHDRAWN", "RELEASED"):
+        conflict = client.post(
+            f"/api/v1/content-documents/{document['id']}/release",
+            json={"release_status": decision},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {
+            "detail": f"ContentDocument {document['id']} cannot transition from WITHDRAWN to {decision}"
+        }
+        assert client.get(
+            f"/api/v1/content-documents/{document['id']}"
+        ).json() == reviewed
+    assert (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    ) == counts_before
+
+
+def test_content_document_release_validation_and_premature_withdrawal_do_not_mutate(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    fixture = _create_content_document_fixture(client, "document-release-validation")
+    document = fixture["document"]
+    before = client.get(f"/api/v1/content-documents/{document['id']}").json()
+    counts_before = (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    )
+    missing = client.post(
+        "/api/v1/content-documents/999999/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "ContentDocument 999999 not found"}
+    for payload in (
+        {},
+        {"release_status": "INVALID"},
+        {"release_status": "UNRELEASED"},
+        {"release_status": None},
+    ):
+        response = client.post(
+            f"/api/v1/content-documents/{document['id']}/release",
+            json=payload,
+        )
+        assert response.status_code == 422
+    premature = client.post(
+        f"/api/v1/content-documents/{document['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert premature.status_code == 409
+    assert premature.json() == {
+        "detail": f"ContentDocument {document['id']} cannot transition from UNRELEASED to WITHDRAWN"
+    }
+    assert client.get(f"/api/v1/content-documents/{document['id']}").json() == before
+    assert (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    ) == counts_before
+
+
+def test_content_document_release_failure_rolls_back(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _create_content_document_fixture(client, "document-release-rollback")
+    document = fixture["document"]
+    approval = client.post(
+        f"/api/v1/content-documents/{document['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Reviewed"},
+    )
+    assert approval.status_code == 200
+    before = approval.json()
+    original = KnowledgeRepository.update_content_document_release
+
+    def fail_after_update(repository, content_document, *args):
+        original(repository, content_document, *args)
+        raise RuntimeError("injected content document release failure")
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "update_content_document_release",
+        fail_after_update,
+    )
+    with pytest.raises(RuntimeError, match="injected content document release failure"):
+        client.post(
+            f"/api/v1/content-documents/{document['id']}/release",
+            json={"release_status": "RELEASED", "release_note": "Rollback"},
+        )
+    assert client.get(f"/api/v1/content-documents/{document['id']}").json() == before
+
+
+@pytest.mark.parametrize(
+    ("values", "constraint_name"),
+    [
+        ({"release_status": "INVALID"}, "ck_content_documents_release_status"),
+        (
+            {"release_status": "UNRELEASED", "released_at": datetime.now(UTC)},
+            "ck_content_documents_release_lifecycle",
+        ),
+        (
+            {"release_status": "UNRELEASED", "withdrawn_at": datetime.now(UTC)},
+            "ck_content_documents_release_lifecycle",
+        ),
+        (
+            {"release_status": "UNRELEASED", "release_note": "Invalid"},
+            "ck_content_documents_release_lifecycle",
+        ),
+        (
+            {"release_status": "RELEASED", "released_at": None},
+            "ck_content_documents_release_lifecycle",
+        ),
+        (
+            {
+                "release_status": "WITHDRAWN",
+                "released_at": datetime.now(UTC),
+                "withdrawn_at": None,
+            },
+            "ck_content_documents_release_lifecycle",
+        ),
+    ],
+)
+def test_database_rejects_invalid_content_document_release_state(
+    client: TestClient,
+    db_connection: Connection,
+    values: dict,
+    constraint_name: str,
+) -> None:
+    foundation = _foundation(client, "document-release-constraint")
+    topic_id = foundation["topic"]["id"]
+    version_id = foundation["first_version"]["id"]
+    _approved_claim(client, topic_id, "document-release-constraint")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+    package = _create_package(client, version_id)
+    document_values = {
+        "content_package_id": package["id"],
+        "content_version_id": version_id,
+        "title": "Content Package",
+        "markdown": "# Document\n",
+        "sha256": "a" * 64,
+        "approval_status": "APPROVED",
+        "approval_decided_at": datetime.now(UTC),
+        **values,
+    }
+    with pytest.raises(IntegrityError) as error, db_connection.begin_nested():
+        db_connection.execute(insert(ContentDocument).values(**document_values))
+    assert error.value.orig.diag.constraint_name == constraint_name
+
+
+def test_database_blocks_review_change_while_content_document_is_released(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    fixture = _create_content_document_fixture(client, "document-release-review-lock")
+    document = fixture["document"]
+    assert client.post(
+        f"/api/v1/content-documents/{document['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-documents/{document['id']}/release",
+        json={"release_status": "RELEASED"},
+    ).status_code == 200
+    for approval_status in ("DRAFT", "REJECTED"):
+        with pytest.raises(IntegrityError) as error, db_connection.begin_nested():
+            db_connection.execute(
+                update(ContentDocument)
+                .where(ContentDocument.id == document["id"])
+                .values(
+                    approval_status=approval_status,
+                    approval_decided_at=(
+                        None if approval_status == "DRAFT" else datetime.now(UTC)
+                    ),
+                    reviewer_note=None,
+                )
+            )
+        assert (
+            error.value.orig.diag.constraint_name
+            == "ck_content_documents_release_lifecycle"
+        )

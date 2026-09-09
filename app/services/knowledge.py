@@ -34,6 +34,8 @@ from app.schemas.knowledge import (
     ClaimCreate,
     ClaimResponse,
     ContentDocumentApprovalCreate,
+    ContentDocumentReleaseCreate,
+    ContentDocumentReleaseDecision,
     ContentDocumentResponse,
     ContentPackageApprovalCreate,
     ContentPackageContentResponse,
@@ -617,6 +619,16 @@ class KnowledgeService:
         if content_document is None:
             raise ResourceNotFoundError("ContentDocument", content_document_id)
 
+        if (
+            content_document.release_status == "RELEASED"
+            and request.approval_status
+            in (ClaimApprovalStatus.DRAFT, ClaimApprovalStatus.REJECTED)
+        ):
+            raise ResourceConflictError(
+                f"ContentDocument {content_document_id} must be withdrawn "
+                "before changing approval"
+            )
+
         is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
         try:
             self.repository.update_content_document_approval(
@@ -634,6 +646,62 @@ class KnowledgeService:
         if stored_document is None:
             raise RuntimeError(
                 f"ContentDocument {content_document_id} missing after successful review"
+            )
+        return self._content_document_response(stored_document)
+
+    def record_content_document_release(
+        self,
+        content_document_id: int,
+        request: ContentDocumentReleaseCreate,
+    ) -> ContentDocumentResponse:
+        content_document = self.repository.get_content_document_for_update(
+            content_document_id
+        )
+        if content_document is None:
+            raise ResourceNotFoundError("ContentDocument", content_document_id)
+
+        requested_status = request.release_status.value
+        current_status = content_document.release_status
+        if (
+            request.release_status == ContentDocumentReleaseDecision.RELEASED
+            and current_status == "UNRELEASED"
+        ):
+            if content_document.approval_status != "APPROVED":
+                raise ResourceConflictError(
+                    f"ContentDocument {content_document_id} must be approved "
+                    "before release"
+                )
+            released_at = datetime.now(UTC)
+            withdrawn_at = None
+        elif (
+            request.release_status == ContentDocumentReleaseDecision.WITHDRAWN
+            and current_status == "RELEASED"
+        ):
+            released_at = content_document.released_at
+            withdrawn_at = datetime.now(UTC)
+        else:
+            raise ResourceConflictError(
+                f"ContentDocument {content_document_id} cannot transition "
+                f"from {current_status} to {requested_status}"
+            )
+
+        try:
+            self.repository.update_content_document_release(
+                content_document,
+                requested_status,
+                released_at,
+                withdrawn_at,
+                request.release_note,
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_document = self.repository.get_content_document(content_document_id)
+        if stored_document is None:
+            raise RuntimeError(
+                f"ContentDocument {content_document_id} missing after successful release"
             )
         return self._content_document_response(stored_document)
 
@@ -1242,6 +1310,10 @@ class KnowledgeService:
             approval_status=content_document.approval_status,
             approval_decided_at=content_document.approval_decided_at,
             reviewer_note=content_document.reviewer_note,
+            release_status=content_document.release_status,
+            released_at=content_document.released_at,
+            withdrawn_at=content_document.withdrawn_at,
+            release_note=content_document.release_note,
         )
 
     @staticmethod
