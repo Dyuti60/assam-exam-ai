@@ -6648,3 +6648,5 @@ Do not self-approve.
 Do not implement or define T-044.
 
 Leave T-043 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/pdf-artifacts/{pdf_artifact_id}` and `GET /api/v1/pdf-artifacts/{pdf_artifact_id}/download`. Both resolve one artifact by its own ID through a PdfArtifact-only, no-autoflush, lock-free query. Metadata reuses the stored response and excludes raw bytes; download returns the exact persisted bytes with stored media type, size, and deterministic attachment filename. Missing artifacts use the stable 404, and later document withdrawal or unrelated upstream state changes do not affect retrieval. No rendering, hashing, related-state evaluation, write, model/schema/migration change, dependency, external storage, publication, learner delivery, AI, personalization, or T-044 work was added. T-043 is Ready for review, not approved; exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.

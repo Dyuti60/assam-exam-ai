@@ -1385,3 +1385,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Deterministic PDF Artifact |
 | Scope | Metadata lookup and exact byte download only; no regeneration, lifecycle, publication, external storage, learner delivery, AI, or personalization |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-043 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/pdf-artifacts/{pdf_artifact_id}` metadata retrieval and `/download` exact stored-byte retrieval |
+| Migration | None; models, constraints, registration, and Alembic head `e7b4c9d2a615` remain unchanged |
+| Tests | Focused T-043: 4 passed, 16 deselected, 1 warning in 1.08s. Complete PdfArtifact: 20 passed, 1 warning in 3.12s. ContentPackage/ContentDocument: 61 passed, 1 warning in 9.52s. T-041 selection: 2 passed, 59 deselected, 1 warning in 1.30s. ContentVersion/T-030: 15 passed, 1 warning in 1.63s. NoteDraft: 43 passed, 1 warning in 3.26s. QuestionBankItem: 54 passed, 1 warning in 3.24s. Full suite: 269 passed, 1 warning in 19.78s. |
+| Validation | Fresh dedicated `_test` upgrade reached unchanged head `e7b4c9d2a615`; lock verification, changed-file Ruff, Alembic head/check, and diff checks passed. |
+| Notes | Both reads use one PdfArtifact-only, no-autoflush, lock-free query by artifact ID. Metadata excludes bytes; download returns the exact stored bytes and stored headers without rendering, hashing, related-state evaluation, or mutation. T-043 is Ready for review, not approved. No model, migration, renderer, dependency, configuration, Docker, storage, list, lifecycle, publication, learner, AI, personalization, or T-044 work was added. |

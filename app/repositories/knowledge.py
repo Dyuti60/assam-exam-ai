@@ -204,6 +204,11 @@ class KnowledgeRepository:
         with self.session.no_autoflush:
             return self.session.scalar(statement)
 
+    def get_pdf_artifact(self, pdf_artifact_id: int) -> PdfArtifact | None:
+        statement = select(PdfArtifact).where(PdfArtifact.id == pdf_artifact_id)
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
     def add_pdf_artifact(self, pdf_artifact: PdfArtifact) -> PdfArtifact:
         self.session.add(pdf_artifact)
         self.session.flush()

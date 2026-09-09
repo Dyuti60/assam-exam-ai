@@ -196,6 +196,15 @@ def _artifact_count(connection: Connection) -> int:
     return connection.scalar(select(func.count()).select_from(PdfArtifact))
 
 
+def _create_artifact(client: TestClient, suffix: str) -> tuple[dict, dict]:
+    fixture = _released_document(client, suffix)
+    response = client.post(
+        f"/api/v1/content-documents/{fixture['document']['id']}/pdf-artifacts"
+    )
+    assert response.status_code == 201, response.text
+    return fixture, response.json()
+
+
 def _related_snapshot(connection: Connection, fixture: dict) -> tuple[object, ...]:
     return (
         connection.execute(
@@ -616,3 +625,163 @@ def test_pdf_uses_stored_document_after_related_state_changes(
     assert db_connection.scalar(
         select(func.count()).select_from(ContentPackageQuestionBankItem)
     ) == 1
+
+
+def test_pdf_artifact_metadata_and_download_return_exact_stored_values(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    _, created = _create_artifact(client, "read")
+    stored = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    expected_metadata = {
+        "id": stored["id"],
+        "content_document_id": stored["content_document_id"],
+        "content_package_id": stored["content_package_id"],
+        "content_version_id": stored["content_version_id"],
+        "filename": stored["filename"],
+        "media_type": stored["media_type"],
+        "byte_size": stored["byte_size"],
+        "sha256": stored["sha256"],
+        "created_at": created["created_at"],
+    }
+
+    metadata = client.get(f"/api/v1/pdf-artifacts/{stored['id']}")
+    assert metadata.status_code == 200
+    assert metadata.json() == expected_metadata
+    assert "pdf_bytes" not in metadata.json()
+    assert datetime.fromisoformat(metadata.json()["created_at"]) == stored["created_at"]
+
+    download = client.get(f"/api/v1/pdf-artifacts/{stored['id']}/download")
+    assert download.status_code == 200
+    assert download.content == bytes(stored["pdf_bytes"])
+    assert download.headers["content-type"] == stored["media_type"]
+    assert download.headers["content-length"] == str(stored["byte_size"])
+    assert download.headers["content-disposition"] == (
+        f'attachment; filename="{stored["filename"]}"'
+    )
+
+
+@pytest.mark.parametrize("suffix", ["", "/download"])
+def test_missing_pdf_artifact_reads_return_stable_404(
+    client: TestClient,
+    suffix: str,
+) -> None:
+    response = client.get(f"/api/v1/pdf-artifacts/999999{suffix}")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "PdfArtifact 999999 not found"}
+
+
+def test_pdf_artifact_reads_are_stable_pdf_only_queries_without_writes(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture, created = _create_artifact(client, "stored-read")
+    artifact_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    related_before = _related_snapshot(db_connection, fixture)
+
+    withdrawal = client.post(
+        f"/api/v1/content-documents/{fixture['document']['id']}/release",
+        json={"release_status": "WITHDRAWN", "release_note": "withdrawn later"},
+    )
+    assert withdrawal.status_code == 200
+    db_connection.execute(
+        update(ContentPackage)
+        .where(ContentPackage.id == fixture["package"]["id"])
+        .values(
+            release_status="WITHDRAWN",
+            withdrawn_at=func.now(),
+            release_note="package changed later",
+        )
+    )
+    db_connection.execute(
+        update(Claim)
+        .where(Claim.id == fixture["claim"]["id"])
+        .values(
+            approval_status="REJECTED",
+            approval_decided_at=func.now(),
+            verification_status="CONTRADICTED",
+        )
+    )
+    db_connection.execute(
+        update(NoteDraft)
+        .where(NoteDraft.id == fixture["draft"]["id"])
+        .values(
+            release_status="WITHDRAWN",
+            withdrawn_at=func.now(),
+            release_note="member changed later",
+        )
+    )
+    db_connection.execute(
+        update(QuestionBankItem)
+        .where(QuestionBankItem.id == fixture["item"]["id"])
+        .values(
+            release_status="WITHDRAWN",
+            withdrawn_at=func.now(),
+            release_note="member changed later",
+        )
+    )
+    state_after_changes = _related_snapshot(db_connection, fixture)
+    artifact_count = _artifact_count(db_connection)
+
+    def unexpected_call(*args: object, **kwargs: object) -> object:
+        raise AssertionError("artifact reads must not render or hash")
+
+    monkeypatch.setattr(
+        "app.services.knowledge.render_content_document_pdf",
+        unexpected_call,
+    )
+    monkeypatch.setattr("app.services.knowledge.sha256", unexpected_call)
+    statements: list[str] = []
+    flushes = 0
+    commits = 0
+
+    def record_statement(*args: object) -> None:
+        statements.append(str(args[2]))
+
+    def record_flush(*args: object) -> None:
+        nonlocal flushes
+        flushes += 1
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    event.listen(db_connection, "before_cursor_execute", record_statement)
+    event.listen(Session, "after_flush", record_flush)
+    event.listen(Session, "after_commit", record_commit)
+    try:
+        metadata = client.get(f"/api/v1/pdf-artifacts/{created['id']}")
+        download = client.get(
+            f"/api/v1/pdf-artifacts/{created['id']}/download"
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_statement)
+        event.remove(Session, "after_flush", record_flush)
+        event.remove(Session, "after_commit", record_commit)
+
+    assert metadata.status_code == 200
+    assert metadata.json() == created
+    assert download.status_code == 200
+    assert download.content == bytes(artifact_before["pdf_bytes"])
+    selects = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+    ]
+    assert len(selects) == 2
+    assert all("FROM pdf_artifacts" in statement for statement in selects)
+    assert all(" JOIN " not in statement.upper() for statement in selects)
+    assert all("FOR UPDATE" not in statement.upper() for statement in selects)
+    assert flushes == 0
+    assert commits == 0
+    assert _artifact_count(db_connection) == artifact_count
+    assert artifact_before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    assert _related_snapshot(db_connection, fixture) == state_after_changes
+    assert related_before != state_after_changes

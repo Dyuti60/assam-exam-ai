@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -290,6 +290,39 @@ def create_pdf_artifact(
         raise _not_found(error) from error
     except ResourceConflictError as error:
         raise _conflict(error) from error
+
+
+@router.get("/pdf-artifacts/{pdf_artifact_id}/download")
+def download_pdf_artifact(
+    pdf_artifact_id: int,
+    db: DatabaseSession,
+) -> Response:
+    try:
+        download = KnowledgeService(db).download_pdf_artifact(pdf_artifact_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    return Response(
+        content=download.pdf_bytes,
+        media_type=download.media_type,
+        headers={
+            "Content-Length": str(download.byte_size),
+            "Content-Disposition": f'attachment; filename="{download.filename}"',
+        },
+    )
+
+
+@router.get(
+    "/pdf-artifacts/{pdf_artifact_id}",
+    response_model=PdfArtifactResponse,
+)
+def get_pdf_artifact(
+    pdf_artifact_id: int,
+    db: DatabaseSession,
+) -> PdfArtifactResponse:
+    try:
+        return KnowledgeService(db).get_pdf_artifact(pdf_artifact_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
 
 
 @router.get(

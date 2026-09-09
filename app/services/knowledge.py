@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 
@@ -88,6 +89,14 @@ class ResourceNotFoundError(Exception):
 
 class ResourceConflictError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class PdfArtifactDownload:
+    filename: str
+    media_type: str
+    byte_size: int
+    pdf_bytes: bytes
 
 
 class KnowledgeService:
@@ -675,6 +684,19 @@ class KnowledgeService:
                 "missing after successful commit"
             )
         return self._pdf_artifact_response(stored_artifact)
+
+    def get_pdf_artifact(self, pdf_artifact_id: int) -> PdfArtifactResponse:
+        pdf_artifact = self._get_pdf_artifact_or_raise(pdf_artifact_id)
+        return self._pdf_artifact_response(pdf_artifact)
+
+    def download_pdf_artifact(self, pdf_artifact_id: int) -> PdfArtifactDownload:
+        pdf_artifact = self._get_pdf_artifact_or_raise(pdf_artifact_id)
+        return PdfArtifactDownload(
+            filename=pdf_artifact.filename,
+            media_type=pdf_artifact.media_type,
+            byte_size=pdf_artifact.byte_size,
+            pdf_bytes=bytes(pdf_artifact.pdf_bytes),
+        )
 
     def record_content_document_approval(
         self,
@@ -1397,6 +1419,12 @@ class KnowledgeService:
             sha256=pdf_artifact.sha256,
             created_at=pdf_artifact.created_at,
         )
+
+    def _get_pdf_artifact_or_raise(self, pdf_artifact_id: int) -> PdfArtifact:
+        pdf_artifact = self.repository.get_pdf_artifact(pdf_artifact_id)
+        if pdf_artifact is None:
+            raise ResourceNotFoundError("PdfArtifact", pdf_artifact_id)
+        return pdf_artifact
 
     @staticmethod
     def _render_content_document_markdown(
