@@ -1398,3 +1398,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | Focused T-043: 4 passed, 16 deselected, 1 warning in 1.08s. Complete PdfArtifact: 20 passed, 1 warning in 3.12s. ContentPackage/ContentDocument: 61 passed, 1 warning in 9.52s. T-041 selection: 2 passed, 59 deselected, 1 warning in 1.30s. ContentVersion/T-030: 15 passed, 1 warning in 1.63s. NoteDraft: 43 passed, 1 warning in 3.26s. QuestionBankItem: 54 passed, 1 warning in 3.24s. Full suite: 269 passed, 1 warning in 19.78s. |
 | Validation | Fresh dedicated `_test` upgrade reached unchanged head `e7b4c9d2a615`; lock verification, changed-file Ruff, Alembic head/check, and diff checks passed. |
 | Notes | Both reads use one PdfArtifact-only, no-autoflush, lock-free query by artifact ID. Metadata excludes bytes; download returns the exact stored bytes and stored headers without rendering, hashing, related-state evaluation, or mutation. T-043 is Ready for review, not approved. No model, migration, renderer, dependency, configuration, Docker, storage, list, lifecycle, publication, learner, AI, personalization, or T-044 work was added. |
+
+
+---
+
+## T-043 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-043` |
+| Implementation commit | `b6ef5943536380ed8cf18a09133ad5cd68f603ad` |
+| Base/task-issuance commit | `45f4c71ed41d4dabc56278281182bed45d1800c0` |
+| Review state | **APPROVED** |
+| Approved capability | Internal metadata retrieval and exact stored-byte download of one immutable PdfArtifact by artifact ID |
+| Migration | None; Alembic head remains `e7b4c9d2a615` |
+| Validation evidence | Developer-recorded: 4 focused T-043 tests, 20 complete PdfArtifact tests, 61 ContentPackage/ContentDocument tests, 2 T-041 selection tests, 15 ContentVersion/T-030 tests, 43 NoteDraft tests, 54 QuestionBankItem tests, and 269 full-suite tests, each with one existing warning; Ruff; lock verification; Alembic head/check; fresh upgrade; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The immutable implementation is exactly one commit over the issued base. Route order, stored metadata serialization, exact byte/header response, stable errors, PdfArtifact-only query boundary, state independence, zero-lock/write/render/hash behavior, tests, documentation, and exclusions match the canonical task with no blocking finding. |
+| Boundaries | No model, schema, migration, renderer, dependency, configuration, Docker, list, ContentDocument-keyed lookup, artifact lifecycle, publication, public/learner delivery, AI, mock assembly, personalization, or T-044 behavior was included. |
+
+---
+
+## T-044 issued — Add independent PdfArtifact human review
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add an independent DRAFT/APPROVED/REJECTED human-review decision to each immutable PdfArtifact while preserving its bytes, checksum, ownership, and read behavior |
+| Architectural phase | Canonical Content / Artifact Trust Boundary |
+| Scope | PdfArtifact review metadata, database invariants, one approval endpoint, and tests only; no release, publication, public delivery, or T-045 |
+| Full implementation prompt | Appended to `docs/next_task.md` |
