@@ -208,6 +208,11 @@ def _create_artifact(client: TestClient, suffix: str) -> tuple[dict, dict]:
 def _related_snapshot(connection: Connection, fixture: dict) -> tuple[object, ...]:
     return (
         connection.execute(
+            select(ContentDocument.__table__).where(
+                ContentDocument.id == fixture["document"]["id"]
+            )
+        ).mappings().one(),
+        connection.execute(
             select(ContentPackage.__table__).where(
                 ContentPackage.id == fixture["package"]["id"]
             )
@@ -864,6 +869,159 @@ def test_pdf_artifact_review_records_utc_decision_and_only_review_fields(
     assert commits == 1
 
 
+def test_pdf_artifact_review_is_target_only_and_related_state_independent(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    fixture, target = _create_artifact(client, "review-target")
+    other_fixture, other = _create_artifact(client, "review-other")
+
+    state_changes = (
+        (
+            f"/api/v1/content-documents/{fixture['document']['id']}/release",
+            {"release_status": "WITHDRAWN", "release_note": "withdraw document"},
+        ),
+        (
+            f"/api/v1/content-packages/{fixture['package']['id']}/release",
+            {"release_status": "WITHDRAWN", "release_note": "withdraw package"},
+        ),
+        (
+            f"/api/v1/note-drafts/{fixture['draft']['id']}/release",
+            {"release_status": "WITHDRAWN", "release_note": "withdraw note"},
+        ),
+        (
+            f"/api/v1/note-drafts/{fixture['draft']['id']}/approval",
+            {"approval_status": "REJECTED", "reviewer_note": "reject note"},
+        ),
+        (
+            f"/api/v1/question-bank-items/{fixture['item']['id']}/release",
+            {"release_status": "WITHDRAWN", "release_note": "withdraw question"},
+        ),
+        (
+            f"/api/v1/question-bank-items/{fixture['item']['id']}/approval",
+            {"approval_status": "REJECTED", "reviewer_note": "reject question"},
+        ),
+        (
+            f"/api/v1/claims/{fixture['claim']['id']}/approval",
+            {"approval_status": "REJECTED", "reviewer_note": "reject claim"},
+        ),
+    )
+    for path, payload in state_changes:
+        response = client.post(path, json=payload)
+        assert response.status_code == 200, response.text
+
+    target_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == target["id"])
+    ).mappings().one()
+    other_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == other["id"])
+    ).mappings().one()
+    target_related_before = _related_snapshot(db_connection, fixture)
+    other_related_before = _related_snapshot(db_connection, other_fixture)
+    statements: list[tuple[str, object]] = []
+
+    def record_statement(
+        connection: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: object,
+    ) -> None:
+        statements.append((statement, parameters))
+
+    event.listen(db_connection, "before_cursor_execute", record_statement)
+    try:
+        response = client.post(
+            f"/api/v1/pdf-artifacts/{target['id']}/approval",
+            json={
+                "approval_status": "APPROVED",
+                "reviewer_note": "independent artifact review",
+            },
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_statement)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["approval_status"] == "APPROVED"
+    assert response.json()["reviewer_note"] == "independent artifact review"
+
+    sql_operations = [
+        (" ".join(statement.split()), parameters)
+        for statement, parameters in statements
+        if statement.lstrip().upper().startswith(("SELECT", "UPDATE", "INSERT", "DELETE"))
+    ]
+    assert len(sql_operations) == 3
+    lock_sql, lock_parameters = sql_operations[0]
+    update_sql, update_parameters = sql_operations[1]
+    reload_sql, reload_parameters = sql_operations[2]
+    assert lock_sql.upper().startswith("SELECT ")
+    assert " from pdf_artifacts " in f" {lock_sql.lower()} "
+    assert " where pdf_artifacts.id =" in f" {lock_sql.lower()} "
+    assert " FOR UPDATE OF PDF_ARTIFACTS" in lock_sql.upper()
+    assert update_sql.upper().startswith("UPDATE PDF_ARTIFACTS SET ")
+    assert " where pdf_artifacts.id =" in f" {update_sql.lower()} "
+    assert reload_sql.upper().startswith("SELECT ")
+    assert " from pdf_artifacts " in f" {reload_sql.lower()} "
+    assert " where pdf_artifacts.id =" in f" {reload_sql.lower()} "
+    assert "FOR UPDATE" not in reload_sql.upper()
+
+    for statement, parameters in sql_operations:
+        assert " JOIN " not in statement.upper()
+        parameter_values = (
+            tuple(parameters.values())
+            if isinstance(parameters, dict)
+            else tuple(parameters)
+        )
+        assert target["id"] in parameter_values
+        assert other["id"] not in parameter_values
+    assert lock_parameters != ()
+    assert update_parameters != ()
+    assert reload_parameters != ()
+
+    related_tables = (
+        "content_documents",
+        "content_packages",
+        "content_package_note_drafts",
+        "content_package_question_bank_items",
+        "note_drafts",
+        "note_draft_claims",
+        "question_bank_items",
+        "question_bank_item_claims",
+        "question_bank_options",
+        "claims",
+        "verifications",
+        "evidence",
+        "sources",
+        "topics",
+        "exams",
+        "syllabus_versions",
+        "content_versions",
+    )
+    for statement, _ in sql_operations:
+        padded_statement = f" {statement.lower()} "
+        assert all(f" {table_name} " not in padded_statement for table_name in related_tables)
+
+    target_after = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == target["id"])
+    ).mappings().one()
+    changed_columns = {
+        column
+        for column in target_before
+        if target_before[column] != target_after[column]
+    }
+    assert changed_columns == {
+        "approval_status",
+        "approval_decided_at",
+        "reviewer_note",
+    }
+    assert other_before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == other["id"])
+    ).mappings().one()
+    assert _related_snapshot(db_connection, fixture) == target_related_before
+    assert _related_snapshot(db_connection, other_fixture) == other_related_before
+
+
 def test_pdf_artifact_review_reset_and_repeated_decisions_are_fresh(
     client: TestClient,
     db_connection: Connection,
@@ -957,6 +1115,89 @@ def test_pdf_artifact_review_missing_invalid_and_failure_are_atomic(
     assert before == db_connection.execute(
         select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
     ).mappings().one()
+
+
+def test_pdf_artifact_review_failure_after_flush_rolls_back_every_change(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture, created = _create_artifact(client, "review-flushed-failure")
+    artifact_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    related_before = _related_snapshot(db_connection, fixture)
+    original_update = KnowledgeRepository.update_pdf_artifact_approval
+    statements: list[str] = []
+    commits = 0
+    rollbacks = 0
+
+    def fail_after_flush(
+        repository: KnowledgeRepository,
+        pdf_artifact: PdfArtifact,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        original_update(
+            repository,
+            pdf_artifact,
+            approval_status,
+            reviewer_note,
+            decided_at,
+        )
+        repository.session.flush()
+        raise RuntimeError("injected failure after review flush")
+
+    def record_statement(*args: object) -> None:
+        statements.append(str(args[2]))
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    def record_rollback(*args: object) -> None:
+        nonlocal rollbacks
+        rollbacks += 1
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "update_pdf_artifact_approval",
+        fail_after_flush,
+    )
+    event.listen(db_connection, "before_cursor_execute", record_statement)
+    event.listen(Session, "after_commit", record_commit)
+    event.listen(Session, "after_rollback", record_rollback)
+    try:
+        with pytest.raises(RuntimeError, match="injected failure after review flush"):
+            client.post(
+                f"/api/v1/pdf-artifacts/{created['id']}/approval",
+                json={
+                    "approval_status": "APPROVED",
+                    "reviewer_note": "must roll back",
+                },
+            )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_statement)
+        event.remove(Session, "after_commit", record_commit)
+        event.remove(Session, "after_rollback", record_rollback)
+
+    updates = [
+        " ".join(statement.split())
+        for statement in statements
+        if statement.lstrip().upper().startswith("UPDATE")
+    ]
+    assert len(updates) == 1
+    assert updates[0].upper().startswith("UPDATE PDF_ARTIFACTS SET ")
+    assert "approval_status" in updates[0]
+    assert "approval_decided_at" in updates[0]
+    assert "reviewer_note" in updates[0]
+    assert commits == 0
+    assert rollbacks == 1
+    assert artifact_before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    assert _related_snapshot(db_connection, fixture) == related_before
 
 
 def test_pdf_artifact_download_is_unchanged_by_review_state(
