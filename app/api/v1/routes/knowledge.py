@@ -27,6 +27,7 @@ from app.schemas.knowledge import (
     NoteDraftPreviewResponse,
     NoteDraftReleaseCreate,
     NoteDraftResponse,
+    PdfArtifactResponse,
     PreviousPaperCreate,
     PreviousPaperResponse,
     PreviousQuestionCreate,
@@ -272,6 +273,23 @@ def get_released_content_documents(
     db: DatabaseSession,
 ) -> list[ContentDocumentResponse]:
     return KnowledgeService(db).get_released_content_documents()
+
+
+@router.post(
+    "/content-documents/{content_document_id}/pdf-artifacts",
+    response_model=PdfArtifactResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_pdf_artifact(
+    content_document_id: int,
+    db: DatabaseSession,
+) -> PdfArtifactResponse:
+    try:
+        return KnowledgeService(db).create_pdf_artifact(content_document_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.get(

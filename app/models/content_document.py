@@ -17,6 +17,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.content_package import ContentPackage
+    from app.models.pdf_artifact import PdfArtifact
 
 
 class ContentDocument(Base):
@@ -70,6 +71,12 @@ class ContentDocument(Base):
             "content_package_id",
             name="uq_content_documents_content_package_id",
         ),
+        UniqueConstraint(
+            "id",
+            "content_package_id",
+            "content_version_id",
+            name="uq_content_documents_id_package_version",
+        ),
         ForeignKeyConstraint(
             ["content_package_id", "content_version_id"],
             ["content_packages.id", "content_packages.content_version_id"],
@@ -111,4 +118,8 @@ class ContentDocument(Base):
 
     content_package: Mapped["ContentPackage"] = relationship(
         back_populates="content_document",
+    )
+    pdf_artifact: Mapped["PdfArtifact | None"] = relationship(
+        back_populates="content_document",
+        uselist=False,
     )

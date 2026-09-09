@@ -1342,3 +1342,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Deterministic PDF Artifact |
 | Scope | Internal PDF generation, byte persistence, checksum, exact document ownership, and creation metadata only; no retrieval/download, publication, learner delivery, AI, or personalization |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-042 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `POST /api/v1/content-documents/{content_document_id}/pdf-artifacts`, rendering and persisting at most one deterministic immutable PDF byte snapshot from one exact currently RELEASED ContentDocument |
+| Migration | `e7b4c9d2a615` after `d1a7c4e9f263`; adds the supporting ContentDocument composite key and `pdf_artifacts` with exact ownership, uniqueness, PDF metadata, byte-size, checksum, and restricted-deletion constraints |
+| Renderer | Dependency-free in-process `deterministic-pdf-v1`: fixed A4 layout, typography, pagination, object order, and metadata; Windows-1252 input is supported and unsupported characters fail before persistence |
+| Tests | Focused T-042: 16 passed, 1 warning in 3.89s. Complete ContentPackage/ContentDocument: 61 passed, 1 warning in 10.45s. T-041 selection: 2 passed, 59 deselected, 1 warning in 1.30s. Required regressions: 112 passed, 1 warning in 7.46s. Full suite: 265 passed, 1 warning in 21.50s. |
+| Validation | Fresh upgrade, seeded upgrade/downgrade/re-upgrade with zero inferred artifacts, direct PostgreSQL probes, changed-file Ruff, Alembic head/check, and diff checks passed against dedicated `_test` databases. |
+| Notes | Creation validates missing/release/ordinary duplicate state before rendering, locks only the target document, persists copied ownership plus exact bytes/size/SHA-256, commits once, reloads stored metadata, and rolls back renderer or persistence failures. T-042 is Ready for review, not approved. No dependency, API key, external service, storage/download, publication, delivery, learner, AI, source discovery, mock assembly, personalization, or T-043 work was added. |

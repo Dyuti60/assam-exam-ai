@@ -376,6 +376,18 @@ class ContentDocumentReleaseCreate(BaseModel):
     release_note: str | None = None
 
 
+class PdfArtifactResponse(BaseModel):
+    id: int
+    content_document_id: int
+    content_package_id: int
+    content_version_id: int
+    filename: str
+    media_type: str
+    byte_size: int
+    sha256: str
+    created_at: datetime
+
+
 class EvidenceCreate(BaseModel):
     source_id: int = Field(gt=0)
     content: str = Field(min_length=1)

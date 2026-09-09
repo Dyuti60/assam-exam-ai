@@ -15,6 +15,7 @@ from app.models import (
     Evidence,
     Exam,
     NoteDraft,
+    PdfArtifact,
     PreviousPaper,
     PreviousQuestion,
     QuestionBankItem,
@@ -192,6 +193,21 @@ class KnowledgeRepository:
         )
         with self.session.no_autoflush:
             return list(self.session.scalars(statement))
+
+    def get_pdf_artifact_by_document_id(
+        self,
+        content_document_id: int,
+    ) -> PdfArtifact | None:
+        statement = select(PdfArtifact).where(
+            PdfArtifact.content_document_id == content_document_id
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
+    def add_pdf_artifact(self, pdf_artifact: PdfArtifact) -> PdfArtifact:
+        self.session.add(pdf_artifact)
+        self.session.flush()
+        return pdf_artifact
 
     def get_content_document_for_update(
         self,

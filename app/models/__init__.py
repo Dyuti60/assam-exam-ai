@@ -12,6 +12,7 @@ from app.models.evidence import Evidence
 from app.models.exam import Exam
 from app.models.note_draft import NoteDraft
 from app.models.note_draft_claim import NoteDraftClaim
+from app.models.pdf_artifact import PdfArtifact
 from app.models.previous_paper import PreviousPaper
 from app.models.previous_question import PreviousQuestion
 from app.models.question_bank_item import QuestionBankItem
@@ -36,6 +37,7 @@ __all__ = [
     "Exam",
     "NoteDraft",
     "NoteDraftClaim",
+    "PdfArtifact",
     "PreviousPaper",
     "PreviousQuestion",
     "QuestionBankItem",

@@ -15,6 +15,7 @@ from app.models import (
     Exam,
     NoteDraft,
     NoteDraftClaim,
+    PdfArtifact,
     PreviousPaper,
     PreviousQuestion,
     QuestionBankItem,
@@ -54,6 +55,7 @@ from app.schemas.knowledge import (
     NoteDraftReleaseCreate,
     NoteDraftReleaseDecision,
     NoteDraftResponse,
+    PdfArtifactResponse,
     PreviousPaperCreate,
     PreviousPaperResponse,
     PreviousQuestionCreate,
@@ -74,6 +76,7 @@ from app.schemas.knowledge import (
     VerificationEvidenceResponse,
     VerificationResponse,
 )
+from app.services.pdf_renderer import render_content_document_pdf
 
 
 class ResourceNotFoundError(Exception):
@@ -613,6 +616,65 @@ class KnowledgeService:
             self._content_document_response(content_document)
             for content_document in self.repository.get_released_content_documents()
         ]
+
+    def create_pdf_artifact(
+        self,
+        content_document_id: int,
+    ) -> PdfArtifactResponse:
+        content_document = self.repository.get_content_document_for_update(
+            content_document_id
+        )
+        if content_document is None:
+            raise ResourceNotFoundError("ContentDocument", content_document_id)
+        if content_document.release_status != "RELEASED":
+            raise ResourceConflictError(
+                f"ContentDocument {content_document_id} must be released "
+                "before PDF creation"
+            )
+        if self.repository.get_pdf_artifact_by_document_id(content_document_id):
+            raise ResourceConflictError(
+                f"ContentDocument {content_document_id} already has a PdfArtifact"
+            )
+
+        try:
+            pdf_bytes = render_content_document_pdf(
+                content_document.title,
+                content_document.markdown,
+            )
+            pdf_artifact = PdfArtifact(
+                content_document_id=content_document.id,
+                content_package_id=content_document.content_package_id,
+                content_version_id=content_document.content_version_id,
+                filename=f"content-document-{content_document.id}.pdf",
+                media_type="application/pdf",
+                pdf_bytes=pdf_bytes,
+                byte_size=len(pdf_bytes),
+                sha256=sha256(pdf_bytes).hexdigest(),
+            )
+            self.repository.add_pdf_artifact(pdf_artifact)
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            diagnostic = getattr(error.orig, "diag", None)
+            constraint_name = getattr(diagnostic, "constraint_name", None)
+            if constraint_name == "uq_pdf_artifacts_content_document_id":
+                raise ResourceConflictError(
+                    f"ContentDocument {content_document_id} already has a PdfArtifact"
+                ) from error
+            raise
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_artifact = self.repository.get_pdf_artifact_by_document_id(
+            content_document_id
+        )
+        if stored_artifact is None:
+            raise RuntimeError(
+                f"PdfArtifact for ContentDocument {content_document_id} "
+                "missing after successful commit"
+            )
+        return self._pdf_artifact_response(stored_artifact)
 
     def record_content_document_approval(
         self,
@@ -1320,6 +1382,20 @@ class KnowledgeService:
             released_at=content_document.released_at,
             withdrawn_at=content_document.withdrawn_at,
             release_note=content_document.release_note,
+        )
+
+    @staticmethod
+    def _pdf_artifact_response(pdf_artifact: PdfArtifact) -> PdfArtifactResponse:
+        return PdfArtifactResponse(
+            id=pdf_artifact.id,
+            content_document_id=pdf_artifact.content_document_id,
+            content_package_id=pdf_artifact.content_package_id,
+            content_version_id=pdf_artifact.content_version_id,
+            filename=pdf_artifact.filename,
+            media_type=pdf_artifact.media_type,
+            byte_size=pdf_artifact.byte_size,
+            sha256=pdf_artifact.sha256,
+            created_at=pdf_artifact.created_at,
         )
 
     @staticmethod
