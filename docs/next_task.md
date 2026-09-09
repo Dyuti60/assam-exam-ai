@@ -6918,3 +6918,274 @@ Do not define or implement T-045.
 Leave T-044 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-10 Asia/Kolkata, UTC+05:30): added only independent PdfArtifact DRAFT/APPROVED/REJECTED review metadata and `POST /api/v1/pdf-artifacts/{pdf_artifact_id}/approval`. Migration `f3c8a1d6e924` follows `e7b4c9d2a615` and migrates existing artifacts to DRAFT/null/null without inference or payload change. Decisions lock only the target artifact, update only review metadata, commit once, roll back failures, and reload stored metadata; DRAFT clears decision metadata while APPROVED/REJECTED record current UTC and an optional note. Exact bytes, checksum, ownership, creation metadata, retrieval, and ungated download remain unchanged. T-044 is Ready for review, not approved. No artifact release/list, publication, storage, learner, AI, personalization, dependency, configuration, Docker, or T-045 work was added; exact validation is recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+# T-044 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-044` |
+| Issuance base | `f2f2e36dc8fae2c2008c3a457ce7a4d6b6a23612` |
+| Implementation commit | `b8f519a1ed5adf017767562f78ae168226c300e6` |
+| Test-correction commit | `592847b89b86bf0f9a744280dfa455562cefb70a` |
+| Review result | **APPROVED** |
+| Approved capability | Independent, atomic DRAFT/APPROVED/REJECTED human review of one immutable PdfArtifact with PostgreSQL lifecycle protection and target-only locking |
+| Independent review | The complete two-commit range was inspected. The correction changes only the focused PdfArtifact test file and closes the target-only SQL and post-flush rollback coverage gaps. No blocking finding remains. |
+| CI evidence | GitHub exposes no status contexts or workflow runs. Recorded local validation is developer evidence, not a claimed CI pass. |
+
+# T-045 — Add controlled PdfArtifact release lifecycle
+
+## Role
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read the live repository before editing and follow `AGENTS.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt.
+
+Repository code is authoritative. Preserve the append-only history in `docs/task_log.md` and `docs/next_task.md`.
+
+## Starting-state verification
+
+Before editing:
+
+1. Confirm branch `main`, fetch `origin/main`, and confirm a clean working tree.
+2. Confirm HEAD is the documentation commit that approves T-044 and issues T-045.
+3. Confirm the approved T-044 range consists of issuance base `f2f2e36dc8fae2c2008c3a457ce7a4d6b6a23612`, implementation `b8f519a1ed5adf017767562f78ae168226c300e6`, and correction `592847b89b86bf0f9a744280dfa455562cefb70a`.
+4. Read PdfArtifact, its migrations, schemas, repository/service/routes, complete tests, and the approved ContentPackage and ContentDocument release implementations.
+5. Confirm Alembic has one head: `f3c8a1d6e924`.
+6. Stop and report repository divergence that materially changes this task.
+
+## Objective
+
+Add a controlled release lifecycle to the already immutable and independently reviewed PdfArtifact:
+
+`UNRELEASED -> RELEASED -> WITHDRAWN`
+
+Release is distinct from human approval. Initial release requires the PdfArtifact's own current approval state to be APPROVED. Do not infer artifact release from ContentDocument, ContentPackage, member, Claim, or Verification state.
+
+Withdrawal is terminal for that artifact version. A withdrawn artifact cannot be re-released in place.
+
+## Data model and PostgreSQL invariants
+
+Add these PdfArtifact fields following established repository conventions:
+
+- `release_status`: non-null, default `UNRELEASED`, allowed values exactly `UNRELEASED`, `RELEASED`, `WITHDRAWN`;
+- `released_at`: timezone-aware nullable timestamp;
+- `withdrawn_at`: timezone-aware nullable timestamp;
+- `release_note`: nullable text.
+
+PostgreSQL must independently enforce:
+
+- only the three allowed release states;
+- `UNRELEASED` requires `released_at IS NULL`, `withdrawn_at IS NULL`, and `release_note IS NULL`;
+- `RELEASED` requires `released_at IS NOT NULL`, `withdrawn_at IS NULL`, and `approval_status = 'APPROVED'`;
+- `WITHDRAWN` requires `released_at IS NOT NULL` and `withdrawn_at IS NOT NULL`;
+- existing approval, ownership, uniqueness, byte-size, checksum, filename/media, and deletion invariants remain intact.
+
+Use explicit named constraints. Application checks complement PostgreSQL; they do not replace it.
+
+Existing PdfArtifact rows must migrate to UNRELEASED/null/null/null. Do not infer release from approval or related state.
+
+## Migration
+
+Add exactly one Alembic revision whose parent is `f3c8a1d6e924`.
+
+The migration must add only the T-045 release fields and named constraints, preserve all existing artifact review and immutable fields exactly, and safely remove only T-045 objects on downgrade. Never edit a historical migration.
+
+Validate a seeded cycle:
+
+`f3c8a1d6e924 -> T-045 head -> f3c8a1d6e924 -> T-045 head`
+
+Prove exact bytes, byte size, checksum, filename, media type, ownership, creation time, approval status/time/note remain unchanged and every upgrade produces UNRELEASED/null/null/null without inferred release.
+
+## API contract
+
+Add exactly:
+
+`POST /api/v1/pdf-artifacts/{pdf_artifact_id}/release`
+
+Request body:
+
+```json
+{
+  "release_status": "RELEASED",
+  "release_note": "Optional release note"
+}
+```
+
+Accepted decisions are only RELEASED and WITHDRAWN.
+
+Required behavior:
+
+- Missing artifact: HTTP 404 with exact detail `PdfArtifact <id> not found`.
+- `UNRELEASED -> RELEASED`: require the artifact's own `approval_status == APPROVED`; set current UTC `released_at`, keep `withdrawn_at` null, and store the optional release note.
+- Non-approved initial release: HTTP 409 with exact detail `PdfArtifact <id> must be approved before release`.
+- `RELEASED -> WITHDRAWN`: preserve the original `released_at`, set current UTC `withdrawn_at`, and replace the release note with the request note.
+- Every other transition, including RELEASED to RELEASED, UNRELEASED to WITHDRAWN, and any transition from WITHDRAWN: HTTP 409 with exact detail `PdfArtifact <id> cannot transition from <current> to <requested>`.
+- Invalid decision values use the established 422 validation response.
+- Return complete stored PdfArtifact metadata including review and release fields; never return raw bytes.
+
+Keep routes thin:
+
+`Route -> Pydantic schema -> Service -> Repository -> PostgreSQL`
+
+## Approval/release interaction
+
+Update the existing PdfArtifact approval operation so that a currently RELEASED artifact cannot be reset to DRAFT or changed to REJECTED.
+
+That conflict must return HTTP 409 with exact detail:
+
+`PdfArtifact <id> must be withdrawn before changing approval`
+
+Repeating APPROVED while RELEASED may remain allowed and must preserve a database-valid RELEASED state. Once WITHDRAWN, review changes may again follow the approved T-044 behavior.
+
+Use the same target PdfArtifact lock for approval decisions. Do not introduce a second related-state query.
+
+## Locking and atomicity
+
+Release and conflicting approval operations must:
+
+- lock only the target PdfArtifact row with `FOR UPDATE OF pdf_artifacts`;
+- update only appropriate artifact lifecycle fields;
+- commit exactly once on success;
+- roll back every failure;
+- reload stored metadata using the ordinary lock-free artifact lookup after commit.
+
+Do not lock, load, or mutate ContentDocument, ContentPackage, memberships, NoteDraft, QuestionBankItem, Claim, Evidence, Verification, Exam, SyllabusVersion, Topic, or ContentVersion.
+
+Failed transitions must not alter review, release, immutable payload, ownership, or related state.
+
+## Existing API compatibility
+
+Extend `PdfArtifactResponse` additively with:
+
+- `release_status`;
+- `released_at`;
+- `withdrawn_at`;
+- `release_note`.
+
+Preserve:
+
+- T-042 creation returns DRAFT review plus UNRELEASED/null/null/null release metadata;
+- T-043 metadata returns stored review and release metadata without raw bytes;
+- T-043 internal download continues returning exact stored bytes and existing headers regardless of review/release state;
+- T-044 review transitions except the required currently-RELEASED conflict;
+- all established missing errors and existing APIs.
+
+Do not gate the existing internal download by release state in T-045. A released-only delivery boundary is a separate future task.
+
+## Repository and service requirements
+
+Reuse the existing target PdfArtifact `FOR UPDATE` lookup for release and approval decisions. Add only the smallest update method needed for release fields.
+
+Business transition checks belong in the service. Persistence query construction and field assignment belong in the repository. Do not put lifecycle logic in routes.
+
+Do not translate unrelated database/programming errors into 404 or 409.
+
+## Required tests
+
+Add focused PostgreSQL-backed tests proving at minimum:
+
+- new and migrated artifacts are UNRELEASED/null/null/null without inferred release;
+- an APPROVED UNRELEASED artifact can become RELEASED with UTC timestamp and optional note;
+- DRAFT and REJECTED artifacts cannot be initially released;
+- RELEASED becomes WITHDRAWN while preserving `released_at`, setting UTC `withdrawn_at`, and replacing the note;
+- no-op, skipped, reverse, and post-withdrawal re-release transitions return exact stable 409 details and change nothing;
+- missing and invalid requests return stable 404/422 behavior;
+- while RELEASED, DRAFT/REJECTED approval changes return the exact conflict and do not mutate state;
+- repeating APPROVED while RELEASED remains database-valid if supported;
+- after withdrawal, approved T-044 review changes remain available;
+- release and approval lock only the target PdfArtifact and access no related tables;
+- success commits exactly once; injected failure after a flushed release UPDATE rolls back exactly once with no partial state;
+- a second PdfArtifact and all related rows remain unchanged;
+- direct PostgreSQL writes violating release values or lifecycle/approval consistency fail under named constraints;
+- immutable bytes, checksum, byte size, filename, media type, ownership, creation time, and review metadata remain protected except for an explicitly requested review decision;
+- metadata retrieval exposes stored release fields without bytes;
+- internal download bytes and headers remain exact in UNRELEASED, RELEASED, and WITHDRAWN states;
+- T-042 creation, T-043 retrieval/download, T-044 review, migration, and earlier content/provenance regressions remain compatible.
+
+Use a dedicated PostgreSQL database whose name ends in `_test`. Do not substitute SQLite.
+
+## Validation
+
+Run and report:
+
+- focused T-045 release tests;
+- complete PdfArtifact suite;
+- complete ContentPackage/ContentDocument suite;
+- T-041 released-document tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft and released-NoteDraft tests;
+- QuestionBankItem and released-QuestionBankItem tests;
+- full suite;
+- Ruff on all changed Python;
+- `uv lock --check` or repository-equivalent verification;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh upgrade through the new head;
+- seeded upgrade/downgrade/re-upgrade;
+- direct PostgreSQL constraint probes;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Confirm one Alembic head whose parent is `f3c8a1d6e924`, no schema drift, no historical migration edit, and no unrelated dependency/configuration/infrastructure change.
+
+## Affected components
+
+Inspect and modify only where required:
+
+- PdfArtifact model;
+- PdfArtifact release schemas and additive response fields;
+- model registration only if genuinely required;
+- knowledge repository;
+- knowledge service, including the released-approval conflict;
+- knowledge routes;
+- exactly one migration;
+- focused PdfArtifact tests;
+- `docs/architecture.md` and `docs/workflow.md` for implemented current state;
+- append-only implementation records in `docs/task_log.md` and `docs/next_task.md`.
+
+Inspect and leave unchanged unless a genuine inconsistency requires otherwise:
+
+- ContentDocument, ContentPackage, memberships, NoteDraft, QuestionBankItem, Claim, Evidence, Verification, Exam, SyllabusVersion, Topic, and ContentVersion models;
+- deterministic PDF renderer;
+- historical migrations;
+- `pyproject.toml` and `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+No dependency, API key, environment variable, secret, configuration value, Docker service, renderer change, external storage, or infrastructure is required. Leave these files unchanged and report that.
+
+## Scope exclusions
+
+Do not add a released/approved artifact collection; released-only download endpoint; publication record; public/learner access; authentication; ContentDocument-keyed artifact lookup; artifact list; object/file/blob/CDN storage; presigned URLs; range/conditional requests; artifact update/delete/replacement/regeneration/repair; HTML artifacts; background jobs/queues; AI/LLM/API keys/source discovery/ingestion/RAG/embeddings/scraping; mock assembly/sessions/scoring/analytics/recommendations/personalization; payments; production infrastructure; or T-046.
+
+Human approval and release remain explicit separate trust boundaries. Do not automatically publish or expose an artifact because it is approved or released.
+
+## Documentation and handoff
+
+Document only implemented behavior. Keep `docs/task_log.md` and `docs/next_task.md` append-only. Record T-045 only as `Ready for review`; do not approve it and do not define or implement T-046.
+
+Report:
+
+- starting/final Git state and exact files;
+- migration revision and parent;
+- fields and PostgreSQL constraints;
+- endpoint, transitions, timestamps, notes, and exact errors;
+- approval/release interaction;
+- target-only locking, commit/rollback, and state preservation;
+- migration-cycle and direct-constraint evidence;
+- focused/regression/full-suite validation;
+- unchanged dependencies/configuration/Docker/renderer state;
+- explicit exclusions.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-046.
+
+Leave T-045 uncommitted and unpushed in the working tree for independent review.
