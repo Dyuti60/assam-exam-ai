@@ -386,6 +386,14 @@ class PdfArtifactResponse(BaseModel):
     byte_size: int
     sha256: str
     created_at: datetime
+    approval_status: ClaimApprovalStatus
+    approval_decided_at: datetime | None
+    reviewer_note: str | None
+
+
+class PdfArtifactApprovalCreate(BaseModel):
+    approval_status: ClaimApprovalStatus
+    reviewer_note: str | None = None
 
 
 class EvidenceCreate(BaseModel):

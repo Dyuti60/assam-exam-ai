@@ -27,6 +27,7 @@ from app.schemas.knowledge import (
     NoteDraftPreviewResponse,
     NoteDraftReleaseCreate,
     NoteDraftResponse,
+    PdfArtifactApprovalCreate,
     PdfArtifactResponse,
     PreviousPaperCreate,
     PreviousPaperResponse,
@@ -321,6 +322,24 @@ def get_pdf_artifact(
 ) -> PdfArtifactResponse:
     try:
         return KnowledgeService(db).get_pdf_artifact(pdf_artifact_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.post(
+    "/pdf-artifacts/{pdf_artifact_id}/approval",
+    response_model=PdfArtifactResponse,
+)
+def record_pdf_artifact_approval(
+    pdf_artifact_id: int,
+    request: PdfArtifactApprovalCreate,
+    db: DatabaseSession,
+) -> PdfArtifactResponse:
+    try:
+        return KnowledgeService(db).record_pdf_artifact_approval(
+            pdf_artifact_id,
+            request,
+        )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
 

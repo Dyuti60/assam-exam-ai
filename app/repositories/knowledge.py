@@ -209,6 +209,28 @@ class KnowledgeRepository:
         with self.session.no_autoflush:
             return self.session.scalar(statement)
 
+    def get_pdf_artifact_for_update(
+        self,
+        pdf_artifact_id: int,
+    ) -> PdfArtifact | None:
+        statement = (
+            select(PdfArtifact)
+            .where(PdfArtifact.id == pdf_artifact_id)
+            .with_for_update(of=PdfArtifact)
+        )
+        return self.session.scalar(statement)
+
+    def update_pdf_artifact_approval(
+        self,
+        pdf_artifact: PdfArtifact,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        pdf_artifact.approval_status = approval_status
+        pdf_artifact.approval_decided_at = decided_at
+        pdf_artifact.reviewer_note = reviewer_note
+
     def add_pdf_artifact(self, pdf_artifact: PdfArtifact) -> PdfArtifact:
         self.session.add(pdf_artifact)
         self.session.flush()

@@ -56,6 +56,7 @@ from app.schemas.knowledge import (
     NoteDraftReleaseCreate,
     NoteDraftReleaseDecision,
     NoteDraftResponse,
+    PdfArtifactApprovalCreate,
     PdfArtifactResponse,
     PreviousPaperCreate,
     PreviousPaperResponse,
@@ -697,6 +698,35 @@ class KnowledgeService:
             byte_size=pdf_artifact.byte_size,
             pdf_bytes=bytes(pdf_artifact.pdf_bytes),
         )
+
+    def record_pdf_artifact_approval(
+        self,
+        pdf_artifact_id: int,
+        request: PdfArtifactApprovalCreate,
+    ) -> PdfArtifactResponse:
+        pdf_artifact = self.repository.get_pdf_artifact_for_update(pdf_artifact_id)
+        if pdf_artifact is None:
+            raise ResourceNotFoundError("PdfArtifact", pdf_artifact_id)
+
+        is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
+        try:
+            self.repository.update_pdf_artifact_approval(
+                pdf_artifact,
+                request.approval_status.value,
+                None if is_draft else request.reviewer_note,
+                None if is_draft else datetime.now(UTC),
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_artifact = self.repository.get_pdf_artifact(pdf_artifact_id)
+        if stored_artifact is None:
+            raise RuntimeError(
+                f"PdfArtifact {pdf_artifact_id} missing after successful review"
+            )
+        return self._pdf_artifact_response(stored_artifact)
 
     def record_content_document_approval(
         self,
@@ -1418,6 +1448,9 @@ class KnowledgeService:
             byte_size=pdf_artifact.byte_size,
             sha256=pdf_artifact.sha256,
             created_at=pdf_artifact.created_at,
+            approval_status=pdf_artifact.approval_status,
+            approval_decided_at=pdf_artifact.approval_decided_at,
+            reviewer_note=pdf_artifact.reviewer_note,
         )
 
     def _get_pdf_artifact_or_raise(self, pdf_artifact_id: int) -> PdfArtifact:

@@ -6916,3 +6916,5 @@ Do not self-approve.
 Do not define or implement T-045.
 
 Leave T-044 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-10 Asia/Kolkata, UTC+05:30): added only independent PdfArtifact DRAFT/APPROVED/REJECTED review metadata and `POST /api/v1/pdf-artifacts/{pdf_artifact_id}/approval`. Migration `f3c8a1d6e924` follows `e7b4c9d2a615` and migrates existing artifacts to DRAFT/null/null without inference or payload change. Decisions lock only the target artifact, update only review metadata, commit once, roll back failures, and reload stored metadata; DRAFT clears decision metadata while APPROVED/REJECTED record current UTC and an optional note. Exact bytes, checksum, ownership, creation metadata, retrieval, and ungated download remain unchanged. T-044 is Ready for review, not approved. No artifact release/list, publication, storage, learner, AI, personalization, dependency, configuration, Docker, or T-045 work was added; exact validation is recorded in `docs/task_log.md` and `docs/workflow.md`.

@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from datetime import datetime
+from datetime import UTC, datetime
 from hashlib import sha256
 
 import pytest
@@ -295,6 +295,9 @@ def test_create_pdf_artifact_persists_deterministic_readable_bytes_and_ownership
         "byte_size": len(pdf_bytes),
         "sha256": sha256(pdf_bytes).hexdigest(),
         "created_at": body["created_at"],
+        "approval_status": "DRAFT",
+        "approval_decided_at": None,
+        "reviewer_note": None,
     }
     assert datetime.fromisoformat(body["created_at"]) == artifact["created_at"]
     assert pdf_bytes.startswith(b"%PDF-1.4")
@@ -645,6 +648,9 @@ def test_pdf_artifact_metadata_and_download_return_exact_stored_values(
         "byte_size": stored["byte_size"],
         "sha256": stored["sha256"],
         "created_at": created["created_at"],
+        "approval_status": "DRAFT",
+        "approval_decided_at": None,
+        "reviewer_note": None,
     }
 
     metadata = client.get(f"/api/v1/pdf-artifacts/{stored['id']}")
@@ -785,3 +791,231 @@ def test_pdf_artifact_reads_are_stable_pdf_only_queries_without_writes(
     ).mappings().one()
     assert _related_snapshot(db_connection, fixture) == state_after_changes
     assert related_before != state_after_changes
+
+
+@pytest.mark.parametrize(
+    ("approval_status", "reviewer_note"),
+    [("APPROVED", "Artifact approved"), ("REJECTED", None)],
+)
+def test_pdf_artifact_review_records_utc_decision_and_only_review_fields(
+    client: TestClient,
+    db_connection: Connection,
+    approval_status: str,
+    reviewer_note: str | None,
+) -> None:
+    fixture, created = _create_artifact(client, f"review-{approval_status.lower()}")
+    before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    related_before = _related_snapshot(db_connection, fixture)
+    statements: list[str] = []
+    commits = 0
+
+    def record_statement(*args: object) -> None:
+        statements.append(str(args[2]))
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    event.listen(db_connection, "before_cursor_execute", record_statement)
+    event.listen(Session, "after_commit", record_commit)
+    try:
+        response = client.post(
+            f"/api/v1/pdf-artifacts/{created['id']}/approval",
+            json={
+                "approval_status": approval_status,
+                "reviewer_note": reviewer_note,
+            },
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_statement)
+        event.remove(Session, "after_commit", record_commit)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["approval_status"] == approval_status
+    assert body["reviewer_note"] == reviewer_note
+    decided_at = datetime.fromisoformat(body["approval_decided_at"])
+    assert decided_at.utcoffset() == UTC.utcoffset(None)
+    after = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    immutable_fields = {
+        "id",
+        "content_document_id",
+        "content_package_id",
+        "content_version_id",
+        "filename",
+        "media_type",
+        "pdf_bytes",
+        "byte_size",
+        "sha256",
+        "created_at",
+    }
+    assert {key: before[key] for key in immutable_fields} == {
+        key: after[key] for key in immutable_fields
+    }
+    assert _related_snapshot(db_connection, fixture) == related_before
+    locking = [statement for statement in statements if "FOR UPDATE" in statement.upper()]
+    assert len(locking) == 1
+    assert "FOR UPDATE OF pdf_artifacts" in locking[0]
+    assert all("content_documents" not in statement for statement in locking)
+    assert commits == 1
+
+
+def test_pdf_artifact_review_reset_and_repeated_decisions_are_fresh(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    _, created = _create_artifact(client, "review-transitions")
+    artifact_id = created["id"]
+    approved = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "first"},
+    ).json()
+    assert datetime.fromisoformat(approved["approval_decided_at"]).utcoffset() == (
+        UTC.utcoffset(None)
+    )
+    first_seed = datetime(2000, 1, 1, tzinfo=UTC)
+    db_connection.execute(
+        update(PdfArtifact)
+        .where(PdfArtifact.id == artifact_id)
+        .values(approval_decided_at=first_seed)
+    )
+    rejected_response = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "second"},
+    )
+    assert rejected_response.status_code == 200
+    rejected = rejected_response.json()
+    assert rejected["approval_status"] == "REJECTED"
+    assert rejected["reviewer_note"] == "second"
+    assert datetime.fromisoformat(rejected["approval_decided_at"]) > first_seed
+    second_seed = datetime(2001, 1, 1, tzinfo=UTC)
+    db_connection.execute(
+        update(PdfArtifact)
+        .where(PdfArtifact.id == artifact_id)
+        .values(approval_decided_at=second_seed)
+    )
+    repeated = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "third"},
+    ).json()
+    assert datetime.fromisoformat(repeated["approval_decided_at"]) > second_seed
+    reset = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "DRAFT", "reviewer_note": "ignored"},
+    )
+    assert reset.status_code == 200
+    assert reset.json()["approval_status"] == "DRAFT"
+    assert reset.json()["approval_decided_at"] is None
+    assert reset.json()["reviewer_note"] is None
+    stored = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == artifact_id)
+    ).mappings().one()
+    assert stored["approval_status"] == "DRAFT"
+    assert stored["approval_decided_at"] is None
+    assert stored["reviewer_note"] is None
+
+
+def test_pdf_artifact_review_missing_invalid_and_failure_are_atomic(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing = client.post(
+        "/api/v1/pdf-artifacts/999999/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "PdfArtifact 999999 not found"}
+    invalid = client.post(
+        "/api/v1/pdf-artifacts/999999/approval",
+        json={"approval_status": "PUBLISHED"},
+    )
+    assert invalid.status_code == 422
+
+    _, created = _create_artifact(client, "review-failure")
+    before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+
+    def fail_update(*args: object) -> None:
+        raise RuntimeError("injected review failure")
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "update_pdf_artifact_approval",
+        fail_update,
+    )
+    with pytest.raises(RuntimeError, match="injected review failure"):
+        client.post(
+            f"/api/v1/pdf-artifacts/{created['id']}/approval",
+            json={"approval_status": "APPROVED"},
+        )
+    assert before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+
+
+def test_pdf_artifact_download_is_unchanged_by_review_state(
+    client: TestClient,
+) -> None:
+    _, created = _create_artifact(client, "review-download")
+    artifact_id = created["id"]
+    draft_download = client.get(f"/api/v1/pdf-artifacts/{artifact_id}/download")
+    for status_value in ("APPROVED", "REJECTED"):
+        decision = client.post(
+            f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+            json={"approval_status": status_value},
+        )
+        assert decision.status_code == 200
+        metadata = client.get(f"/api/v1/pdf-artifacts/{artifact_id}")
+        assert metadata.json()["approval_status"] == status_value
+        assert "pdf_bytes" not in metadata.json()
+        download = client.get(f"/api/v1/pdf-artifacts/{artifact_id}/download")
+        assert download.content == draft_download.content
+        assert download.headers["content-type"] == draft_download.headers["content-type"]
+        assert download.headers["content-length"] == draft_download.headers[
+            "content-length"
+        ]
+        assert download.headers["content-disposition"] == draft_download.headers[
+            "content-disposition"
+        ]
+
+
+@pytest.mark.parametrize(
+    ("values", "constraint_name"),
+    [
+        ({"approval_status": "UNKNOWN"}, "ck_pdf_artifacts_approval_status"),
+        (
+            {"approval_status": "DRAFT", "approval_decided_at": func.now()},
+            "ck_pdf_artifacts_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "DRAFT", "reviewer_note": "not allowed"},
+            "ck_pdf_artifacts_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "APPROVED", "approval_decided_at": None},
+            "ck_pdf_artifacts_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "REJECTED", "approval_decided_at": None},
+            "ck_pdf_artifacts_approval_lifecycle",
+        ),
+    ],
+)
+def test_pdf_artifact_review_database_constraints(
+    client: TestClient,
+    db_connection: Connection,
+    values: dict,
+    constraint_name: str,
+) -> None:
+    _, created = _create_artifact(client, f"review-db-{len(str(values))}")
+    with pytest.raises(IntegrityError) as error, db_connection.begin_nested():
+        db_connection.execute(
+            update(PdfArtifact).where(PdfArtifact.id == created["id"]).values(**values)
+        )
+    assert error.value.orig.diag.constraint_name == constraint_name

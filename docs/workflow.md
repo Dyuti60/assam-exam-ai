@@ -1507,3 +1507,11 @@ flowchart LR
 - Developer-recorded evidence is 4 focused T-043 tests, 20 complete PdfArtifact tests, 61 ContentPackage/ContentDocument tests, 2 T-041 selection tests, 15 ContentVersion/T-030 tests, 43 NoteDraft tests, 54 QuestionBankItem tests, and 269 full-suite tests, each with one existing warning, plus successful Ruff, lock, Alembic head/check, fresh upgrade, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - Models, model registration, schemas, migration head `e7b4c9d2a615`, renderer, dependencies, environment, configuration, Docker, AGENTS.md, and README are unchanged. No list, ContentDocument-keyed lookup, lifecycle, publication, public/learner delivery, AI, mock assembly, personalization, or T-044 implementation was included.
 - T-044 is issued as a separate increment for independent PdfArtifact human review. Release, publication, and public delivery remain later tasks.
+
+### T-044 Independent PdfArtifact human review
+
+- Migration `f3c8a1d6e924` follows `e7b4c9d2a615`, adds only DRAFT/APPROVED/REJECTED review metadata and named lifecycle constraints, and migrates existing artifacts to DRAFT/null/null without inference or payload change.
+- `POST /api/v1/pdf-artifacts/{pdf_artifact_id}/approval` locks only the artifact row. APPROVED/REJECTED record current UTC and the optional note; DRAFT clears both. Success commits once and reloads through the ordinary lock-free artifact query; failures roll back.
+- Creation, metadata retrieval, and download return stored review metadata additively. Download bytes and headers remain unchanged and ungated in every review state; related document/package/member/Claim/Verification state is not loaded or evaluated.
+- Focused T-044: 10 passed, 20 deselected, 1 warning in 2.13s. Complete PdfArtifact: 30 passed, 1 warning in 4.80s. ContentPackage/ContentDocument: 61 passed, 1 warning in 11.22s. Required regressions: 173 passed, 1 warning in 18.44s. Full suite: 279 passed, 1 warning in 23.57s.
+- Fresh and seeded migration cycles, direct PostgreSQL probes, Ruff, lock verification, Alembic head/check, and diff checks passed. T-044 is Ready for review, not approved; no artifact release/list, publication, storage, learner, AI, personalization, dependency, configuration, Docker, or T-045 behavior was added.

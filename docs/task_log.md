@@ -1427,3 +1427,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Artifact Trust Boundary |
 | Scope | PdfArtifact review metadata, database invariants, one approval endpoint, and tests only; no release, publication, public delivery, or T-045 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-044 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only independent DRAFT/APPROVED/REJECTED PdfArtifact review metadata and `POST /api/v1/pdf-artifacts/{pdf_artifact_id}/approval` |
+| Migration | `f3c8a1d6e924` after `e7b4c9d2a615`; existing artifacts become DRAFT/null/null without inferred approval or payload changes |
+| Tests | Focused T-044: 10 passed, 20 deselected, 1 warning in 2.13s. Complete PdfArtifact: 30 passed, 1 warning in 4.80s. ContentPackage/ContentDocument: 61 passed, 1 warning in 11.22s. Required regressions: 173 passed, 1 warning in 18.44s. Full suite: 279 passed, 1 warning in 23.57s. |
+| Validation | Fresh and seeded migration cycles, direct PostgreSQL constraints, changed-file Ruff, lock verification, Alembic head/check, and diff checks passed on dedicated `_test` databases. |
+| Notes | Review locks only the target artifact, updates only review metadata, commits once, rolls back failures, and preserves exact bytes, checksum, ownership, metadata and ungated download. T-044 is Ready for review, not approved. No release/list, publication, storage, learner, AI, personalization, dependency, configuration, Docker, or T-045 work was added. |
