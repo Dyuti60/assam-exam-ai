@@ -1515,3 +1515,15 @@ flowchart LR
 - Creation, metadata retrieval, and download return stored review metadata additively. Download bytes and headers remain unchanged and ungated in every review state; related document/package/member/Claim/Verification state is not loaded or evaluated.
 - Focused T-044: 10 passed, 20 deselected, 1 warning in 2.13s. Complete PdfArtifact: 30 passed, 1 warning in 4.80s. ContentPackage/ContentDocument: 61 passed, 1 warning in 11.22s. Required regressions: 173 passed, 1 warning in 18.44s. Full suite: 279 passed, 1 warning in 23.57s.
 - Fresh and seeded migration cycles, direct PostgreSQL probes, Ruff, lock verification, Alembic head/check, and diff checks passed. T-044 is Ready for review, not approved; no artifact release/list, publication, storage, learner, AI, personalization, dependency, configuration, Docker, or T-045 behavior was added.
+
+
+### T-044 post-correction independent review and T-045 issuance
+
+- **APPROVED** for the complete range from issuance base `f2f2e36dc8fae2c2008c3a457ce7a4d6b6a23612` through implementation commit `b8f519a1ed5adf017767562f78ae168226c300e6` and focused test-correction commit `592847b89b86bf0f9a744280dfa455562cefb70a`.
+- The implementation adds only PdfArtifact review fields/constraints, migration `f3c8a1d6e924`, the approval schema/endpoint and layered repository/service behavior, focused tests, and current-state documentation. The correction commit changes only `tests/test_pdf_artifacts_api.py`.
+- PostgreSQL enforces DRAFT/APPROVED/REJECTED values and lifecycle consistency. Existing artifacts migrate to DRAFT/null/null without inferred approval, while exact PDF bytes, byte size, checksum, ownership, filename, media type, and creation time remain unchanged.
+- Approval locks only the requested PdfArtifact, updates only its three review fields, commits once, rolls back failures, and reloads through the ordinary lock-free lookup. It does not evaluate or mutate related state; download remains exact and ungated in every review state.
+- The correction proves review after related document/package/member/Claim changes, an exact target-ID lock/UPDATE/reload sequence with no related-table access, a second artifact unchanged, and rollback after the review UPDATE was assigned and flushed. Event listeners are removed in `finally`.
+- Corrected developer-recorded evidence is 2 correction-focused tests, 32 complete PdfArtifact tests, 61 ContentPackage/ContentDocument regressions, 112 earlier boundary regressions, and 281 full-suite tests, each with one existing warning, plus successful Ruff, lock, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No artifact release/list, publication, storage, learner, AI, personalization, dependency, configuration, Docker, AGENTS.md, README, or T-045 behavior was included.
+- T-045 is issued as the separate controlled PdfArtifact release/withdrawal lifecycle. A released-artifact delivery boundary remains a later task.
