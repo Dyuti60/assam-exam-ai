@@ -1411,3 +1411,14 @@ flowchart LR
 - Focused T-039 selection: 8 passed, 41 deselected, 1 warning in 1.25s. Complete ContentPackage/ContentDocument suite: 49 passed, 1 warning in 8.32s. Required regressions: 112 passed, 1 warning in 6.81s. Full suite: 237 passed, 1 warning in 15.71s.
 - Fresh and seeded `c4d8f2a6b731 -> b6f1d3a8e942 -> c4d8f2a6b731 -> b6f1d3a8e942` validation preserved the document, package membership, immutable payload, and checksum while producing DRAFT/null review metadata on each upgrade. PostgreSQL constraint probes passed.
 - T-039 is Ready for review, not approved. No approved-document collection, release, list, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-040 behavior was added.
+
+
+### T-039 post-push review
+
+- **APPROVED** at implementation commit `5d954866cf18e5bbfeb89f0a465ce593645bdd45`, whose parent is the T-039 issuance head `0c44c8e0fd2ea587339d18d4f9bf83f03103d882`.
+- The immutable commit adds only ContentDocument DRAFT/APPROVED/REJECTED metadata, migration `b6f1d3a8e942`, response/request compatibility, one approval route, document-only locking/update behavior, focused PostgreSQL tests, and current-state documentation.
+- Model and migration constraints agree: DRAFT requires null decision metadata, while APPROVED and REJECTED require a timezone-aware decision timestamp and allow an optional reviewer note. Existing documents migrate to DRAFT without inferred approval and keep every immutable payload field.
+- Decisions lock only the target ContentDocument row, update only its three review fields, commit once, roll back persistence failures, and reload through the ordinary lock-free stored-document lookup.
+- APPROVED and REJECTED record current UTC time and the optional note; DRAFT clears timestamp and note. Package/member/Claim state does not block review or alter document identity, title, exact Markdown, SHA-256, ContentVersion ownership, or creation time.
+- Developer-recorded evidence is 8 focused T-039 tests, 49 complete ContentPackage/ContentDocument tests, 112 required regressions, and 237 full-suite tests, each with one existing warning, plus successful Ruff, fresh and seeded migration cycles, PostgreSQL probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No approved-document collection, document release/list/lifecycle, PDF/HTML, publication, storage/download, delivery, public/learner API, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-040 implementation was included.

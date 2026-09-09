@@ -1230,3 +1230,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-039 selection: 8 passed, 41 deselected, 1 warning in 1.25s. Complete ContentPackage/ContentDocument suite: 49 passed, 1 warning in 8.32s. Required regressions: 112 passed, 1 warning in 6.81s. Full suite: 237 passed, 1 warning in 15.71s. |
 | Validation | Fresh and seeded upgrade/downgrade/re-upgrade, PostgreSQL constraints, changed-file Ruff, Alembic head/check, and diff checks passed against the dedicated T-039 PostgreSQL test database. |
 | Notes | Approval locks only the target document, changes only review fields, commits once, rolls back failures, and preserves all stored content and related state. T-039 is Ready for review, not approved. No approved-document collection, release, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-040 work was added. |
+
+
+---
+
+## T-039 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-039` |
+| Implementation commit | `5d954866cf18e5bbfeb89f0a465ce593645bdd45` |
+| Base/task-issuance commit | `0c44c8e0fd2ea587339d18d4f9bf83f03103d882` |
+| Review state | **APPROVED** |
+| Approved capability | Independent DRAFT/APPROVED/REJECTED human review for ContentDocument while preserving its immutable payload |
+| Migration | `b6f1d3a8e942` follows `c4d8f2a6b731`, adds only review metadata/constraints, and migrates existing documents to DRAFT without inferred approval |
+| Validation evidence | Developer-recorded: 8 focused T-039 tests, 49 complete ContentPackage/ContentDocument tests, 112 combined regressions, and 237 full-suite tests, each with one existing warning; Ruff; fresh and seeded migration cycles; PostgreSQL probes; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. Model/migration alignment, safe legacy migration, response compatibility, UTC decisions, DRAFT reset, target-only locking, one-commit success, rollback, immutable-field preservation, state independence, tests, documentation, and exclusions match the task with no blocking finding. |
+| Boundaries | No approved-document collection, document release/list/lifecycle, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-040 behavior was included. |
+
+---
+
+## T-040 issued — Add controlled ContentDocument release lifecycle
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add an independent one-way UNRELEASED/RELEASED/WITHDRAWN lifecycle to ContentDocument, requiring its own APPROVED review before release |
+| Architectural phase | Canonical Content / Controlled Document Release |
+| Scope | Release metadata, one decision endpoint, response compatibility, approval lock, database constraints, migration, and tests only; no released list, PDF/HTML, publication, storage/download, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |

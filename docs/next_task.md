@@ -5893,3 +5893,161 @@ Do not implement T-040.
 Leave T-039 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only independent DRAFT/APPROVED/REJECTED ContentDocument review metadata, migration `b6f1d3a8e942`, and `POST /api/v1/content-documents/{content_document_id}/approval`. Approval decisions lock only the target document row, update only the three review fields, commit once, roll back failures, and freshly return the stored immutable document response. APPROVED/REJECTED record a UTC decision timestamp and optional note; DRAFT clears both. Existing documents migrate to DRAFT/null without inferred approval. T-039 is Ready for review, not approved. No approved-document collection, release, list, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-040 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## Independent review outcome — T-039
+
+T-039 is **APPROVED** at immutable implementation commit `5d954866cf18e5bbfeb89f0a465ce593645bdd45`, directly based on issuance commit `0c44c8e0fd2ea587339d18d4f9bf83f03103d882`.
+
+The review found no blocker in the ContentDocument review model/migration, safe DRAFT migration, PostgreSQL constraints, request/response compatibility, UTC decision metadata, DRAFT reset semantics, target-only row locking, one-commit success, rollback handling, lock-free retrieval, immutable-payload preservation, state independence, tests, documentation, or scope boundaries. GitHub exposes no status contexts or workflow runs, so the reported local validation is developer evidence rather than CI evidence.
+
+Do not modify or reinterpret T-039 while implementing the next task.
+
+# T-040 — Add controlled ContentDocument release lifecycle
+
+## Context
+
+T-037 persists one deterministic immutable ContentDocument snapshot from a released ContentPackage. T-038 retrieves it exactly by document ID. T-039 adds the document’s own independent DRAFT/APPROVED/REJECTED human-review decision without changing its payload.
+
+The next trust boundary is explicit controlled release of the ContentDocument itself. Document approval must not imply release, and release must remain separate from released-document listing, PDF/HTML rendering, publication, file storage, download, or learner delivery.
+
+## Exact bounded goal
+
+Add exactly:
+
+`POST /api/v1/content-documents/{content_document_id}/release`
+
+Request:
+
+```json
+{
+  "release_status": "RELEASED | WITHDRAWN",
+  "release_note": "optional"
+}
+```
+
+Return the existing ContentDocument response extended with stored release metadata.
+
+Allowed transitions:
+
+- `UNRELEASED → RELEASED`;
+- `RELEASED → WITHDRAWN`.
+
+All other transitions must return deterministic HTTP 409 without mutation. Do not expose UNRELEASED as an API decision. Missing, invalid, or UNRELEASED decisions return standard HTTP 422.
+
+## Data model and response
+
+Extend ContentDocument with exactly:
+
+- `release_status`: non-null string, initially `UNRELEASED`;
+- `released_at`: nullable timezone-aware timestamp;
+- `withdrawn_at`: nullable timezone-aware timestamp;
+- `release_note`: nullable text.
+
+Extend `ContentDocumentResponse` with the same four fields.
+
+Add PostgreSQL constraints equivalent to:
+
+- status is exactly UNRELEASED, RELEASED, or WITHDRAWN;
+- UNRELEASED requires null release timestamp, withdrawal timestamp, and release note;
+- RELEASED requires a release timestamp, null withdrawal timestamp, and the document’s own current review state APPROVED;
+- WITHDRAWN requires both timestamps; its review may change after withdrawal.
+
+The immutable ID, ownership, title, exact Markdown, SHA-256, and creation timestamp must never change. Approval must not infer release. New and migrated documents begin UNRELEASED with null release metadata.
+
+## Eligibility and stable errors
+
+Release eligibility is only the target document’s own APPROVED state. Do not consult current package/member review or release, Claims, Verifications, priority, T-030, global collections, other documents, or other ContentVersions.
+
+Errors:
+
+- missing document: HTTP 404, `{"detail": "ContentDocument <id> not found"}`;
+- unapproved release: HTTP 409, `{"detail": "ContentDocument <id> must be approved before release"}`;
+- invalid transition: HTTP 409, `{"detail": "ContentDocument <id> cannot transition from <CURRENT> to <REQUESTED>"}`;
+- review change while released: HTTP 409, `{"detail": "ContentDocument <id> must be withdrawn before changing approval"}`.
+
+While currently RELEASED, DRAFT and REJECTED review changes are blocked. Re-applying APPROVED may retain existing review semantics without changing release metadata. After withdrawal, review changes work again and preserve release metadata.
+
+## Decision semantics
+
+Successful release records current UTC `released_at`, leaves `withdrawn_at` null, stores the optional note, and preserves payload/review metadata.
+
+Successful withdrawal preserves original `released_at`, records current UTC `withdrawn_at`, replaces the optional note, and preserves payload/review metadata.
+
+A withdrawn document cannot be re-released in T-040.
+
+## Repository, locking, and atomicity
+
+Release and potentially conflicting approval decisions must use `SELECT ... FOR UPDATE OF content_documents` and lock only the target document.
+
+Do not lock or modify packages, memberships, assets, Claims, or other documents.
+
+Add a focused repository helper that updates only the four release fields. The service must validate before mutation, commit exactly once, roll back and re-raise persistence failures, then freshly retrieve the stored response. Ordinary T-038 retrieval remains lock-free and read-only.
+
+## Migration requirements
+
+Create exactly one Alembic revision whose parent is `b6f1d3a8e942`.
+
+It must add only the four release columns and named constraints, migrate every existing document to UNRELEASED/null metadata without inference, preserve all payload/review fields, keep model metadata/defaults aligned, and edit no historical migration.
+
+Downgrade removes only T-040 release constraints/columns and preserves the row, immutable payload, and T-039 review state.
+
+Validate `b6f1d3a8e942 → T-040 head → b6f1d3a8e942 → T-040 head` with seeded document payload and review metadata preserved. Each upgrade must produce UNRELEASED/null release metadata.
+
+## Required tests
+
+Add PostgreSQL-backed tests proving:
+
+- new documents default to UNRELEASED/null release metadata and approval does not imply release;
+- APPROVED documents release with exact UTC metadata and optional note;
+- DRAFT/REJECTED documents return the stable approval conflict without mutation;
+- package/member/Claim/Verification/priority/T-030/other-document state does not affect eligibility;
+- premature withdrawal, duplicate release, repeated withdrawal, and withdrawn-to-release return exact conflicts without mutation;
+- withdrawal preserves release time, records UTC withdrawal time, and replaces the note;
+- RELEASED blocks DRAFT/REJECTED review changes; changes work after withdrawal while preserving release metadata;
+- missing document returns exact 404; missing/invalid/UNRELEASED decisions return 422;
+- release/conflicting approval lock only the target document;
+- successful decisions commit exactly once and injected failures roll back;
+- payload, review metadata, memberships, members, and Claims remain unchanged;
+- PostgreSQL rejects invalid status/metadata combinations and RELEASED with non-APPROVED review;
+- direct persistence cannot move a currently RELEASED document to DRAFT or REJECTED;
+- migration cycle preserves payload/review data and infers no release;
+- T-037 creation, T-038 retrieval, T-039 review, and T-030 through T-036 remain compatible.
+
+Use dedicated PostgreSQL databases ending in `_test`. Do not weaken, remove, reorder, or silently skip existing tests.
+
+## Validation
+
+Run and report focused T-040 tests; complete ContentPackage/ContentDocument tests; T-030 released-assets and ContentVersion tests; NoteDraft/released-NoteDraft tests; QuestionBankItem/released-QuestionBankItem tests; full suite; changed-file Ruff; Alembic heads/check; fresh upgrade; seeded upgrade/downgrade/re-upgrade; direct PostgreSQL probes; diff and untracked whitespace checks; and final status.
+
+Confirm one Alembic head whose parent is `b6f1d3a8e942`, no schema drift or historical migration edit, and no dependency/configuration/environment/Docker/API-key/storage/infrastructure change.
+
+## Affected components
+
+Update only where required: ContentDocument model, shared schemas, repository, service, routes, exactly one migration, focused tests, architecture/workflow, and append-only task records.
+
+Inspect but otherwise leave unchanged: model registration unless import mechanics require no change; ContentPackage/membership and asset models; historical migrations; T-030 through T-039 behavior; `pyproject.toml`; `uv.lock`; `.env.example`; configuration; Docker; `AGENTS.md`; and `README.md`.
+
+## Scope exclusions
+
+Do not add released/approved ContentDocument collections; PDF/HTML rendering; storage/download; publication/delivery; public/learner APIs; users/auth/history; document update/delete/replacement/regeneration/repair or re-release; AI/LLM/API keys/source discovery/ingestion/RAG/embeddings/scraping; mocks/sessions/scoring/analytics/recommendations/personalization; package/member transitions; dependencies/config/environment/Docker/payments/infrastructure; or T-041.
+
+Preserve trust, provenance, exact ContentVersion ownership, immutable package membership and document payload, deterministic reproducibility, stored checksum integrity, independent review and controlled release, and Generate Once/Personalize Later.
+
+## Documentation and handoff
+
+Document only implemented behavior. Keep task history append-only. Record T-040 only as `Ready for review`; do not approve it and do not define or implement T-041.
+
+T-040 needs no API key, external service, dependency, secret, renderer, storage backend, configuration, Docker service, or infrastructure change. Stop and report if one appears necessary.
+
+Report starting state; files and migration; model/default/constraints; endpoint/request/response/errors; transitions/UTC metadata; review lock/state independence; immutable preservation; locking/commit/rollback/PostgreSQL enforcement; migration cycle; tests/checks; unchanged configuration; final status; and explicit confirmation of no commit, push, PR, self-approval, T-041, collections, PDF/HTML, publication, storage/download, delivery, AI, source discovery, mock assembly, or personalization.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-041.
+
+Leave T-040 uncommitted and unpushed in the working tree for independent review.
