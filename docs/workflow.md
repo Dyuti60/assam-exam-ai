@@ -1433,3 +1433,14 @@ flowchart LR
 - Focused T-040 selection: 10 passed, 49 deselected, 1 warning in 1.86s. Complete ContentPackage/ContentDocument suite: 59 passed, 1 warning in 8.89s. Required regressions: 112 passed, 1 warning in 6.87s. Full suite: 247 passed, 1 warning in 17.49s.
 - Fresh upgrade and seeded `b6f1d3a8e942 -> d1a7c4e9f263 -> b6f1d3a8e942 -> d1a7c4e9f263` validation preserved document payload, T-039 review metadata, package membership, and inferred no release. PostgreSQL constraint probes passed.
 - T-040 is Ready for review, not approved. No approved/released document collection, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-041 behavior was added.
+
+
+### T-040 post-push review
+
+- **APPROVED** at implementation commit `9add651af5a8a07dd9d1a1739bbe90f6e6b19277`, whose parent is the T-040 issuance head `426489d58513686871eb8a3315192cbdc03ea97c`.
+- The immutable commit adds only ContentDocument release metadata, migration `d1a7c4e9f263`, response/request compatibility, one release route, the released-review lock, document-only update behavior, focused PostgreSQL tests, and current-state documentation.
+- Model and migration constraints agree on UNRELEASED/RELEASED/WITHDRAWN state, metadata consistency, and the requirement that a currently RELEASED document remain APPROVED. Existing documents migrate to UNRELEASED with null release metadata and no inferred release.
+- Release and potentially conflicting review decisions lock only the target ContentDocument. Release validates before mutation, updates only four release fields, commits once, rolls back persistence failures, and reloads through the ordinary lock-free document lookup.
+- Release eligibility uses only the target document’s APPROVED state. Package/member/Claim changes do not affect eligibility or alter the immutable payload. Withdrawal retains the original release time, records UTC withdrawal time, replaces the note, and prevents re-release.
+- Developer-recorded evidence is 10 focused T-040 tests, 59 complete ContentPackage/ContentDocument tests, 112 required regressions, and 247 full-suite tests, each with one existing warning, plus successful Ruff, fresh and seeded migration cycles, PostgreSQL probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No approved/released document collection, PDF/HTML rendering, publication, storage/download, delivery, public/learner API, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-041 implementation was included.

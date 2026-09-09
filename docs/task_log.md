@@ -1272,3 +1272,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-040 selection: 10 passed, 49 deselected, 1 warning in 1.86s. Complete ContentPackage/ContentDocument suite: 59 passed, 1 warning in 8.89s. Required regressions: 112 passed, 1 warning in 6.87s. Full suite: 247 passed, 1 warning in 17.49s. |
 | Validation | Fresh and seeded upgrade/downgrade/re-upgrade, PostgreSQL constraints, changed-file Ruff, Alembic head/check, and diff checks passed against the dedicated T-040 PostgreSQL test database. |
 | Notes | Release and conflicting approval decisions lock only the target document, commit once, roll back failures, and preserve the immutable stored payload and related state. T-040 is Ready for review, not approved. No document collection, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-041 work was added. |
+
+
+---
+
+## T-040 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-040` |
+| Implementation commit | `9add651af5a8a07dd9d1a1739bbe90f6e6b19277` |
+| Base/task-issuance commit | `426489d58513686871eb8a3315192cbdc03ea97c` |
+| Review state | **APPROVED** |
+| Approved capability | Controlled one-way ContentDocument UNRELEASED/RELEASED/WITHDRAWN lifecycle requiring the document’s own APPROVED review |
+| Migration | `d1a7c4e9f263` follows `b6f1d3a8e942`, adds only release metadata/constraints, and migrates existing documents to UNRELEASED without inferred release |
+| Validation evidence | Developer-recorded: 10 focused T-040 tests, 59 complete ContentPackage/ContentDocument tests, 112 combined regressions, and 247 full-suite tests, each with one existing warning; Ruff; fresh and seeded migration cycles; PostgreSQL probes; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. Transition ordering, stable errors, own-review eligibility, review lock, UTC provenance, document-only locking, one-commit success, rollback, database enforcement, immutable-field preservation, state independence, migration safety, tests, documentation, and exclusions match the task with no blocking finding. |
+| Boundaries | No approved/released document collection, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-041 behavior was included. |
+
+---
+
+## T-041 issued — Add released ContentDocument read boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one read-only internal collection returning only currently RELEASED ContentDocument snapshots in stable document-ID order |
+| Architectural phase | Canonical Content / Released Document Read Boundary |
+| Scope | Exact document release-state filtering and stored response serialization only; no approved list, PDF/HTML, publication, storage/download, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |

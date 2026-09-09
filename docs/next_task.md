@@ -6053,3 +6053,178 @@ Do not implement T-041.
 Leave T-040 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only controlled UNRELEASED/RELEASED/WITHDRAWN ContentDocument metadata, migration `d1a7c4e9f263`, and `POST /api/v1/content-documents/{content_document_id}/release`. Only the document's own APPROVED review state permits initial release; withdrawal retains the original release time, records a UTC withdrawal time, and prevents in-place re-release. Release and conflicting approval decisions lock only the target document row, commit once, roll back failures, and preserve the immutable payload and related state. Existing documents migrate to UNRELEASED/null without inferred release. T-040 is Ready for review, not approved. No approved/released document collection, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-041 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## Independent review outcome — T-040
+
+T-040 is **APPROVED** at immutable implementation commit `9add651af5a8a07dd9d1a1739bbe90f6e6b19277`, directly based on issuance commit `426489d58513686871eb8a3315192cbdc03ea97c`.
+
+The review found no blocker in model/migration alignment, safe UNRELEASED migration, transition ordering, stable conflicts, document-own approval eligibility, released-review lock, UTC provenance, document-only row locking, one-commit success, rollback handling, PostgreSQL enforcement, immutable-payload preservation, state independence, tests, documentation, or scope boundaries. GitHub exposes no status contexts or workflow runs, so the reported local validation is developer evidence rather than CI evidence.
+
+Do not modify or reinterpret T-040 while implementing the next task.
+
+# T-041 — Add released ContentDocument read boundary
+
+## Context
+
+T-037 persists one immutable deterministic ContentDocument, T-038 retrieves it by ID, T-039 records its independent review, and T-040 controls its UNRELEASED/RELEASED/WITHDRAWN lifecycle.
+
+The next bounded capability is a read-only internal collection of only the documents whose current persisted release state is RELEASED. It is an internal downstream boundary, not PDF rendering, publication, download, or learner delivery.
+
+## Exact bounded goal
+
+Add exactly:
+
+`GET /api/v1/content-documents/released`
+
+Return `list[ContentDocumentResponse]` with HTTP 200.
+
+The static `/released` route must be registered before `/content-documents/{content_document_id}` so it cannot be captured by the dynamic integer-ID route.
+
+An empty database or an existing database with no currently RELEASED document returns HTTP 200 with `[]`.
+
+## Eligibility and ordering
+
+Eligibility depends exactly and only on:
+
+`ContentDocument.release_status == "RELEASED"`
+
+The repository must filter in PostgreSQL and order by ascending ContentDocument ID.
+
+Do not add a separate approval filter. PostgreSQL already requires a currently RELEASED document to be APPROVED.
+
+Exclude:
+
+- all UNRELEASED documents, regardless of review state;
+- all WITHDRAWN documents, regardless of review state.
+
+Package/member/Claim/Verification/priority/T-030/current collection state must not substitute for or affect document eligibility. A document remains eligible while RELEASED even if its package or retained members are later withdrawn or review-changed.
+
+## Stored response contract
+
+Return the existing ContentDocumentResponse unchanged, including:
+
+- document ID;
+- ContentPackage ID;
+- ContentVersion ID;
+- title;
+- exact stored Markdown;
+- lowercase stored SHA-256;
+- creation timestamp;
+- review status, timestamp, and note;
+- release status, release timestamp, null withdrawal timestamp, and release note.
+
+Use the existing stored ContentDocument serializer. Do not regenerate Markdown, recompute/repair the checksum, normalize content, resolve package membership, load package/member bodies, or inspect related state.
+
+## Read-only query behavior
+
+The repository query must select only ContentDocument rows. It requires no eager loading because the response is self-contained.
+
+The endpoint must perform no:
+
+- `FOR UPDATE` or other lock;
+- insert, update, or delete;
+- flush or commit;
+- transition;
+- regeneration, hashing, repair, inference, or related-state evaluation.
+
+The query count must remain fixed at one SELECT regardless of returned document count.
+
+## Persistence and migration scope
+
+T-041 requires no model, relationship, schema, model-registration, constraint, or migration change.
+
+Alembic remains at the single head `d1a7c4e9f263`. Do not edit historical migrations.
+
+## Required tests
+
+Add focused PostgreSQL-backed tests proving:
+
+- an empty database returns HTTP 200 and `[]`;
+- a database with only UNRELEASED and WITHDRAWN documents returns `[]`;
+- DRAFT, APPROVED, and REJECTED UNRELEASED documents are excluded;
+- currently RELEASED documents are returned in ascending document-ID order;
+- a WITHDRAWN document is excluded;
+- complete returned responses equal the stored release responses field for field;
+- exact Markdown/final newline, stored checksum, ownership, creation, review, and release metadata are preserved;
+- package/member withdrawal and permitted review changes do not affect a document that remains RELEASED;
+- Claim and unrelated domain state do not affect eligibility or snapshots;
+- withdrawing one document removes only that document from later results;
+- repeated reads are stable;
+- successful and empty reads leave relevant row counts unchanged;
+- each request executes one ContentDocument SELECT with no package/member query;
+- no `FOR UPDATE`, write, flush, or commit occurs;
+- static-route precedence is demonstrated;
+- T-037 creation, T-038 retrieval, T-039 review, T-040 release, and T-030 through T-036 remain compatible.
+
+Use a dedicated PostgreSQL database ending in `_test`. Do not weaken, remove, reorder, or silently skip existing tests.
+
+## Validation
+
+Run and report:
+
+- focused T-041 released-document tests;
+- complete ContentPackage/ContentDocument tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft and released-NoteDraft tests;
+- QuestionBankItem and released-QuestionBankItem tests;
+- full suite;
+- Ruff on changed Python;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- a fresh upgrade through `d1a7c4e9f263`;
+- `git diff --check`;
+- final `git status --short`.
+
+No migration cycle is required because persistence does not change. Confirm no schema drift, historical migration edit, dependency/configuration/environment/Docker/API-key/storage/infrastructure change, row lock, or write path.
+
+## Affected components
+
+Update only where required:
+
+- knowledge repository;
+- knowledge service;
+- knowledge routes;
+- focused released-ContentDocument tests;
+- architecture and workflow documentation;
+- append-only task log and next-task records.
+
+Inspect but otherwise leave unchanged:
+
+- all models and model registration;
+- all schemas;
+- all migrations;
+- ContentDocument creation/retrieval/review/release behavior;
+- ContentPackage and asset behavior;
+- T-030 through T-040 boundaries;
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- configuration;
+- Docker;
+- `AGENTS.md`;
+- `README.md`.
+
+## Scope exclusions
+
+Do not add approved-document collection, PDF/HTML rendering, file/object/blob/CDN storage, download endpoints, publication/delivery, public/learner APIs, users/auth/history, document mutation/regeneration/repair, AI/LLM/API keys/source discovery/ingestion/RAG/embeddings/scraping, mock assembly/sessions/scoring/analytics/recommendations/personalization, package/member transitions, dependencies/config/environment/Docker/payments/infrastructure, or T-042.
+
+Preserve trust, provenance, exact ContentVersion ownership, immutable package membership and document payload, stored checksum integrity, independent review, controlled release, and Generate Once/Personalize Later.
+
+## Documentation and handoff
+
+Document only implemented behavior. Keep task history append-only. Record T-041 only as `Ready for review`; do not approve it and do not define or implement T-042.
+
+T-041 needs no API key, external service, dependency, secret, renderer, storage backend, configuration, Docker service, or infrastructure change. Stop and report if one appears necessary.
+
+Report starting state; files changed; endpoint and filtering/order; stored response; state independence; fixed-query/no-write behavior; focused/full tests; Alembic/Ruff/diff; unchanged configuration; final status; and explicit confirmation of no commit, push, PR, self-approval, T-042, approved list, PDF/HTML, publication, storage/download, delivery, AI, source discovery, mock assembly, or personalization.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-042.
+
+Leave T-041 uncommitted and unpushed in the working tree for independent review.
