@@ -3425,3 +3425,257 @@ def test_database_blocks_review_change_while_content_document_is_released(
             error.value.orig.diag.constraint_name
             == "ck_content_documents_release_lifecycle"
         )
+
+
+def test_released_content_documents_returns_empty_for_empty_and_ineligible_sets(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statements: list[str] = []
+    commit_count = 0
+    flush_count = 0
+    original_commit = Session.commit
+    original_flush = Session.flush
+
+    def record_sql(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    def count_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        return original_commit(session)
+
+    def count_flush(session, *args, **kwargs):
+        nonlocal flush_count
+        flush_count += 1
+        return original_flush(session, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "commit", count_commit)
+    monkeypatch.setattr(Session, "flush", count_flush)
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    try:
+        empty = client.get("/api/v1/content-documents/released")
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+    assert empty.status_code == 200
+    assert empty.json() == []
+    empty_selects = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+    ]
+    assert len(empty_selects) == 1
+    assert "content_documents" in empty_selects[0]
+    assert all("FOR UPDATE" not in statement.upper() for statement in statements)
+    assert commit_count == 0
+    assert flush_count == 0
+
+    draft_document = _create_content_document_fixture(
+        client, "released-doc-empty-draft"
+    )["document"]
+    approved_fixture = _create_content_document_fixture(
+        client, "released-doc-empty-approved"
+    )
+    approved_document = approved_fixture["document"]
+    rejected_document = _create_content_document_fixture(
+        client, "released-doc-empty-rejected"
+    )["document"]
+    assert client.post(
+        f"/api/v1/content-documents/{approved_document['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-documents/{rejected_document['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    released_then_withdrawn = client.post(
+        f"/api/v1/content-documents/{approved_document['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert released_then_withdrawn.status_code == 200
+    withdrawn = client.post(
+        f"/api/v1/content-documents/{approved_document['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawn.status_code == 200
+    assert client.post(
+        f"/api/v1/content-documents/{approved_document['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    counts_before = (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    )
+    statements.clear()
+    commits_before = commit_count
+    flushes_before = flush_count
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    try:
+        response = client.get("/api/v1/content-documents/released")
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+    assert response.status_code == 200
+    assert response.json() == []
+    assert draft_document["approval_status"] == "DRAFT"
+    assert withdrawn.json()["release_status"] == "WITHDRAWN"
+    selects = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+    ]
+    assert len(selects) == 1
+    assert "content_documents" in selects[0]
+    assert "content_packages" not in selects[0]
+    assert "note_drafts" not in selects[0]
+    assert "question_bank_items" not in selects[0]
+    assert "FOR UPDATE" not in selects[0].upper()
+    assert commit_count == commits_before
+    assert flush_count == flushes_before
+    assert (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    ) == counts_before
+
+
+def test_released_content_documents_orders_preserves_and_reads_once(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_fixture = _create_content_document_fixture(client, "released-doc-first")
+    second_fixture = _create_content_document_fixture(client, "released-doc-second")
+    first_document = first_fixture["document"]
+    second_document = second_fixture["document"]
+    first_approval = client.post(
+        f"/api/v1/content-documents/{first_document['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "First review"},
+    )
+    second_approval = client.post(
+        f"/api/v1/content-documents/{second_document['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "Second review"},
+    )
+    assert first_approval.status_code == 200
+    assert second_approval.status_code == 200
+    first_release = client.post(
+        f"/api/v1/content-documents/{first_document['id']}/release",
+        json={"release_status": "RELEASED", "release_note": "First release"},
+    )
+    second_release = client.post(
+        f"/api/v1/content-documents/{second_document['id']}/release",
+        json={"release_status": "RELEASED", "release_note": "Second release"},
+    )
+    assert first_release.status_code == 200
+    assert second_release.status_code == 200
+    first_stored = first_release.json()
+    second_stored = second_release.json()
+
+    first_package_id = first_fixture["package"]["id"]
+    first_draft_id = first_fixture["draft"]["id"]
+    assert client.post(
+        f"/api/v1/content-packages/{first_package_id}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{first_package_id}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/note-drafts/{first_draft_id}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/note-drafts/{first_draft_id}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/claims/{first_fixture['claim_id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    manifest = client.get(
+        "/api/v1/content-versions/"
+        f"{first_fixture['foundation']['first_version']['id']}/released-assets"
+    )
+    assert manifest.status_code == 200
+    assert manifest.json()["note_drafts"] == []
+
+    counts_before = (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    )
+    statements: list[str] = []
+    commit_count = 0
+    flush_count = 0
+    original_commit = Session.commit
+    original_flush = Session.flush
+
+    def record_sql(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    def count_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        return original_commit(session)
+
+    def count_flush(session, *args, **kwargs):
+        nonlocal flush_count
+        flush_count += 1
+        return original_flush(session, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "commit", count_commit)
+    monkeypatch.setattr(Session, "flush", count_flush)
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    try:
+        first_read = client.get("/api/v1/content-documents/released")
+        second_read = client.get("/api/v1/content-documents/released")
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+    assert first_read.status_code == 200
+    assert second_read.status_code == 200
+    expected = [first_stored, second_stored]
+    assert first_read.json() == expected
+    assert second_read.json() == expected
+    assert [document["id"] for document in first_read.json()] == sorted(
+        [first_document["id"], second_document["id"]]
+    )
+    assert first_read.json()[0]["markdown"].endswith("\n")
+    assert first_read.json()[0]["sha256"] == first_document["sha256"]
+    assert first_read.json()[0]["content_package_id"] == first_package_id
+    assert first_read.json()[0]["content_version_id"] == first_document[
+        "content_version_id"
+    ]
+    assert first_read.json()[0]["created_at"] == first_document["created_at"]
+    assert first_read.json()[0]["approval_decided_at"] == first_approval.json()[
+        "approval_decided_at"
+    ]
+    assert first_read.json()[0]["released_at"] == first_stored["released_at"]
+    selects = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+    ]
+    assert len(selects) == 2
+    assert all("content_documents" in statement for statement in selects)
+    assert all("content_packages" not in statement for statement in selects)
+    assert all("note_drafts" not in statement for statement in selects)
+    assert all("question_bank_items" not in statement for statement in selects)
+    assert all("FOR UPDATE" not in statement.upper() for statement in statements)
+    assert all(
+        not statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        for statement in statements
+    )
+    assert commit_count == 0
+    assert flush_count == 0
+    assert (
+        *_content_snapshot_row_counts(db_connection),
+        db_connection.scalar(select(func.count()).select_from(ContentDocument)),
+    ) == counts_before
+
+    withdrawal = client.post(
+        f"/api/v1/content-documents/{first_document['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawal.status_code == 200
+    after_withdrawal = client.get("/api/v1/content-documents/released")
+    assert after_withdrawal.status_code == 200
+    assert after_withdrawal.json() == [second_stored]

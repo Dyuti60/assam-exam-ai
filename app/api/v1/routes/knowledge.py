@@ -265,6 +265,16 @@ def create_content_document(
 
 
 @router.get(
+    "/content-documents/released",
+    response_model=list[ContentDocumentResponse],
+)
+def get_released_content_documents(
+    db: DatabaseSession,
+) -> list[ContentDocumentResponse]:
+    return KnowledgeService(db).get_released_content_documents()
+
+
+@router.get(
     "/content-documents/{content_document_id}",
     response_model=ContentDocumentResponse,
 )

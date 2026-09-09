@@ -184,6 +184,15 @@ class KnowledgeRepository:
         with self.session.no_autoflush:
             return self.session.scalar(statement)
 
+    def get_released_content_documents(self) -> list[ContentDocument]:
+        statement = (
+            select(ContentDocument)
+            .where(ContentDocument.release_status == "RELEASED")
+            .order_by(ContentDocument.id)
+        )
+        with self.session.no_autoflush:
+            return list(self.session.scalars(statement))
+
     def get_content_document_for_update(
         self,
         content_document_id: int,

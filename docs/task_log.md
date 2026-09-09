@@ -1301,3 +1301,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Released Document Read Boundary |
 | Scope | Exact document release-state filtering and stored response serialization only; no approved list, PDF/HTML, publication, storage/download, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-041 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/content-documents/released`, returning currently RELEASED stored ContentDocument responses in ascending document-ID order |
+| Migration | None; models, schemas, constraints, registration, and Alembic head `d1a7c4e9f263` remain unchanged |
+| Tests | T-041 selection: 2 passed, 59 deselected, 1 warning in 1.44s. Complete ContentPackage/ContentDocument suite: 61 passed, 1 warning in 11.57s. Required regressions: 112 passed, 1 warning in 8.08s. Full suite: 249 passed, 1 warning in 23.68s. |
+| Validation | Fresh dedicated `_test` upgrade reached `d1a7c4e9f263`. Changed-file Ruff, Alembic head/check, diff, and status checks passed. |
+| Notes | The repository filters only RELEASED documents and orders by ID in one ContentDocument-only, no-autoflush, lock-free SELECT. Stored serialization performs no regeneration, checksum work, related-state evaluation, write, flush, or commit. T-041 is Ready for review, not approved. No approved list, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-042 work was added. |

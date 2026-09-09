@@ -608,6 +608,12 @@ class KnowledgeService:
             raise ResourceNotFoundError("ContentDocument", content_document_id)
         return self._content_document_response(content_document)
 
+    def get_released_content_documents(self) -> list[ContentDocumentResponse]:
+        return [
+            self._content_document_response(content_document)
+            for content_document in self.repository.get_released_content_documents()
+        ]
+
     def record_content_document_approval(
         self,
         content_document_id: int,

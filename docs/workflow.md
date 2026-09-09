@@ -1444,3 +1444,14 @@ flowchart LR
 - Release eligibility uses only the target document’s APPROVED state. Package/member/Claim changes do not affect eligibility or alter the immutable payload. Withdrawal retains the original release time, records UTC withdrawal time, replaces the note, and prevents re-release.
 - Developer-recorded evidence is 10 focused T-040 tests, 59 complete ContentPackage/ContentDocument tests, 112 required regressions, and 247 full-suite tests, each with one existing warning, plus successful Ruff, fresh and seeded migration cycles, PostgreSQL probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - No approved/released document collection, PDF/HTML rendering, publication, storage/download, delivery, public/learner API, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-041 implementation was included.
+
+### T-041 Released ContentDocument read boundary
+
+- `GET /api/v1/content-documents/released` is registered before the dynamic document-ID route and returns `list[ContentDocumentResponse]` with HTTP 200. An empty eligible set returns `[]`.
+- The repository issues one ContentDocument-only SELECT, filters exactly `release_status = 'RELEASED'`, and orders by ascending document ID. It uses `no_autoflush`, no eager loading, no related-state query, and no row lock.
+- The service reuses the shared stored ContentDocument serializer, preserving immutable title, exact Markdown/final newline, SHA-256, package/ContentVersion ownership, creation time, review metadata, and release metadata without regeneration or recalculation.
+- UNRELEASED and WITHDRAWN documents are excluded. Package/member/Claim/Verification/priority/manifest/other-document state cannot create or remove eligibility while the target document remains RELEASED.
+- Reads execute one fixed SELECT per request regardless of result count and perform no write, flush, commit, transition, hash, repair, inference, or related-object resolution. Withdrawing one document removes only that document from later collection results.
+- Focused T-041 tests: 2 passed, 59 deselected, 1 warning in 1.44s. Complete ContentPackage/ContentDocument suite: 61 passed, 1 warning in 11.57s. Required regressions: 112 passed, 1 warning in 8.08s. Full suite: 249 passed, 1 warning in 23.68s.
+- Fresh upgrade reached unchanged Alembic head `d1a7c4e9f263`; Ruff, Alembic head/check, diff, and status checks passed. No model, schema, registration, migration, dependency, configuration, environment, Docker, API-key, storage, or infrastructure change was required.
+- T-041 is Ready for review, not approved. No approved-document collection, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, or T-042 behavior was added.
