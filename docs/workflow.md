@@ -1390,3 +1390,14 @@ flowchart LR
 - Retrieval reuses the T-037 stored serializer and therefore preserves title, exact Markdown including its final newline, stored lowercase SHA-256, package/ContentVersion IDs, and UTC creation timestamp without normalization, regeneration, checksum repair, or inference.
 - Focused T-038 selection: 2 passed, 39 deselected, 1 warning in 0.81s. Complete ContentPackage/ContentDocument suite: 41 passed, 1 warning in 7.14s. Required regressions: 112 passed, 1 warning in 6.55s. Full suite: 229 passed, 1 warning in 15.71s.
 - Fresh upgrade reached unchanged head `c4d8f2a6b731`; Ruff, Alembic head/check, diff, and whitespace checks passed. No schema, migration, dependency, configuration, environment, Docker, API-key, storage, or infrastructure change was required.
+
+
+### T-038 post-push review
+
+- **APPROVED** at implementation commit `4e3adcf4da0c6a29f6d7ba4556b77e47e28e353a`, whose parent is the T-038 issuance head `8c431484ca7814923a709c5b44136489ac4a81b9`.
+- The immutable commit adds only `GET /api/v1/content-documents/{content_document_id}`, one focused repository lookup, one read-only service method, two PostgreSQL-backed tests, and current-state documentation.
+- The repository selects only the requested ContentDocument row under `no_autoflush`; it performs no eager loading, package/member resolution, related-state query, row lock, write, flush, or commit.
+- The service reuses the T-037 stored serializer, preserving title, exact Markdown/final newline, lowercase SHA-256, package/ContentVersion IDs, and UTC creation timestamp without regeneration, checksum calculation/repair, normalization, or inference.
+- Tests prove exact missing-document 404, field-for-field equality with the creation response, repeated stable retrieval, package/member/Claim-state independence, one SELECT per request, zero lock/write/flush/commit behavior, and unchanged row counts.
+- Developer-recorded evidence is 2 focused T-038 tests, 41 complete ContentPackage/ContentDocument tests, 112 required regressions, and 229 full-suite tests, each with one existing warning, plus successful Ruff, fresh upgrade, unchanged Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No model, schema, migration, document list/review/release/lifecycle, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-039 implementation was included.

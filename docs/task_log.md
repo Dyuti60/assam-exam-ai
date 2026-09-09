@@ -1188,3 +1188,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-038 selection: 2 passed, 39 deselected, 1 warning in 0.81s. Complete ContentPackage/ContentDocument suite: 41 passed, 1 warning in 7.14s. Required regressions: 112 passed, 1 warning in 6.55s. Full suite: 229 passed, 1 warning in 15.71s. |
 | Validation | Fresh dedicated `_test` upgrade reached `c4d8f2a6b731`. Changed-file Ruff, Alembic head/check, diff, and whitespace checks passed. |
 | Notes | Retrieval performs one no-autoflush ContentDocument SELECT, reuses the stored serializer, and does not load package members, lock, write, commit, regenerate Markdown, recalculate SHA-256, or inspect current related state. T-038 is Ready for review, not approved. No list/lifecycle, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-039 work was added. |
+
+
+---
+
+## T-038 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-038` |
+| Implementation commit | `4e3adcf4da0c6a29f6d7ba4556b77e47e28e353a` |
+| Base/task-issuance commit | `8c431484ca7814923a709c5b44136489ac4a81b9` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only retrieval of one exact immutable stored ContentDocument by its own ID |
+| Migration | None; Alembic remains at `c4d8f2a6b731` |
+| Validation evidence | Developer-recorded: 2 focused T-038 tests, 41 complete ContentPackage/ContentDocument tests, 112 combined regressions, and 229 full-suite tests, each with one existing warning; Ruff; fresh upgrade; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. Exact 404 handling, one-row/no-autoflush query, shared stored serialization, state independence, repeatability, no-lock/no-write execution, row-count preservation, compatibility, documentation, and scope exclusions match the task with no blocking finding. |
+| Boundaries | No model/schema/migration change, document list/review/release/lifecycle, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-039 behavior was included. |
+
+---
+
+## T-039 issued — Add independent ContentDocument human review
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add an independent DRAFT/APPROVED/REJECTED human-review decision to ContentDocument while keeping its stored payload immutable |
+| Architectural phase | Canonical Content / Document Trust Boundary |
+| Scope | Review metadata, one decision endpoint, response compatibility, database constraints, migration, and tests only; no release, list, PDF/HTML, publication, storage/download, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |

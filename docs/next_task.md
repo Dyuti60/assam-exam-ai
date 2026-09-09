@@ -5615,3 +5615,279 @@ Do not implement T-039.
 Leave T-038 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-documents/{content_document_id}` through one focused repository lookup, read-only service method, thin route, tests, and current-state documentation. It returns the existing stored ContentDocument response exactly and uses no autoflush, related-object loading, lock, write, commit, member resolution, regeneration, checksum calculation/repair, ownership inference, or current-state evaluation. Missing documents return the stable `ContentDocument <id> not found` 404. T-038 is Ready for review, not approved. Alembic remains `c4d8f2a6b731`; no model, schema, registration, migration, dependency, configuration, Docker, list/lifecycle, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-039 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## Independent review outcome — T-038
+
+T-038 is **APPROVED** at immutable implementation commit `4e3adcf4da0c6a29f6d7ba4556b77e47e28e353a`, directly based on issuance commit `8c431484ca7814923a709c5b44136489ac4a81b9`.
+
+The review found no blocker in the exact missing-document 404, one-row/no-autoflush repository query, read-only service and route, shared stored serialization, package/member/Claim-state independence, repeated response equality, one-query behavior, zero-lock/write/flush/commit execution, row-count preservation, regression coverage, documentation, or scope boundaries. GitHub exposes no status contexts or workflow runs, so the reported local validation is developer evidence rather than CI evidence.
+
+Do not modify or reinterpret T-038 while implementing the next task.
+
+# T-039 — Add independent ContentDocument human review
+
+## Context
+
+T-037 persists at most one deterministic ContentDocument snapshot from a currently RELEASED ContentPackage. T-038 retrieves that exact stored document by its own ID without regeneration or related-state evaluation.
+
+The document payload—package ID, ContentVersion ID, title, Markdown, SHA-256, and creation time—is immutable. Before any document release, PDF/HTML rendering, publication, or delivery boundary is introduced, the assembled document needs its own explicit human-review decision independent of the package and its retained members.
+
+T-039 adds only that trust boundary.
+
+## Exact bounded goal
+
+Add exactly:
+
+`POST /api/v1/content-documents/{content_document_id}/approval`
+
+Request:
+
+```json
+{
+  "approval_status": "DRAFT | APPROVED | REJECTED",
+  "reviewer_note": "optional"
+}
+```
+
+Return the existing ContentDocument response extended with stored review metadata.
+
+Do not add an approved-document collection, document release, rendering, publication, storage, download, delivery, learner access, AI, or personalization.
+
+## Data model and response
+
+Extend ContentDocument with exactly:
+
+- `approval_status`: non-null string, initially `DRAFT`;
+- `approval_decided_at`: nullable timezone-aware timestamp;
+- `reviewer_note`: nullable text.
+
+The immutable payload fields must remain unchanged:
+
+- `id`;
+- `content_package_id`;
+- `content_version_id`;
+- `title`;
+- `markdown`;
+- `sha256`;
+- `created_at`.
+
+Add PostgreSQL constraints equivalent to:
+
+- status is exactly `DRAFT`, `APPROVED`, or `REJECTED`;
+- `DRAFT` requires null decision timestamp and null reviewer note;
+- `APPROVED` and `REJECTED` require a non-null decision timestamp; reviewer note remains optional.
+
+Extend `ContentDocumentResponse` with:
+
+- `approval_status`;
+- `approval_decided_at`;
+- `reviewer_note`.
+
+Use the existing approval-status enum when appropriate. Ensure T-037 creation and T-038 retrieval return the same review fields from stored state.
+
+Add a request schema accepting only DRAFT, APPROVED, or REJECTED plus an optional reviewer note. Missing or invalid decisions must use standard HTTP 422 validation.
+
+## Decision semantics
+
+For `APPROVED` or `REJECTED`:
+
+- store the requested status;
+- record the current UTC decision timestamp;
+- store the optional reviewer note.
+
+For `DRAFT`:
+
+- set status to DRAFT;
+- clear `approval_decided_at`;
+- clear `reviewer_note`, even when a note is supplied.
+
+A missing ContentDocument returns HTTP 404 with exactly:
+
+`{"detail": "ContentDocument <id> not found"}`
+
+Do not introduce a 409 path in T-039.
+
+Review is independent of:
+
+- ContentPackage review or release state;
+- NoteDraft and QuestionBankItem review/release state;
+- Claims and Verifications;
+- Topic priority and T-030 released-assets state;
+- other documents, packages, or ContentVersions.
+
+Changing review must never rewrite, normalize, regenerate, re-hash, or revalidate the immutable document payload.
+
+## Repository, locking, and transaction behavior
+
+Add a repository lookup for approval using:
+
+- `SELECT ... FOR UPDATE OF content_documents`;
+- only the target ContentDocument row;
+- no package/member eager loading;
+- no locks on ContentPackage, membership rows, NoteDrafts, QuestionBankItems, Claims, or other documents.
+
+Add a focused repository update helper that changes only:
+
+- `approval_status`;
+- `approval_decided_at`;
+- `reviewer_note`.
+
+The service must:
+
+1. load and lock the target document;
+2. return the established 404 when absent;
+3. calculate DRAFT versus decided metadata;
+4. update only the three review fields;
+5. commit exactly once;
+6. roll back and re-raise generic persistence failures;
+7. freshly retrieve and serialize the stored ContentDocument response.
+
+Ordinary T-038 retrieval must remain lock-free and read-only.
+
+## Migration requirements
+
+Create exactly one Alembic revision whose parent is `c4d8f2a6b731`.
+
+It must:
+
+- add only the three ContentDocument review columns and their constraints;
+- migrate every existing ContentDocument to DRAFT with null decision metadata;
+- infer no approval from ContentPackage or member state;
+- keep model metadata and database defaults aligned;
+- preserve all existing document IDs, package/ContentVersion ownership, title, Markdown, SHA-256, and creation timestamps;
+- edit no historical migration.
+
+Downgrade must remove only the T-039 review constraints and columns while preserving every pre-T-039 document field and row.
+
+Validate:
+
+`c4d8f2a6b731 → T-039 head → c4d8f2a6b731 → T-039 head`
+
+with at least one seeded ContentDocument and its referenced package/members preserved. Each upgrade must produce DRAFT with null decision metadata and must not modify the stored Markdown or checksum.
+
+## Required tests
+
+Add PostgreSQL-backed tests proving:
+
+- newly created ContentDocuments default to DRAFT with null decision timestamp and note;
+- T-038 retrieval returns stored review metadata;
+- APPROVED and REJECTED record exact requested status, a UTC decision timestamp, and optional note;
+- resetting to DRAFT clears timestamp and note;
+- repeated decisions follow the defined semantics without changing immutable fields;
+- missing document returns the exact 404;
+- missing and invalid status values return standard 422;
+- package/member/Claim/Verification/priority/T-030/other-document state cannot substitute for or block the target document’s own review decision;
+- review changes leave package identity, ContentVersion identity, title, exact Markdown/final newline, SHA-256, creation timestamp, package membership, and member rows unchanged;
+- approval locks only the target ContentDocument row;
+- ordinary retrieval remains lock-free;
+- exactly one commit occurs on a successful decision;
+- injected persistence failure rolls back all review-field changes;
+- PostgreSQL rejects invalid statuses and invalid status/timestamp/note combinations;
+- migration upgrade/downgrade/re-upgrade preserves existing document payload and establishes DRAFT/null review metadata;
+- T-037 creation/duplicate behavior, T-038 retrieval, and T-030 through T-036 boundaries remain compatible.
+
+Use dedicated PostgreSQL databases whose names end in `_test`. Do not weaken, remove, reorder, or silently skip existing tests.
+
+## Validation
+
+Run and report:
+
+- focused T-039 ContentDocument-review tests;
+- complete ContentPackage/ContentDocument tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft and released-NoteDraft tests;
+- QuestionBankItem and released-QuestionBankItem tests;
+- full suite;
+- Ruff on changed Python files;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh upgrade through the T-039 head;
+- seeded upgrade/downgrade/re-upgrade;
+- direct PostgreSQL constraint probes;
+- `git diff --check`;
+- untracked-file whitespace checks;
+- final `git status --short`.
+
+Confirm one Alembic head whose parent is `c4d8f2a6b731`, no schema drift or historical migration edits, and no dependency/configuration/environment/Docker/API-key/storage/infrastructure change.
+
+## Affected components
+
+Update only where required:
+
+- ContentDocument model;
+- shared schemas;
+- knowledge repository;
+- knowledge service;
+- knowledge routes;
+- exactly one new migration;
+- focused ContentDocument/package tests;
+- architecture and workflow documentation;
+- append-only task log and next-task records.
+
+Inspect but otherwise leave unchanged:
+
+- model registration unless import mechanics genuinely require no change;
+- ContentPackage and membership models;
+- NoteDraft and QuestionBankItem models;
+- historical migrations;
+- T-030 through T-038 behavior;
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+## Scope exclusions
+
+Do not add:
+
+- approved ContentDocument collection;
+- ContentDocument release, withdrawal, list, update, delete, replacement, regeneration, or repair;
+- HTML or PDF rendering;
+- file/object/blob/CDN storage or download endpoints;
+- publication or delivery;
+- public or learner APIs;
+- users, authentication, authorization, reviewer identity, review history, or audit-event infrastructure;
+- AI/LLM providers, API keys, prompts, source discovery, ingestion, RAG, embeddings, vectors, or scraping;
+- mock assembly, learner sessions, scoring, analytics, recommendations, or personalization;
+- new package/member transitions;
+- dependencies, configuration, environment variables, Docker services, payments, or unrelated infrastructure;
+- T-040 implementation.
+
+Preserve trust, provenance, exact ContentVersion ownership, immutable package membership, immutable document payload, deterministic reproducibility, stored checksum integrity, independent review/release boundaries, and Generate Once/Personalize Later.
+
+## Documentation and handoff
+
+Document only implemented behavior. Keep task history append-only. Record T-039 only as `Ready for review`; do not approve it and do not define or implement T-040.
+
+T-039 needs no API key, external service, dependency, secret, renderer, storage backend, configuration, Docker service, or infrastructure change. Stop and report if one appears necessary.
+
+Report:
+
+- starting HEAD and clean synchronized state;
+- files changed/created;
+- migration revision and parent;
+- model/constraint/default behavior;
+- endpoint/request/response/errors;
+- decision semantics and UTC metadata;
+- immutable-field preservation and state independence;
+- locking, commit, rollback, and concurrency behavior;
+- migration cycle and PostgreSQL probes;
+- focused/full validation;
+- Alembic/Ruff/diff results;
+- unchanged dependency/configuration inspection;
+- final status;
+- explicit confirmation that no commit, push, PR, self-approval, T-040, approved list, document release/lifecycle, PDF/HTML, publication, storage/download, delivery, AI, source discovery, mock assembly, or personalization work occurred.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-040.
+
+Leave T-039 uncommitted and unpushed in the working tree for independent review.
