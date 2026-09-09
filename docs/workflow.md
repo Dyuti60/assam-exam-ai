@@ -1340,3 +1340,14 @@ flowchart LR
 - PostgreSQL constrains lifecycle status, timestamps, notes, and approval. Existing packages migrate to UNRELEASED with null release metadata and no inferred release; downgrade removes only T-035 state.
 - Developer-recorded evidence is 5 focused T-035 tests, 27 complete ContentPackage tests, 112 combined focused regressions, and 215 full-suite tests, each with one existing warning, plus Ruff, fresh and seeded migration cycles, PostgreSQL probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - No released-package collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-036 implementation was included.
+
+
+### T-036 Released ContentPackage read boundary
+
+- `GET /api/v1/content-packages/released` is registered before the dynamic package-ID route and returns the shared `ContentPackageResponse` list.
+- The repository filters exactly `release_status = 'RELEASED'` and orders by ascending package ID in PostgreSQL. Two select-in loaders preserve both relationship-defined association-position orders with a fixed three-query pattern regardless of package count.
+- Eligibility does not add a separate approval filter and does not inspect member state, Claims, Verification, priority, T-030, another ContentVersion, or another package. Member withdrawal and later review changes do not alter retained membership or eligibility.
+- The collection returns `[]` when empty, includes one-type packages with an empty opposite membership list, and excludes UNRELEASED and WITHDRAWN packages. Withdrawing one package removes only that package from subsequent reads.
+- The route, service, and repository perform no row locks, writes, flushes, commits, transitions, rebuilding, expansion, or regeneration.
+- Focused T-036 tests: 2 passed, 27 deselected, 1 warning in 1.79s. Complete ContentPackage suite: 29 passed, 1 warning in 6.09s. Required focused regressions: 112 passed, 1 warning in 6.56s. Full suite: 217 passed, 1 warning in 14.18s.
+- A fresh dedicated `_test` database upgrade reached the unchanged Alembic head `a8c4e2f9b671`. No model, schema, migration, dependency, configuration, environment, Docker, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, or T-037 behavior was added.

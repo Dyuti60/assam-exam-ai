@@ -1090,3 +1090,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Released Package Read Boundary |
 | Scope | Exact package release-state filtering and stored membership response only; no expanded package bodies, publication, rendering, PDF/export, delivery, learner, AI, or personalization behavior |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+
+---
+
+## T-036 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/content-packages/released`, returning currently RELEASED stored package responses in ascending package-ID order with both retained membership lists in persisted position order |
+| Migration | None; models, schemas, persistence, constraints, and Alembic head `a8c4e2f9b671` remain unchanged |
+| Tests | T-036 selection: 2 passed, 27 deselected, 1 warning in 1.79s. Complete ContentPackage suite: 29 passed, 1 warning in 6.09s. Required focused regressions: 112 passed, 1 warning in 6.56s. Full suite: 217 passed, 1 warning in 14.18s. |
+| Validation | Fresh dedicated `_test` database upgrade reached unchanged head `a8c4e2f9b671`. Changed-file Ruff, Alembic head/check, diff, and whitespace checks passed. |
+| Notes | PostgreSQL filters exactly current RELEASED package state and orders by package ID. Two select-in loads preserve both stored membership orders with a fixed three-query read. The endpoint performs no lock or write and does not inspect member or unrelated domain state. No approved-package list, expanded collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-037 work was added. |

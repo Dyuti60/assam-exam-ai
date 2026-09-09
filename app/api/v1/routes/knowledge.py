@@ -181,6 +181,16 @@ def get_content_package_content(
 
 
 @router.get(
+    "/content-packages/released",
+    response_model=list[ContentPackageResponse],
+)
+def get_released_content_packages(
+    db: DatabaseSession,
+) -> list[ContentPackageResponse]:
+    return KnowledgeService(db).get_released_content_packages()
+
+
+@router.get(
     "/content-packages/{content_package_id}",
     response_model=ContentPackageResponse,
 )

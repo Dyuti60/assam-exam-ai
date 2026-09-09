@@ -384,6 +384,12 @@ class KnowledgeService:
             raise ResourceNotFoundError("ContentPackage", content_package_id)
         return self._content_package_response(content_package)
 
+    def get_released_content_packages(self) -> list[ContentPackageResponse]:
+        return [
+            self._content_package_response(content_package)
+            for content_package in self.repository.get_released_content_packages()
+        ]
+
     def get_content_package_content(
         self,
         content_package_id: int,

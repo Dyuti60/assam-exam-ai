@@ -5172,3 +5172,5 @@ Do not self-approve.
 Do not implement T-037.
 
 Leave T-036 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-packages/released` through the existing route, service, repository, and shared `ContentPackageResponse` flow. It filters exactly current RELEASED package state in PostgreSQL, orders by ascending package ID, and eagerly loads both retained membership lists in persisted association-position order using a fixed three-query strategy. It returns `[]` when none qualify and performs no locks, writes, transitions, membership rebuilding, member expansion, or current-state re-evaluation. T-036 is Ready for review, not approved. No model, schema, migration, approved-package list, expanded collection, publication, rendering, PDF/export, delivery, learner, AI, source discovery, mock assembly, personalization, or T-037 behavior was added.

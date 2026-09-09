@@ -175,6 +175,18 @@ class KnowledgeRepository:
         )
         return self.session.scalar(statement)
 
+    def get_released_content_packages(self) -> list[ContentPackage]:
+        statement = (
+            select(ContentPackage)
+            .options(
+                selectinload(ContentPackage.note_draft_links),
+                selectinload(ContentPackage.question_bank_item_links),
+            )
+            .where(ContentPackage.release_status == "RELEASED")
+            .order_by(ContentPackage.id)
+        )
+        return list(self.session.scalars(statement))
+
     def get_content_package_for_update(
         self,
         content_package_id: int,

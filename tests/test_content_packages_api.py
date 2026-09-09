@@ -2020,3 +2020,221 @@ def test_database_rejects_invalid_content_package_release_states(
             .values(**values),
         )
     assert client.get(f"/api/v1/content-packages/{package['id']}").json() == package
+
+
+def test_released_content_packages_empty_and_ineligible_states_are_excluded(
+    client: TestClient,
+) -> None:
+    empty = client.get("/api/v1/content-packages/released")
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    foundation = _foundation(client, "released-packages-ineligible")
+    version_id = foundation["first_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    _approved_claim(client, topic_id, "released-packages-ineligible")
+    draft = _create_draft(client, topic_id, version_id)
+    _approve_and_release_draft(client, draft["id"])
+
+    draft_package = _create_package(client, version_id)
+    approved_package = _create_package(client, version_id)
+    rejected_package = _create_package(client, version_id)
+    withdrawn_package = _create_package(client, version_id)
+    assert client.post(
+        f"/api/v1/content-packages/{approved_package['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{rejected_package['id']}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{withdrawn_package['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{withdrawn_package['id']}/release",
+        json={"release_status": "RELEASED"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/content-packages/{withdrawn_package['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    ).status_code == 200
+
+    response = client.get("/api/v1/content-packages/released")
+    assert response.status_code == 200
+    assert response.json() == []
+    assert draft_package["approval_status"] == "DRAFT"
+
+
+def test_released_content_packages_preserve_order_snapshot_and_are_read_only(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    foundation = _foundation(client, "released-packages-snapshot")
+    version_id = foundation["first_version"]["id"]
+    other_version_id = foundation["second_version"]["id"]
+    topic_id = foundation["topic"]["id"]
+    first_claim_id = _approved_claim(client, topic_id, "released-packages-first")
+    second_claim_id = _approved_claim(client, topic_id, "released-packages-second")
+    first_draft = _create_draft(client, topic_id, version_id)
+    second_draft = _create_draft(client, topic_id, version_id)
+    other_draft = _create_draft(client, topic_id, other_version_id)
+    first_item = _create_item(
+        client, version_id, [first_claim_id], "released-packages-first"
+    )
+    second_item = _create_item(
+        client, version_id, [second_claim_id], "released-packages-second"
+    )
+    for draft in (first_draft, second_draft, other_draft):
+        _approve_and_release_draft(client, draft["id"])
+    for item in (first_item, second_item):
+        _approve_and_release_item(client, item["id"])
+
+    ordered_package = _create_package(client, version_id)
+    second_package = _create_package(client, version_id)
+    note_only_package = _create_package(client, version_id)
+    item_only_package = _create_package(client, version_id)
+    other_package = _create_package(client, other_version_id)
+
+    db_connection.execute(
+        delete(ContentPackageQuestionBankItem).where(
+            ContentPackageQuestionBankItem.content_package_id
+            == note_only_package["id"]
+        )
+    )
+    db_connection.execute(
+        delete(ContentPackageNoteDraft).where(
+            ContentPackageNoteDraft.content_package_id == item_only_package["id"]
+        )
+    )
+    for model, id_column, first_id, second_id in (
+        (
+            ContentPackageNoteDraft,
+            ContentPackageNoteDraft.note_draft_id,
+            first_draft["id"],
+            second_draft["id"],
+        ),
+        (
+            ContentPackageQuestionBankItem,
+            ContentPackageQuestionBankItem.question_bank_item_id,
+            first_item["id"],
+            second_item["id"],
+        ),
+    ):
+        package_filter = model.content_package_id == ordered_package["id"]
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == first_id)
+            .values(position=2)
+        )
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == second_id)
+            .values(position=0)
+        )
+        db_connection.execute(
+            update(model)
+            .where(package_filter, id_column == first_id)
+            .values(position=1)
+        )
+
+    released_ids = []
+    for package in (
+        ordered_package,
+        second_package,
+        note_only_package,
+        item_only_package,
+    ):
+        approval = client.post(
+            f"/api/v1/content-packages/{package['id']}/approval",
+            json={"approval_status": "APPROVED", "reviewer_note": "Reviewed"},
+        )
+        assert approval.status_code == 200
+        release = client.post(
+            f"/api/v1/content-packages/{package['id']}/release",
+            json={"release_status": "RELEASED", "release_note": "Released"},
+        )
+        assert release.status_code == 200
+        released_ids.append(package["id"])
+    assert other_package["release_status"] == "UNRELEASED"
+
+    for resource, resource_id in (
+        ("note-drafts", first_draft["id"]),
+        ("question-bank-items", first_item["id"]),
+    ):
+        assert client.post(
+            f"/api/v1/{resource}/{resource_id}/release",
+            json={"release_status": "WITHDRAWN"},
+        ).status_code == 200
+        assert client.post(
+            f"/api/v1/{resource}/{resource_id}/approval",
+            json={"approval_status": "REJECTED"},
+        ).status_code == 200
+    assert client.post(
+        f"/api/v1/claims/{first_claim_id}/approval",
+        json={"approval_status": "REJECTED"},
+    ).status_code == 200
+    manifest = client.get(f"/api/v1/content-versions/{version_id}/released-assets")
+    assert manifest.status_code == 200
+    assert [draft["id"] for draft in manifest.json()["note_drafts"]] == [
+        second_draft["id"]
+    ]
+    assert [item["id"] for item in manifest.json()["question_bank_items"]] == [
+        second_item["id"]
+    ]
+
+    counts_before = _content_snapshot_row_counts(db_connection)
+    statements: list[str] = []
+
+    def record_sql(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(db_connection, "before_cursor_execute", record_sql)
+    try:
+        first_read = client.get("/api/v1/content-packages/released")
+        second_read = client.get("/api/v1/content-packages/released")
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_sql)
+    assert first_read.status_code == 200
+    assert first_read.json() == second_read.json()
+    returned = first_read.json()
+    assert [package["id"] for package in returned] == sorted(released_ids)
+    by_id = {package["id"]: package for package in returned}
+    assert by_id[ordered_package["id"]]["note_draft_ids"] == [
+        second_draft["id"],
+        first_draft["id"],
+    ]
+    assert by_id[ordered_package["id"]]["question_bank_item_ids"] == [
+        second_item["id"],
+        first_item["id"],
+    ]
+    assert by_id[note_only_package["id"]]["question_bank_item_ids"] == []
+    assert by_id[item_only_package["id"]]["note_draft_ids"] == []
+    for package in returned:
+        assert package["approval_status"] == "APPROVED"
+        assert package["approval_decided_at"] is not None
+        assert package["reviewer_note"] == "Reviewed"
+        assert package["release_status"] == "RELEASED"
+        assert package["released_at"] is not None
+        assert package["withdrawn_at"] is None
+        assert package["release_note"] == "Released"
+    select_statements = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+    ]
+    assert len(select_statements) == 6
+    assert all("FOR UPDATE" not in statement.upper() for statement in statements)
+    assert _content_snapshot_row_counts(db_connection) == counts_before
+
+    withdrawal = client.post(
+        f"/api/v1/content-packages/{second_package['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawal.status_code == 200
+    after = client.get("/api/v1/content-packages/released").json()
+    assert [package["id"] for package in after] == sorted(
+        set(released_ids) - {second_package["id"]}
+    )
+    assert by_id[ordered_package["id"]] in after
