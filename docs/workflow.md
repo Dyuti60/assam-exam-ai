@@ -1455,3 +1455,13 @@ flowchart LR
 - Focused T-041 tests: 2 passed, 59 deselected, 1 warning in 1.44s. Complete ContentPackage/ContentDocument suite: 61 passed, 1 warning in 11.57s. Required regressions: 112 passed, 1 warning in 8.08s. Full suite: 249 passed, 1 warning in 23.68s.
 - Fresh upgrade reached unchanged Alembic head `d1a7c4e9f263`; Ruff, Alembic head/check, diff, and status checks passed. No model, schema, registration, migration, dependency, configuration, environment, Docker, API-key, storage, or infrastructure change was required.
 - T-041 is Ready for review, not approved. No approved-document collection, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, or T-042 behavior was added.
+
+
+### T-041 post-push review
+
+- **APPROVED** at immutable implementation commit `210d3c7186ec8a5d344dfbbf99d669b7aa0d0292`, whose parent is the T-041 issuance head `bb1db0872e444307501adb495418d24bd7f43091`.
+- The commit adds only the static released-document route, a ContentDocument-only repository query, shared stored-response serialization, focused PostgreSQL tests, and current-state documentation.
+- PostgreSQL filters exactly current RELEASED state and orders by document ID. The query uses `no_autoflush`, performs one SELECT per request, and does not load packages, members, Claims, or other related state.
+- The static route precedes the dynamic document-ID route. UNRELEASED and WITHDRAWN documents are excluded; package/member/Claim changes cannot substitute for or remove eligibility while a document remains RELEASED.
+- Developer-recorded evidence is 2 focused T-041 tests, 61 complete ContentPackage/ContentDocument tests, 112 required regressions, and 249 full-suite tests, each with one existing warning, plus successful Ruff, fresh upgrade, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No approved-document collection, PDF/HTML rendering, publication, storage/download, delivery, learner API, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-042 implementation was included.

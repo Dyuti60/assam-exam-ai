@@ -6230,3 +6230,221 @@ Do not implement T-042.
 Leave T-041 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/content-documents/released` through the existing route, service, repository, and `ContentDocumentResponse` flow. PostgreSQL filters exactly current RELEASED state and orders by ascending document ID. Each request performs one ContentDocument-only, no-autoflush, lock-free SELECT and returns stored immutable payload, ownership, checksum, review, and release metadata without regeneration, recalculation, related-state evaluation, write, flush, or commit. UNRELEASED and WITHDRAWN documents are excluded; package/member/Claim/Verification/priority/manifest state cannot substitute for document release. T-041 is Ready for review, not approved. Alembic remains `d1a7c4e9f263`; no model, schema, registration, migration, dependency, configuration, Docker, approved-document list, PDF/HTML, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, or T-042 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## Independent review outcome — T-041
+
+T-041 is **APPROVED** at immutable implementation commit `210d3c7186ec8a5d344dfbbf99d669b7aa0d0292`, directly based on issuance commit `bb1db0872e444307501adb495418d24bd7f43091`.
+
+The review found no blocker in static-route precedence, exact RELEASED filtering, ascending ordering, one-query/no-autoflush behavior, stored response preservation, related-state independence, absence of locks and writes, tests, documentation, or scope boundaries. GitHub exposes no status contexts or workflow runs, so the reported local validation is developer evidence rather than CI evidence.
+
+Do not modify or reinterpret T-041 while implementing the next task.
+
+# T-042 — Persist immutable deterministic PDF artifact
+
+## Context
+
+T-037 persists one immutable render-ready Markdown ContentDocument, T-038 retrieves it, T-039 reviews it, T-040 controls release and withdrawal, and T-041 lists only currently RELEASED documents.
+
+The next bounded capability is to render one exact RELEASED ContentDocument into immutable PDF bytes and persist those bytes with checksum and ownership provenance. This remains an internal artifact-creation boundary. Retrieval/download, publication, learner delivery, AI generation, source discovery, and personalization are later tasks.
+
+## Exact bounded goal
+
+Add exactly:
+
+`POST /api/v1/content-documents/{content_document_id}/pdf-artifacts`
+
+The endpoint accepts no request body and returns HTTP 201 with a new `PdfArtifactResponse`.
+
+Allow at most one PdfArtifact per ContentDocument. A repeated request must return a deterministic HTTP 409 and must not regenerate or replace the existing artifact.
+
+## Eligibility and stable errors
+
+Eligibility depends exactly on the target ContentDocument’s current persisted `release_status == "RELEASED"`.
+
+Do not add a separate approval check; PostgreSQL already requires a RELEASED document to be APPROVED. Do not consult current package, retained members, Claims, Verifications, priority, T-030 manifests, global collections, other documents, or other ContentVersions.
+
+Errors:
+
+- missing document: HTTP 404, `{"detail": "ContentDocument <id> not found"}`;
+- ineligible document: HTTP 409, `{"detail": "ContentDocument <id> must be released before PDF creation"}`;
+- duplicate artifact: HTTP 409, `{"detail": "ContentDocument <id> already has a PdfArtifact"}`.
+
+Validate eligibility and the ordinary duplicate path before rendering. Treat the named database uniqueness constraint as the concurrency authority and translate only that expected violation to the same duplicate 409. Roll back and re-raise unrelated persistence failures.
+
+## PdfArtifact persistence model
+
+Add one `PdfArtifact` model/table with exactly the immutable artifact data needed by this slice:
+
+- integer primary-key `id`;
+- non-null `content_document_id`;
+- non-null copied `content_package_id`;
+- non-null copied `content_version_id`;
+- non-null `filename`;
+- non-null `media_type`, exactly `application/pdf`;
+- non-null PDF bytes in a PostgreSQL `bytea`/SQLAlchemy `LargeBinary` column;
+- positive non-null `byte_size`;
+- non-null lowercase 64-character hexadecimal `sha256`;
+- non-null timezone-aware `created_at`.
+
+Expose all metadata through `PdfArtifactResponse` except the raw PDF bytes. The response must include ID, all three ownership IDs, filename, media type, byte size, SHA-256, and creation timestamp.
+
+Enforce one artifact per ContentDocument with a named unique constraint. Enforce exact document/package/ContentVersion agreement with a named composite foreign key to `content_documents(id, content_package_id, content_version_id)`; add only the supporting ContentDocument uniqueness required for that reference. Use `ON DELETE RESTRICT`.
+
+Add named PostgreSQL checks for a nonblank filename ending in `.pdf`, exact media type, positive byte size, byte-size agreement with the stored bytes, and lowercase SHA-256 format. Keep model metadata and migration definitions aligned.
+
+No update, delete, replacement, repair, or regeneration API is allowed.
+
+## Deterministic renderer contract
+
+Render only the exact stored ContentDocument `title` and `markdown`. Do not rebuild package membership, notes, questions, answers, explanations, or provenance.
+
+Use one deterministic in-process PDF renderer. A renderer dependency may be added only if it is necessary; prefer a mature maintained Python library, pin it through the project’s normal `uv` workflow, and update `pyproject.toml` and `uv.lock` together. No network call, API key, browser, external conversion service, office suite, Docker service, or runtime binary may be required.
+
+The PDF contract must be stable and explicitly versioned in code:
+
+- A4 pages;
+- fixed margins, typography, spacing, wrapping, and pagination;
+- the stored title is rendered once as the document heading;
+- the stored Markdown is rendered predictably without mutating the stored source;
+- headings, paragraphs, blank lines, bullets, and the T-037 Notes/Practice Questions structure remain readable;
+- fixed PDF metadata and deterministic object generation; never embed wall-clock creation time, random IDs, host paths, usernames, or environment-specific values inside the PDF bytes;
+- identical title and Markdown under the same renderer version produce byte-identical PDF output;
+- output begins with a valid PDF header and has a valid EOF marker;
+- calculate `byte_size` and lowercase SHA-256 from the exact bytes persisted.
+
+Keep the renderer isolated behind a small focused module/function and define a constant renderer version for future traceability. Do not expose renderer internals as an API field in T-042 unless a persistence field is genuinely required to reproduce or interpret the artifact; if so, stop and document the necessity before expanding the schema.
+
+Unicode content must fail clearly before persistence if the chosen deterministic renderer cannot represent it; never silently replace, drop, or corrupt characters. Do not broaden T-042 into a general HTML/CSS renderer.
+
+## Locking and atomicity
+
+Load the target ContentDocument with `SELECT ... FOR UPDATE OF content_documents` and lock only that row.
+
+After eligibility and duplicate validation:
+
+1. render bytes in memory from the stored title and Markdown;
+2. calculate byte size and SHA-256 from those exact bytes;
+3. create the PdfArtifact with copied ownership IDs;
+4. flush artifact constraints;
+5. commit exactly once;
+6. retrieve and return the stored metadata response.
+
+On any rendering or persistence failure, leave zero partial PdfArtifact rows and do not modify the ContentDocument or related state.
+
+Do not lock or modify the ContentPackage, membership associations, NoteDrafts, QuestionBankItems, Claims, or other documents.
+
+## Migration requirements
+
+Create exactly one Alembic revision whose parent is `d1a7c4e9f263`.
+
+It must:
+
+- add only the supporting ContentDocument unique constraint and the `pdf_artifacts` table with named constraints;
+- create no artifact for existing documents;
+- preserve every existing document and all earlier state;
+- edit no historical migration.
+
+Downgrade must drop only T-042 objects in safe dependency order and preserve ContentDocuments.
+
+Validate `d1a7c4e9f263 -> T-042 head -> d1a7c4e9f263 -> T-042 head` with seeded ContentDocument payload/review/release metadata preserved and zero inferred artifacts on both upgrades.
+
+## Required tests
+
+Add focused PostgreSQL-backed tests proving:
+
+- a RELEASED ContentDocument creates one artifact with HTTP 201;
+- response metadata and stored row exactly match document/package/ContentVersion ownership;
+- bytes start with a PDF header, end with a valid EOF marker, have positive size, and match stored `byte_size` and lowercase SHA-256;
+- the PDF contains the document title and representative Notes, Practice Questions, options, answer, and explanation content in readable order;
+- rendering the same title/Markdown twice through the renderer produces byte-identical output;
+- the exact stored ContentDocument is the only rendering input; later package/member/Claim changes do not affect creation;
+- UNRELEASED and WITHDRAWN documents return the exact eligibility 409 without rendering or persistence;
+- a missing document returns the exact 404;
+- a duplicate request returns the exact 409 without changing the stored artifact;
+- a simulated uniqueness race maps only the named duplicate constraint to the duplicate 409;
+- unrelated integrity/database errors are rolled back and re-raised;
+- renderer failure or unsupported-character failure leaves zero artifact rows;
+- the target document alone is row-locked;
+- success commits exactly once; failures roll back;
+- ContentDocument and all package/member/Claim/review/release data remain unchanged;
+- PostgreSQL rejects mismatched ownership, duplicate document ownership, blank/non-PDF filenames, wrong media type, nonpositive/mismatched byte size, and malformed SHA-256;
+- deletion of a referenced ContentDocument is restricted;
+- migration cycle preserves prior data and infers no artifact;
+- T-037 through T-041 and T-030 through T-036 remain compatible.
+
+Use dedicated PostgreSQL databases ending in `_test`. Do not weaken, remove, reorder, or silently skip existing tests.
+
+## Validation
+
+Run and report:
+
+- focused T-042 PdfArtifact tests;
+- complete ContentPackage/ContentDocument tests;
+- T-041 released-document tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft and released-NoteDraft tests;
+- QuestionBankItem and released-QuestionBankItem tests;
+- full suite;
+- Ruff on all changed Python;
+- `uv lock --check` or the repository-equivalent lock verification if dependencies change;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- a fresh upgrade through the new head;
+- seeded upgrade/downgrade/re-upgrade;
+- direct PostgreSQL constraint probes;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Confirm one Alembic head whose parent is `d1a7c4e9f263`, no schema drift or historical migration edit, and no external-service/API-key/configuration/environment/Docker/storage-backend/infrastructure change.
+
+## Affected components
+
+Update only where required:
+
+- PdfArtifact model and model registration;
+- ContentDocument supporting relationship/constraint only if required;
+- shared schemas;
+- knowledge repository, service, and routes;
+- one focused deterministic renderer module;
+- exactly one migration;
+- focused tests;
+- `pyproject.toml` and `uv.lock` only if a renderer dependency is required;
+- architecture/workflow and append-only task records.
+
+Inspect but otherwise leave unchanged:
+
+- ContentPackage and membership models;
+- NoteDraft and QuestionBankItem models;
+- historical migrations;
+- existing T-030 through T-041 APIs and behavior;
+- `.env.example`;
+- configuration;
+- Docker;
+- `AGENTS.md`;
+- `README.md`.
+
+## Scope exclusions
+
+Do not add PdfArtifact retrieval/list/download endpoints; approved-document collection; HTML artifact persistence; object/file/blob/CDN storage; publication or delivery lifecycle; public/learner APIs; users/auth/history; artifact update/delete/replacement/regeneration/repair; asynchronous jobs/queues; AI/LLM/API keys/source discovery/ingestion/RAG/embeddings/scraping; mock assembly/sessions/scoring/analytics/recommendations/personalization; payments or infrastructure; or T-043.
+
+Preserve trust, provenance, exact ContentVersion ownership, immutable package membership and ContentDocument payload, stored checksums, independent review, controlled release, deterministic reproducibility, and Generate Once/Personalize Later.
+
+## Documentation and handoff
+
+Document only implemented behavior. Keep task history append-only. Record T-042 only as `Ready for review`; do not approve it and do not define or implement T-043.
+
+T-042 needs no API key, external service, secret, storage backend, configuration value, Docker service, or infrastructure change. A local deterministic renderer dependency is permitted only as described above.
+
+Report starting state; files and migration; dependency decision; renderer version/contract; endpoint/errors; model/constraints; deterministic byte/checksum evidence; ownership; locking/atomicity; migration cycle; tests/checks; unchanged configuration; final status; and explicit confirmation of no commit, push, PR, self-approval, T-043, retrieval/download, publication, delivery, learner API, AI, source discovery, mock assembly, or personalization.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-043.
+
+Leave T-042 uncommitted and unpushed in the working tree for independent review.

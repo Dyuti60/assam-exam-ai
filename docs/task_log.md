@@ -1314,3 +1314,31 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-041 selection: 2 passed, 59 deselected, 1 warning in 1.44s. Complete ContentPackage/ContentDocument suite: 61 passed, 1 warning in 11.57s. Required regressions: 112 passed, 1 warning in 8.08s. Full suite: 249 passed, 1 warning in 23.68s. |
 | Validation | Fresh dedicated `_test` upgrade reached `d1a7c4e9f263`. Changed-file Ruff, Alembic head/check, diff, and status checks passed. |
 | Notes | The repository filters only RELEASED documents and orders by ID in one ContentDocument-only, no-autoflush, lock-free SELECT. Stored serialization performs no regeneration, checksum work, related-state evaluation, write, flush, or commit. T-041 is Ready for review, not approved. No approved list, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-042 work was added. |
+
+
+---
+
+## T-041 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-041` |
+| Implementation commit | `210d3c7186ec8a5d344dfbbf99d669b7aa0d0292` |
+| Base/task-issuance commit | `bb1db0872e444307501adb495418d24bd7f43091` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only internal collection of currently RELEASED ContentDocument snapshots in ascending document-ID order |
+| Validation evidence | Developer-recorded: 2 focused T-041 tests, 61 complete ContentPackage/ContentDocument tests, 112 combined regressions, and 249 full-suite tests, each with one existing warning; Ruff; fresh upgrade; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. Static-route precedence, exact release filtering, stable ordering, one-query behavior, shared stored serialization, related-state independence, zero-write behavior, tests, documentation, and exclusions match the task with no blocking finding. |
+| Boundaries | No approved-document collection, PDF/HTML rendering, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-042 behavior was included. |
+
+---
+
+## T-042 issued — Persist immutable deterministic PDF artifact
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Render and atomically persist at most one immutable PDF byte snapshot from one exact currently RELEASED ContentDocument |
+| Architectural phase | Canonical Content / Deterministic PDF Artifact |
+| Scope | Internal PDF generation, byte persistence, checksum, exact document ownership, and creation metadata only; no retrieval/download, publication, learner delivery, AI, or personalization |
+| Full implementation prompt | Appended to `docs/next_task.md` |
