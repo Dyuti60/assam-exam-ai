@@ -1371,3 +1371,14 @@ flowchart LR
 - Focused T-037 selection: 10 passed, 29 deselected, 1 warning in 1.95s. Complete ContentPackage suite: 39 passed, 1 warning in 7.26s. Required focused regressions: 112 passed, 1 warning in 6.84s. Full suite: 227 passed, 1 warning in 14.71s.
 - Fresh upgrade and seeded `a8c4e2f9b671 -> c4d8f2a6b731 -> a8c4e2f9b671 -> c4d8f2a6b731` validation preserved a package and both membership types and inferred no document. PostgreSQL probes, Ruff, Alembic head/check, and diff checks passed.
 - ContentDocument retrieval/list/review/release, PDF/HTML rendering, publication, files/storage/download, public or learner delivery, AI, source discovery, mock assembly, and personalization remain absent.
+
+
+### T-037 post-push review
+
+- **APPROVED** at implementation commit `e199b9b6b4698ad3df1c3bf60c7e82b1adc3e951`, whose parent is the T-037 issuance head `180c3b9f7061ee2f4100faba71f91bb330c236fa`.
+- The immutable commit adds only the ContentDocument model/registration, migration `c4d8f2a6b731`, stored response schema, deterministic creation service/repository flow, one creation route, focused tests, and current-state documentation.
+- Model and migration constraints agree on one document per package, exact package/ContentVersion ownership, non-blank title/Markdown, lowercase 64-character SHA-256 format, stored UTC creation time, and restricted deletion of a referenced package.
+- Creation locks only the currently RELEASED package, resolves both retained membership lists by stored position, rejects incomplete resolution or more than 26 options before persistence, renders deterministic Markdown with exactly one final newline, hashes its exact UTF-8 bytes, commits once, and rolls back failures.
+- Only the package-document uniqueness constraint is translated to the stable duplicate 409. Other persistence and internal-integrity failures remain internal rather than being mislabeled or partially persisted.
+- Later member/Claim changes and package withdrawal/review changes do not alter the stored document. No document retrieval/list/lifecycle, PDF/HTML, publication, file/storage/download, public/learner delivery, AI, source discovery, mock assembly, or personalization was included.
+- Developer-recorded evidence is 10 focused T-037 tests, 39 complete ContentPackage tests, 112 required regressions, and 227 full-suite tests, each with one existing warning, plus successful Ruff, fresh and seeded migration cycles, PostgreSQL constraint probes, Alembic head/check, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.

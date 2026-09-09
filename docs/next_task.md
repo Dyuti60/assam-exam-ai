@@ -5430,3 +5430,186 @@ Do not implement T-038.
 Leave T-037 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-09 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/content-packages/{content_package_id}/content-documents` and migration `c4d8f2a6b731`. A currently RELEASED package is locked and its retained, independently ordered members are resolved into one deterministic Markdown snapshot with A-Z option/answer labels, exactly one final newline, and a lowercase SHA-256 digest of the exact UTF-8 content. PostgreSQL enforces one document per package, exact ContentVersion agreement, non-blank content, checksum format, and restricted package deletion. Creation commits once and rolls back fully on failure; current member and Claim state is not re-evaluated. T-037 is Ready for review, not approved. No ContentDocument retrieval/list/lifecycle, PDF/HTML, publication, file/storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-038 work was added. Exact validation results are recorded in `docs/task_log.md` and `docs/workflow.md`.
+
+
+---
+
+## Independent review outcome — T-037
+
+T-037 is **APPROVED** at immutable implementation commit `e199b9b6b4698ad3df1c3bf60c7e82b1adc3e951`, directly based on issuance commit `180c3b9f7061ee2f4100faba71f91bb330c236fa`.
+
+The review found no blocker in the ContentDocument model and migration, exact package/ContentVersion constraint, deterministic Markdown contract, UTF-8 SHA-256 calculation, retained membership ordering, package-only locking, one-commit transaction, uniqueness-specific conflict mapping, rollback behavior, migration safety, tests, documentation, or scope boundaries. GitHub exposes no status contexts or workflow runs, so the reported local validation is developer evidence rather than CI evidence.
+
+Do not modify or reinterpret T-037 while implementing the next task.
+
+# T-038 — Add individual ContentDocument retrieval boundary
+
+## Context
+
+The repository now persists at most one immutable deterministic ContentDocument for a currently RELEASED ContentPackage. The document stores its package identity, exact ContentVersion ownership, title, Markdown, SHA-256 digest, and creation timestamp. Its content is already a retained snapshot and must remain independent of later package, member, Claim, Verification, priority, or dynamic-manifest state.
+
+There is currently no API for retrieving a ContentDocument by its own ID. T-038 adds only that internal read boundary.
+
+## Exact bounded goal
+
+Add exactly:
+
+`GET /api/v1/content-documents/{content_document_id}`
+
+Return the existing `ContentDocumentResponse` with HTTP 200.
+
+For a missing document, return HTTP 404 with exactly:
+
+`{"detail": "ContentDocument <id> not found"}`
+
+The endpoint must return the stored row exactly. It must not regenerate Markdown, recompute or repair SHA-256, resolve package members, load member bodies, inspect current package/member approval or release state, infer ownership, or mutate anything.
+
+## Repository, service, and route behavior
+
+Add one repository lookup by ContentDocument ID.
+
+It must:
+
+- select only the requested ContentDocument;
+- require no eager loading of ContentPackage, membership, NoteDraft, QuestionBankItem, Claim, Verification, or ContentVersion bodies;
+- use no `FOR UPDATE`;
+- preserve the stored title, Markdown, digest, ContentVersion ID, package ID, and creation timestamp exactly.
+
+Add one service method that:
+
+- calls the repository lookup;
+- raises `ResourceNotFoundError("ContentDocument", content_document_id)` when absent;
+- otherwise reuses the existing stored ContentDocument serializer;
+- performs no validation against current related state and no checksum calculation.
+
+Add the route through the existing knowledge router and established 404 translation. Do not add a 409 path.
+
+## Snapshot and state-independence contract
+
+A successfully created document must remain retrievable without change after any later allowed changes to:
+
+- the parent ContentPackage release or review state;
+- retained NoteDraft or QuestionBankItem release/review state;
+- Claims, Verifications, Topic priority, or T-030 released-assets results;
+- unrelated packages, documents, ContentVersions, or collections.
+
+The response must equal the original T-037 creation response field for field. Retrieval must not omit, rewrite, normalize, regenerate, validate, or repair stored content.
+
+The database continues to restrict deletion of the referenced package. Do not add delete, update, replacement, regeneration, or repair behavior.
+
+## Persistence and migration scope
+
+T-038 requires no model, relationship, schema, model-registration, constraint, or migration change.
+
+Alembic must remain at the single head `c4d8f2a6b731`, and `uv run alembic check` must report no new upgrade operations.
+
+Do not edit historical migrations.
+
+## Required tests
+
+Add focused PostgreSQL-backed tests proving:
+
+- a missing ContentDocument returns the exact 404;
+- a created document is retrieved by its own ID with a response exactly equal to the T-037 creation response;
+- title, Markdown including final newline, lowercase SHA-256, package ID, ContentVersion ID, and stored UTC creation timestamp are preserved;
+- repeated retrieval returns the identical stored response;
+- package withdrawal and a permitted post-withdrawal package review change do not alter or hide the document;
+- later member release/review changes and Claim decisions do not alter or hide the document;
+- retrieval performs no `FOR UPDATE`, insert, update, delete, flush, or commit;
+- relevant row counts remain unchanged on successful and missing reads;
+- no package-member expansion or current eligibility query is required;
+- T-037 duplicate-creation behavior and T-030 through T-036 boundaries remain compatible.
+
+Use a dedicated PostgreSQL database whose name ends in `_test`. Do not weaken, remove, reorder, or silently skip existing tests.
+
+## Validation
+
+Run and report:
+
+- focused T-038 ContentDocument retrieval tests;
+- complete ContentPackage/ContentDocument tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft and released-NoteDraft tests;
+- QuestionBankItem and released-QuestionBankItem tests;
+- full suite;
+- Ruff on changed Python files;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- a fresh upgrade through `c4d8f2a6b731`;
+- `git diff --check`;
+- final `git status --short`.
+
+No migration cycle is required because persistence does not change. Confirm no schema drift, historical migration edit, dependency/configuration/environment/Docker/API-key/storage/infrastructure change, row lock, or write path.
+
+## Affected components
+
+Update only where required:
+
+- knowledge repository;
+- knowledge service;
+- knowledge routes;
+- focused ContentDocument retrieval tests;
+- architecture and workflow documentation;
+- append-only task log and next-task records.
+
+Inspect but otherwise leave unchanged:
+
+- all models and model registration;
+- all schemas;
+- all migrations;
+- ContentPackage creation/read/content/review/release/list behavior;
+- T-037 document creation and deterministic rendering behavior;
+- other domain components;
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+## Scope exclusions
+
+Do not add:
+
+- ContentDocument list, review, release, update, delete, replacement, regeneration, or repair;
+- HTML or PDF rendering;
+- file, object, blob, or CDN storage;
+- download endpoints;
+- publication or delivery;
+- public or learner APIs;
+- users, authentication, authorization, reviewer identity, or history;
+- AI/LLM providers, API keys, prompts, source discovery, ingestion, RAG, embeddings, vectors, or scraping;
+- mock assembly, learner sessions, scoring, analytics, recommendations, or personalization;
+- dependencies, configuration, environment variables, Docker services, payments, or unrelated infrastructure;
+- T-039 implementation.
+
+Preserve trust, provenance, exact ContentVersion ownership, immutable package membership, deterministic reproducibility, the stored document checksum, independent review/release boundaries, and Generate Once/Personalize Later.
+
+## Documentation and handoff
+
+Document only implemented behavior. Keep task history append-only. Record T-038 only as `Ready for review`; do not approve it and do not define or implement T-039.
+
+T-038 requires no API key, external service, dependency, secret, template engine, storage backend, configuration, Docker service, or infrastructure change. Stop and report if one appears necessary.
+
+Report:
+
+- starting HEAD and clean synchronized state;
+- files changed;
+- exact endpoint and 404;
+- stored-field preservation;
+- state independence;
+- read-only/query behavior;
+- focused and full validation;
+- unchanged Alembic head/check;
+- unchanged dependencies/configuration;
+- final status;
+- explicit confirmation that no commit, push, PR, self-approval, T-039, list/lifecycle, PDF/HTML, publication, storage/download, delivery, AI, source discovery, mock assembly, or personalization work occurred.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not implement T-039.
+
+Leave T-038 uncommitted and unpushed in the working tree for independent review.

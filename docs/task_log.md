@@ -1146,3 +1146,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | T-037 selection: 10 passed, 29 deselected, 1 warning in 1.95s. Complete ContentPackage suite: 39 passed, 1 warning in 7.26s. Required regressions: 112 passed, 1 warning in 6.84s. Full suite: 227 passed, 1 warning in 14.71s. |
 | Validation | Fresh upgrade and seeded upgrade/downgrade/re-upgrade preserved package identity and both membership types with no inferred document. PostgreSQL constraints, changed-file Ruff, Alembic head/check, and diff checks passed. |
 | Notes | Rendering uses retained membership order, stored snapshots, A-Z option/answer labels, one final newline, and SHA-256 of exact UTF-8 Markdown. Package-only locking, one successful commit, duplicate protection, and rollback are covered. No retrieval/list/lifecycle, PDF/HTML, publication, storage/download, delivery, learner, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, AGENTS, README, or T-038 work was added. |
+
+
+---
+
+## T-037 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-037` |
+| Implementation commit | `e199b9b6b4698ad3df1c3bf60c7e82b1adc3e951` |
+| Base/task-issuance commit | `180c3b9f7061ee2f4100faba71f91bb330c236fa` |
+| Review state | **APPROVED** |
+| Approved capability | Atomic creation of at most one immutable deterministic Markdown ContentDocument snapshot from one currently RELEASED ContentPackage |
+| Migration | `c4d8f2a6b731` follows `a8c4e2f9b671`, creates only `content_documents`, and infers no document |
+| Validation evidence | Developer-recorded: 10 focused T-037 tests, 39 complete ContentPackage tests, 112 combined regressions, and 227 full-suite tests, each with one existing warning; Ruff; fresh and seeded migration cycles; PostgreSQL probes; Alembic head/check; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. Deterministic rendering, exact UTF-8 checksum, ContentVersion integrity, one-document uniqueness, package-only locking, retained ordering, duplicate translation, rollback, data preservation, model/migration alignment, and scope exclusions match the task with no blocking finding. |
+| Boundaries | No ContentDocument retrieval/list/lifecycle, PDF/HTML rendering, publication, storage/download, public/learner delivery, AI, source discovery, mock assembly, personalization, dependency, configuration, Docker, or T-038 behavior was included. |
+
+---
+
+## T-038 issued — Add individual ContentDocument retrieval boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one read-only endpoint that retrieves one immutable stored ContentDocument by its own ID |
+| Architectural phase | Canonical Content / Stored Document Read Boundary |
+| Scope | Exact stored ContentDocument response and missing-resource handling only; no regeneration, checksum recomputation, lifecycle, list, PDF/HTML, publication, storage/download, delivery, learner, AI, or personalization behavior |
+| Full implementation prompt | Appended to `docs/next_task.md` |
