@@ -1537,3 +1537,16 @@ flowchart LR
 - Focused T-045: 18 passed, 33 deselected, 1 warning in 3.64s. Complete PdfArtifact: 51 passed, 1 warning in 8.20s. ContentPackage/ContentDocument: 61 passed, 1 warning in 11.15s. T-041 released documents: 2 passed, 59 deselected, 1 warning in 1.29s. ContentVersion/T-030: 15 passed, 1 warning in 1.71s. NoteDraft: 43 passed, 1 warning in 3.36s. QuestionBankItem: 54 passed, 1 warning in 3.60s. Full suite: 300 passed, 1 warning in 27.59s.
 - Fresh and seeded migration cycles preserve exact pre-T-045 artifact fields and infer only UNRELEASED/null/null/null release metadata. Direct PostgreSQL constraint tests, Ruff, dependency-lock verification, Alembic head/check, and diff checks passed on dedicated `_test` databases.
 - T-045 is Ready for review, not approved. No released/approved artifact collection, released-only download, publication, external storage, public/learner delivery, AI, personalization, dependency, configuration, Docker, renderer, or T-046 work was added.
+
+
+### T-045 post-push independent review and T-046 issuance
+
+- **APPROVED** at immutable implementation commit `72cb1316980e49444292744629276d7b513985f1`, whose exact parent is the T-045 issuance head `4677c5af806146f35155026db6d53deca0064f1f`.
+- The single implementation commit changes only the expected PdfArtifact model, schemas, repository, service, route, migration, focused tests, and current-state documentation.
+- Migration `a5d2c8f1e736` follows `f3c8a1d6e924`, adds only release metadata and named constraints, preserves review/immutable fields, seeds existing artifacts as UNRELEASED/null/null/null without inference, and removes only T-045 objects on downgrade.
+- PostgreSQL enforces valid UNRELEASED/RELEASED/WITHDRAWN values, null metadata for UNRELEASED, own APPROVED state plus release time for RELEASED, and both timestamps for WITHDRAWN.
+- Release and withdrawal use the existing target-only PdfArtifact lock, modify only lifecycle fields, commit once, roll back failures after flushed updates, and reload through the ordinary lock-free lookup. Related state is neither accessed nor used for eligibility.
+- Tests cover approval eligibility, exact transitions/errors, terminal withdrawal, released-review conflicts, post-withdrawal review, target-only SQL, a second artifact, direct constraints, immutable state, and ungated internal download across lifecycle states.
+- Developer-recorded evidence is 18 focused T-045 tests, 51 complete PdfArtifact tests, 61 ContentPackage/ContentDocument tests, 2 T-041 tests, 15 ContentVersion/T-030 tests, 43 NoteDraft tests, 54 QuestionBankItem tests, and 300 full-suite tests, each with one existing warning, plus successful Ruff, lock, Alembic head/check, fresh/seeded migration cycles, PostgreSQL probes, and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- Model registration, renderer, dependencies, environment, configuration, Docker, AGENTS.md, and README are unchanged. No released collection/download boundary, publication, external storage, public/learner delivery, AI, personalization, or T-046 implementation was included.
+- T-046 is issued as the read-only released PdfArtifact metadata and exact-byte delivery boundary. The first complete manual end-to-end deliverable test remains the next likely increment.
