@@ -7392,3 +7392,251 @@ Do not define or implement T-047.
 Leave T-046 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-10 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/pdf-artifacts/released` and `GET /api/v1/pdf-artifacts/released/{pdf_artifact_id}/download`. The collection filters exact current RELEASED state in PostgreSQL and orders stored metadata by ascending artifact ID; the download returns exact stored bytes and stored headers only for a currently RELEASED artifact, with missing and non-RELEASED targets sharing the established stable 404. Each endpoint uses one PdfArtifact-only, lock-free, no-autoflush SELECT and performs no write, render, hash, or related-state evaluation. No model, schema, migration, renderer, dependency, configuration, Docker, external-storage, publication, public/learner delivery, AI, personalization, end-to-end smoke, or T-047 work was added. Exact validation results are recorded in `docs/workflow.md` and `docs/task_log.md`. T-046 is Ready for review, not approved.
+
+
+---
+
+# T-046 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-046` |
+| Implementation commit | `40c66d108b3c7b69ead420fd4e65a9de146f607d` |
+| Correction commit | `2f7e5c5ea7e50f9ee533d9ba8bf9485aae305ca2` |
+| Base/task-issuance commit | `7af933509ca583350d813f1540ad686eaee96489` |
+| Review result | **APPROVED** |
+| Approved capability | Read-only current-RELEASED PdfArtifact metadata collection and exact stored-byte released download |
+| Independent review | Exact ancestry and both immutable diffs were inspected. The correction is test-only and proves post-release Verification changes do not affect delivery. Route ordering, filtering, ordering, bytes, headers, stable 404 behavior, one-query boundaries, related-state independence, compatibility, documentation, and excluded scope satisfy the canonical task. |
+| CI evidence | GitHub exposes no status contexts or workflow runs. Recorded validation remains developer evidence, not a claimed CI pass. |
+
+# T-047 — Add complete internal deliverable smoke workflow
+
+## Role
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read the live repository before editing and follow `AGENTS.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt.
+
+Repository code is authoritative. Preserve append-only history in `docs/task_log.md` and `docs/next_task.md`.
+
+## Architectural classification
+
+Canonical Content / End-to-End Deliverable Validation.
+
+This task validates the already implemented deterministic trusted-content pipeline. It does not introduce a new product capability, agent, learner workflow, or publication system.
+
+## Starting-state verification
+
+Before editing:
+
+1. Confirm branch `main`, fetch `origin/main`, and confirm a clean working tree.
+2. Confirm HEAD is the documentation commit that approves T-046 and issues T-047.
+3. Confirm the approved T-046 range:
+   - issuance base `7af933509ca583350d813f1540ad686eaee96489`;
+   - implementation `40c66d108b3c7b69ead420fd4e65a9de146f607d`;
+   - test correction `2f7e5c5ea7e50f9ee533d9ba8bf9485aae305ca2`.
+4. Read the current Source, Evidence, Claim, Verification, Exam, SyllabusVersion, Topic, ContentVersion, NoteDraft, QuestionBankItem, ContentPackage, ContentDocument, and PdfArtifact API contracts and tests.
+5. Confirm Alembic has one unchanged head: `a5d2c8f1e736`.
+6. Stop and report any repository divergence that materially changes this task.
+
+## Objective
+
+Add one focused PostgreSQL-backed API-level end-to-end smoke workflow proving that the current repository can produce one complete internal educational deliverable through the existing trust and canonical-content boundaries:
+
+```text
+Source + Exam/SyllabusVersion/Topic
+        ↓
+Evidence → Claim → Verification → Human approval
+        ↓
+ContentVersion
+        ↓
+NoteDraft + QuestionBankItem
+        ↓ own review and release
+ContentPackage
+        ↓ own review and release
+ContentDocument
+        ↓ own review and release
+PdfArtifact
+        ↓ own review and release
+Released metadata + exact-byte PDF download
+```
+
+Use only existing APIs and behavior. The test must fail clearly if any existing boundary cannot participate in this complete workflow.
+
+## Exact implementation scope
+
+Create one focused integration test module:
+
+`tests/test_internal_deliverable_e2e.py`
+
+Prefer one primary end-to-end test with small local helper functions only where they improve readability. Do not duplicate large production logic in the test.
+
+Use FastAPI `TestClient` with the repository's normal database dependency override pattern and a real PostgreSQL transaction. The database name must end in `_test`. Do not use SQLite, mocks, service stubs, repository stubs, or direct database inserts to construct the workflow.
+
+The deterministic PDF renderer must execute normally.
+
+## Required workflow and assertions
+
+The smoke test must create and validate, through existing APIs, one coherent traceable chain:
+
+1. Create one authoritative Source.
+2. Create one Exam and one Topic.
+3. Create a sourced SyllabusVersion for that Exam containing that Topic.
+4. Create one ContentVersion for the exact SyllabusVersion/Topic mapping.
+5. Create Evidence owned by the Source.
+6. Create one Topic-owned Claim and link it to the Evidence through the existing Claim/Evidence endpoint.
+7. Create a Verification using that exact Evidence and prove the Claim verification summary is updated.
+8. Explicitly approve the Claim. Verification must not substitute for human approval.
+9. Create one NoteDraft for the exact Topic and ContentVersion; prove its stored Claim provenance.
+10. Create one complete QuestionBankItem for the same ContentVersion with:
+    - non-blank question and explanation;
+    - supported difficulty;
+    - at least two ordered options;
+    - one correct option;
+    - the exact approved Claim provenance.
+11. Independently approve and release the NoteDraft and QuestionBankItem.
+12. Read the ContentVersion released-assets manifest and prove it contains exactly those stored released assets with the expected ownership and provenance.
+13. Create one immutable ContentPackage from that ContentVersion and prove its retained ordered member IDs.
+14. Retrieve the package and expanded package content through existing boundaries; prove exact ContentVersion ownership and retained asset snapshots.
+15. Independently approve and release the ContentPackage.
+16. Create one deterministic ContentDocument from the released package and prove:
+    - exact package and ContentVersion ownership;
+    - stored title and Markdown;
+    - Notes and Practice Questions content from the retained assets;
+    - lowercase SHA-256 equals the digest of the exact UTF-8 Markdown;
+    - individual retrieval returns the exact stored response.
+17. Independently approve and release the ContentDocument and prove it appears in the existing released-document collection.
+18. Create one PdfArtifact from the released document and prove:
+    - exact document/package/ContentVersion ownership;
+    - filename and `application/pdf` metadata;
+    - positive byte size and lowercase SHA-256;
+    - metadata contains no raw bytes;
+    - internal download returns PDF bytes whose length and SHA-256 equal stored metadata.
+19. Independently approve and release the PdfArtifact.
+20. Prove the released-artifact collection contains the exact stored artifact metadata.
+21. Download through the released-only boundary and prove:
+    - HTTP 200;
+    - exact equality with the earlier internal stored-byte download;
+    - `Content-Type`, `Content-Length`, and attachment filename match stored metadata;
+    - downloaded length and lowercase SHA-256 match the artifact metadata.
+
+Assert the important HTTP status at every transition. Preserve and compare exact IDs across each ownership/provenance boundary so the test proves one coherent chain rather than unrelated successful requests.
+
+## Trust-boundary requirements
+
+The test must visibly preserve these distinctions:
+
+- Evidence-based Verification is separate from Claim human approval.
+- Each canonical asset, package, document, and artifact uses its own approval and release transition.
+- Release is not inferred from approval.
+- QuestionBankItem is reusable practice content, not a PreviousQuestion.
+- The learner does not receive independently regenerated copies.
+- Final delivery uses the stored released PdfArtifact bytes.
+
+Do not bypass review/release endpoints by directly changing database state.
+
+## Production-code boundary
+
+No production-code change is expected.
+
+Inspect relevant routes, schemas, services, repositories, models, and migrations, but leave them unchanged. If the end-to-end workflow exposes a genuine production defect, stop and report the exact blocker instead of silently expanding T-047 into an application fix.
+
+Do not modify existing tests merely to make the new smoke test pass, except for a genuinely necessary shared test-fixture correction that is clearly reported and does not weaken coverage.
+
+## Persistence and migrations
+
+No model, registration, constraint, or migration change is required.
+
+- Alembic head must remain `a5d2c8f1e736`.
+- Do not create a migration.
+- Do not edit any historical migration.
+- The test transaction must cleanly roll back through the established fixture behavior.
+
+## Dependencies, configuration, and infrastructure
+
+Inspect and leave unchanged:
+
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- deterministic PDF renderer;
+- `AGENTS.md`;
+- `README.md`.
+
+No dependency, API key, secret, environment variable, Docker service, object storage, queue, or infrastructure change is required.
+
+## Documentation
+
+Update only implemented test reality:
+
+- update `docs/workflow.md` with the end-to-end workflow and exact validation evidence;
+- update `docs/architecture.md` only if needed to record that the existing internal pipeline is now covered end to end, without claiming new runtime behavior;
+- append a T-047 implementation record to `docs/task_log.md`;
+- append a T-047 implementation note to `docs/next_task.md`.
+
+Keep `docs/task_log.md` and `docs/next_task.md` append-only. Record T-047 only as **Ready for review**, never approved. Do not define T-048.
+
+## Required validation
+
+Use a dedicated PostgreSQL database whose name ends in `_test`.
+
+Run and report:
+
+- the focused T-047 smoke test;
+- complete PdfArtifact suite;
+- complete ContentPackage/ContentDocument suite;
+- complete knowledge API suite;
+- ContentVersion/released-assets tests;
+- NoteDraft suites;
+- QuestionBankItem suites;
+- full test suite;
+- Ruff on every changed Python file;
+- `uv lock --check` or repository-equivalent lock verification;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh migration upgrade through unchanged head `a5d2c8f1e736`;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Report developer-run validation accurately. Do not call it GitHub CI.
+
+## Scope exclusions
+
+Do not add or implement:
+
+- new production endpoints or runtime behavior;
+- source discovery, fetching, scraping, ingestion, snapshots, extraction, or chunking;
+- autonomous agents or orchestration;
+- LLM/provider abstraction, API keys, prompts, generation, evaluation, RAG, embeddings, or pgvector behavior;
+- PreviousPaper/PreviousQuestion conversion;
+- learner/public APIs, users, authentication, authorization, profiles, progress, attempts, plans, mocks, personalization, payments, or frontend;
+- publication entities or lifecycle;
+- external/object/blob/CDN storage;
+- background jobs or queues;
+- production deployment, monitoring, security, or CI/CD;
+- T-048.
+
+## Expected handoff
+
+Report:
+
+- verified starting and final Git state;
+- exact files changed;
+- complete API workflow exercised;
+- exact provenance and ownership chain asserted;
+- approval/release boundaries asserted;
+- Markdown and PDF checksum/byte evidence;
+- focused and regression validation;
+- unchanged production code, migration head, dependencies, configuration, Docker, renderer, AGENTS.md, and README;
+- explicit excluded scope.
+
+Leave T-047 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-048.
+
+The next likely task after T-047, subject to independent review, is a bounded SourceDiscoveryRun and SourceCandidate persistence foundation.
