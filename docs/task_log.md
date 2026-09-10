@@ -1525,3 +1525,33 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | Focused T-046: 4 passed, 51 deselected, 1 warning in 2.01s. Complete PdfArtifact: 55 passed, 1 warning in 8.77s. ContentPackage/ContentDocument: 61 passed, 1 warning in 9.73s. T-041 released documents: 2 passed, 59 deselected, 1 warning in 1.27s. ContentVersion/T-030: 15 passed, 1 warning in 1.64s. NoteDraft: 43 passed, 1 warning in 3.27s. QuestionBankItem: 54 passed, 1 warning in 3.29s. Full suite: 304 passed, 1 warning in 25.39s. |
 | Validation | Fresh upgrade through unchanged head, changed-file Ruff, dependency-lock verification, Alembic head/check, and diff checks passed on dedicated `_test` databases. |
 | Notes | Collection filtering and ordering occur in PostgreSQL; released download returns exact stored bytes and headers. Each boundary uses one lock-free, no-autoflush PdfArtifact-only SELECT and ignores related state. T-046 is Ready for review, not approved. No publication, public/learner delivery, external storage, AI, personalization, end-to-end smoke workflow, or T-047 was added. |
+
+
+---
+
+## T-046 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-046` |
+| Implementation commit | `40c66d108b3c7b69ead420fd4e65a9de146f607d` |
+| Correction commit | `2f7e5c5ea7e50f9ee533d9ba8bf9485aae305ca2` |
+| Base/task-issuance commit | `7af933509ca583350d813f1540ad686eaee96489` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only current-RELEASED PdfArtifact metadata collection and exact stored-byte released-download boundary |
+| Persistence | No model or migration change; Alembic head remains `a5d2c8f1e736` |
+| Validation evidence | Developer-recorded: corrected Verification-state test 1 passed; 4 focused T-046 tests, 55 complete PdfArtifact tests, and 304 full-suite tests, each with one existing warning; Ruff, dependency-lock verification, Alembic head/check, fresh upgrade, and diff checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is one commit over the issued base and the correction is one test-only child. Route ordering, exact filtering/order/bytes/headers/404 behavior, one-query boundaries, related-state independence including post-release Verification, compatibility, documentation, and exclusions satisfy the canonical task. |
+| Boundaries | No model, schema, migration, renderer, dependency, configuration, Docker, AGENTS.md, README, publication, external storage, public/learner delivery, AI, personalization, end-to-end smoke workflow, or T-047 behavior was added. |
+
+---
+
+## T-047 issued — Add complete internal deliverable smoke workflow
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add one PostgreSQL-backed API-level integration workflow proving the existing trusted-content chain can produce and retrieve a released exact-byte PDF deliverable |
+| Architectural phase | Canonical Content / End-to-End Deliverable Validation |
+| Scope | Automated integration validation and documentation only; no new production behavior, schema, dependency, AI, learner, or infrastructure work |
+| Full implementation prompt | Appended to `docs/next_task.md` |
