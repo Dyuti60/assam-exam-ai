@@ -7191,3 +7191,202 @@ Do not define or implement T-046.
 Leave T-045 uncommitted and unpushed in the working tree for independent review.
 
 Implementation note (2026-09-10 Asia/Kolkata, UTC+05:30): added only the controlled PdfArtifact release lifecycle, migration `a5d2c8f1e736`, and `POST /api/v1/pdf-artifacts/{pdf_artifact_id}/release`. Existing and new artifacts default to UNRELEASED/null/null/null without inferred release. Only an independently APPROVED artifact can be released; withdrawal preserves the original UTC release time, records its own UTC time, replaces the note, and prevents in-place re-release. Release and conflicting review decisions lock only the target artifact, commit once on success, and roll back failures. Immutable bytes, checksum, ownership, metadata reads, and ungated internal download remain unchanged. T-045 is Ready for review, not approved. No released-artifact collection, released-only download, publication, external storage, public/learner delivery, dependency, configuration, Docker, renderer, AI, personalization, or T-046 work was added.
+
+
+---
+
+# T-045 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-045` |
+| Implementation commit | `72cb1316980e49444292744629276d7b513985f1` |
+| Base/task-issuance commit | `4677c5af806146f35155026db6d53deca0064f1f` |
+| Review result | **APPROVED** |
+| Approved capability | Controlled database-enforced UNRELEASED/RELEASED/WITHDRAWN lifecycle for independently reviewed immutable PdfArtifacts |
+| Independent review | Exact commit ancestry/diff, model/migration parity, constraints, API transitions/errors, approval interaction, target-only locking, atomicity, rollback, state independence, compatibility, tests, documentation, unchanged dependencies/configuration, and excluded scope were inspected. No blocking finding was identified. |
+| CI evidence | GitHub exposes no status contexts or workflow runs. Recorded validation remains developer evidence, not a claimed CI pass. |
+
+# T-046 — Add released PdfArtifact delivery boundary
+
+## Role
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read the live repository before editing and follow `AGENTS.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt.
+
+Repository code is authoritative. Preserve append-only history in `docs/task_log.md` and `docs/next_task.md`.
+
+## Starting-state verification
+
+Before editing:
+
+1. Confirm branch `main`, fetch `origin/main`, and confirm a clean working tree.
+2. Confirm HEAD is the documentation commit that approves T-045 and issues T-046.
+3. Confirm T-045 implementation commit `72cb1316980e49444292744629276d7b513985f1` has exact issuance parent `4677c5af806146f35155026db6d53deca0064f1f`.
+4. Read PdfArtifact, migration `a5d2c8f1e736`, schemas, repository/service/routes, complete PdfArtifact tests, and existing released ContentPackage/ContentDocument collection patterns.
+5. Confirm Alembic has one head: `a5d2c8f1e736`.
+6. Stop and report repository divergence that materially changes this task.
+
+## Objective
+
+Add a read-only internal delivery boundary that exposes only currently RELEASED PdfArtifacts:
+
+- a stable metadata collection;
+- an exact stored-byte download for one currently RELEASED artifact.
+
+This boundary must filter only on the PdfArtifact's own current `release_status`. Approval or related state cannot substitute for release and cannot remove a currently RELEASED artifact.
+
+## Required API
+
+Add exactly these endpoints under `/api/v1`:
+
+1. `GET /pdf-artifacts/released`
+   - Return HTTP 200 and a JSON list of existing `PdfArtifactResponse` values.
+   - Include only rows whose current PdfArtifact `release_status` is exactly `RELEASED`.
+   - Order by ascending PdfArtifact ID.
+   - Return `[]` when none qualify.
+   - Never include raw `pdf_bytes`.
+
+2. `GET /pdf-artifacts/released/{pdf_artifact_id}/download`
+   - Return HTTP 200 only when that exact PdfArtifact currently has `release_status == RELEASED`.
+   - Return its exact stored `pdf_bytes` byte-for-byte.
+   - Set `Content-Type` from stored `media_type`.
+   - Set `Content-Length` from stored `byte_size`.
+   - Set attachment `Content-Disposition` using the exact stored filename.
+   - Treat both a missing artifact and an existing non-RELEASED artifact as HTTP 404 with exact detail `PdfArtifact <id> not found`.
+
+Register both static `released` routes before all dynamic `/pdf-artifacts/{pdf_artifact_id}` routes so `released` cannot be captured as an artifact ID.
+
+Keep routes thin:
+
+`Route -> response adaptation -> Service -> Repository -> PostgreSQL`
+
+## Repository query boundaries
+
+Add the smallest read-only repository methods required:
+
+- released collection: select PdfArtifact rows filtered exactly by `release_status == 'RELEASED'`, ordered by ascending `id`;
+- released download: select by exact PdfArtifact ID and `release_status == 'RELEASED'` in the same query.
+
+Each endpoint must use one PdfArtifact-only SELECT under `no_autoflush`.
+
+Do not:
+
+- join or eager/lazy-load related tables;
+- lock rows;
+- insert, update, delete, flush, commit, refresh, regenerate, repair, hash, or re-render;
+- query current ContentDocument, ContentPackage, membership, NoteDraft, QuestionBankItem, Claim, Evidence, Verification, Source, Exam, SyllabusVersion, Topic, ContentVersion, priority, or manifest state.
+
+Collection and download eligibility changes only when the PdfArtifact's own release state changes. Later upstream withdrawal/rejection does not remove a still-RELEASED artifact. Withdrawing the artifact itself removes it from the collection and released-download boundary.
+
+## Service and response behavior
+
+Reuse the existing stored PdfArtifact metadata serializer for collection responses. Reuse the existing immutable download value object or an equally narrow internal representation for exact-byte delivery.
+
+Do not expose bytes through Pydantic metadata. Do not recalculate byte size or checksum.
+
+The released-download 404 must not translate unrelated database/programming failures. The existing internal metadata and ungated internal download endpoints must remain unchanged.
+
+## Persistence boundary
+
+No model, model registration, database constraint, or migration change is required. Alembic head must remain `a5d2c8f1e736`.
+
+Do not edit any historical migration. If a schema change appears necessary, stop and report it instead of expanding T-046.
+
+## Required tests
+
+Add focused PostgreSQL-backed tests proving at minimum:
+
+- the released collection returns `[]` when no artifact is RELEASED;
+- only RELEASED artifacts are returned; UNRELEASED and WITHDRAWN are excluded;
+- collection ordering is ascending artifact ID;
+- collection metadata is exact and never contains raw bytes;
+- released download returns exact stored bytes and exact stored content headers;
+- missing, UNRELEASED, and WITHDRAWN released-download requests return the stable 404;
+- own approval without release does not qualify;
+- upstream document/package/member/Claim/Verification changes do not affect a still-RELEASED artifact;
+- artifact withdrawal alone removes it from collection and released download;
+- each request issues exactly one PdfArtifact-only, no-autoflush SELECT with no joins or related-table loading;
+- neither endpoint uses `FOR UPDATE`, writes, flushes, commits, rendering, or SHA-256 recalculation;
+- static route ordering keeps both released routes reachable and does not break existing dynamic metadata/download/approval/release routes;
+- existing internal download remains ungated and exact for UNRELEASED, RELEASED, and WITHDRAWN artifacts;
+- T-042 through T-045 behavior and earlier canonical-content/provenance boundaries remain compatible.
+
+Use a dedicated PostgreSQL database whose name ends in `_test`. Do not use SQLite as a substitute.
+
+## Validation
+
+Run and report:
+
+- focused T-046 released-delivery tests;
+- complete PdfArtifact suite;
+- complete ContentPackage/ContentDocument suite;
+- T-041 released-document tests;
+- T-030 released-assets and ContentVersion tests;
+- NoteDraft and released-NoteDraft tests;
+- QuestionBankItem and released-QuestionBankItem tests;
+- full suite;
+- Ruff on all changed Python;
+- `uv lock --check` or repository-equivalent lock verification;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh upgrade through unchanged head `a5d2c8f1e736`;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Report developer-run results accurately and do not describe them as GitHub CI.
+
+## Affected components
+
+Inspect and modify only where required:
+
+- existing PdfArtifact response/download support;
+- knowledge repository;
+- knowledge service;
+- knowledge routes;
+- focused PdfArtifact tests;
+- `docs/architecture.md` and `docs/workflow.md` for implemented current state;
+- append-only implementation records in `docs/task_log.md` and `docs/next_task.md`.
+
+Inspect and leave unchanged unless a genuine inconsistency requires otherwise:
+
+- all models and model registration;
+- migration `a5d2c8f1e736` and all historical migrations;
+- deterministic PDF renderer;
+- `pyproject.toml` and `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+No dependency, API key, environment variable, secret, configuration value, Docker service, renderer change, external storage, or infrastructure is required. Leave these files unchanged and report that.
+
+## Scope exclusions
+
+Do not add approved-only artifact collection; publication entity/lifecycle; public/learner authentication or authorization; learner delivery APIs; ContentDocument-keyed artifact lookup; general artifact list; external object/file/blob/CDN storage; presigned URLs; range/conditional requests; ETags or cache policy; artifact update/delete/replacement/regeneration/repair; HTML artifacts; background jobs/queues; AI/LLM/provider keys/source discovery/ingestion/RAG/embeddings/scraping; mock assembly/sessions/scoring/analytics/recommendations/personalization; payments; production infrastructure; end-to-end smoke workflow; or T-047.
+
+Human approval, release, publication, and future public delivery remain distinct boundaries.
+
+## Documentation and handoff
+
+Document only implemented behavior. Keep `docs/task_log.md` and `docs/next_task.md` append-only. Record T-046 only as `Ready for review`; do not approve it and do not define or implement T-047.
+
+Report:
+
+- starting/final Git state and exact files;
+- both endpoints and route ordering;
+- exact filtering, ordering, 404, bytes, and headers;
+- query count and PdfArtifact-only/no-lock/no-write behavior;
+- state-independence and withdrawal evidence;
+- focused/regression/full-suite validation;
+- unchanged migration/dependencies/configuration/Docker/renderer state;
+- explicit excluded scope.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-047.
+
+Leave T-046 uncommitted and unpushed in the working tree for independent review.
