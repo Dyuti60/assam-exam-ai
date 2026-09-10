@@ -7642,3 +7642,355 @@ Do not define or implement T-048.
 The next likely task after T-047, subject to independent review, is a bounded SourceDiscoveryRun and SourceCandidate persistence foundation.
 
 Implementation note (2026-09-10 Asia/Kolkata, UTC+05:30): added only `tests/test_internal_deliverable_e2e.py`, a PostgreSQL-backed API smoke workflow that exercises the existing trusted chain from authoritative Source, Evidence-linked Verification, and explicit Claim approval through exact ContentVersion-owned NoteDraft and QuestionBankItem snapshots, independent review/release stages, immutable package and deterministic document/PDF snapshots, and exact stored-byte released delivery. It asserts coherent provenance/ownership IDs, approval/release separation, exact Markdown and UTF-8 SHA-256, exact PDF bytes/headers/size/SHA-256, and no raw bytes in metadata. No production code, model, schema, migration, renderer, dependency, configuration, Docker, SourceDiscoveryRun, AI, learner/public delivery, publication, infrastructure, or T-048 work was added. Exact validation is recorded in `docs/workflow.md` and `docs/task_log.md`. T-047 is Ready for review, not approved.
+
+
+---
+
+# T-047 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-047` |
+| Implementation commit | `38eb63189c66167258ad2cbc54b5d9d3d79f4fe8` |
+| Base/task-issuance commit | `e18ad840ac98ef174289673c470266b092bf8b9e` |
+| Review result | **APPROVED** |
+| Approved capability | End-to-end PostgreSQL API validation of the existing trusted internal deliverable workflow through released exact-byte PDF delivery |
+| Independent review | Exact ancestry and complete diff were inspected. The implementation is test/documentation only, uses existing APIs and real PostgreSQL without mocks or direct inserts, preserves all provenance and independent approval/release boundaries, and validates deterministic Markdown and exact stored PDF bytes. |
+| CI evidence | GitHub exposes no status contexts or workflow runs. Recorded validation remains developer evidence, not a claimed CI pass. |
+
+# T-048 — Persist SourceDiscoveryRun and SourceCandidate snapshots
+
+## Role
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read the live repository before editing and follow `AGENTS.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt.
+
+Repository code is authoritative. Preserve append-only history in `docs/task_log.md` and `docs/next_task.md`.
+
+## Architectural classification
+
+Content Factory / Source Discovery Foundation.
+
+This task adds auditable persistence only. It does not discover, fetch, scrape, trust, approve, ingest, or convert any source.
+
+## Starting-state verification
+
+Before editing:
+
+1. Confirm branch `main`, fetch `origin/main`, and confirm a clean working tree.
+2. Confirm HEAD is the documentation commit approving T-047 and issuing T-048.
+3. Confirm T-047 implementation commit `38eb63189c66167258ad2cbc54b5d9d3d79f4fe8` has exact issuance parent `e18ad840ac98ef174289673c470266b092bf8b9e`.
+4. Read existing Source models, schemas, repository/service/routes, model registration, migration conventions, PostgreSQL tests, and documentation.
+5. Confirm Alembic has one head: `a5d2c8f1e736`.
+6. Stop and report repository divergence that materially changes this task.
+
+## Objective
+
+Persist an immutable audit snapshot for a completed source-discovery attempt and its ordered candidate results.
+
+The boundary is:
+
+```text
+Discovery attempt metadata
+        ↓
+SourceDiscoveryRun
+        ↓
+ordered SourceCandidate snapshots
+        ↓
+future review/discovery/fetch work
+```
+
+A SourceCandidate is an untrusted discovery lead. It is not a trusted `Source`, `Evidence`, verification, approval, or permission to fetch or ingest content.
+
+## Domain model
+
+Add `SourceDiscoveryRun` and `SourceCandidate` as separate SQLAlchemy models and register them in `app/models/__init__.py`.
+
+### SourceDiscoveryRun
+
+Persist exactly:
+
+- `id`: integer primary key;
+- `query`: non-blank text;
+- `adapter_key`: non-blank string, maximum 100 characters, identifying the generic discovery mechanism/version that produced the recorded result, for example `manual-test-v1`; it is not a provider credential;
+- `status`: `SUCCEEDED` or `FAILED`;
+- `error_message`: nullable text;
+- `created_at`: timezone-aware database-generated timestamp.
+
+Lifecycle:
+
+- `SUCCEEDED` requires `error_message IS NULL`;
+- `FAILED` requires a non-blank `error_message`;
+- repeated runs with the same query and adapter key are allowed because each run is a distinct audit event;
+- no update or delete API is added.
+
+### SourceCandidate
+
+Persist exactly:
+
+- `id`: integer primary key;
+- `source_discovery_run_id`: required reference to one SourceDiscoveryRun;
+- `run_status`: required stored value constrained to `SUCCEEDED`;
+- `position`: non-negative integer preserving request order;
+- `location`: non-blank text containing the candidate location/URL;
+- `title`: nullable text;
+- `publisher`: nullable string, maximum 255 characters;
+- `snippet`: nullable text;
+- `created_at`: timezone-aware database-generated timestamp.
+
+Candidate rules:
+
+- positions are assigned by the service from request-list order, beginning at zero; clients do not submit positions;
+- exact candidate locations must be unique within one run;
+- positions must be unique within one run;
+- the same location may appear in different runs so cross-run discovery history is preserved;
+- a composite foreign key through `(source_discovery_run_id, run_status)` must ensure PostgreSQL permits candidates only for a `SUCCEEDED` run;
+- support that composite reference with a named unique constraint on `SourceDiscoveryRun(id, status)`;
+- deleting a referenced run must be restricted;
+- no relationship to the existing Source table is added;
+- no candidate approval/rejection or promotion state is added.
+
+Use explicit named PostgreSQL constraints for status, lifecycle, non-blank text, non-negative position, per-run position uniqueness, per-run location uniqueness, composite run/status identity, and the foreign key.
+
+Optional text fields may be null. If supplied, `title`, `publisher`, and `snippet` must contain non-whitespace content; enforce this in both schemas and PostgreSQL checks.
+
+## API contract
+
+Add exactly two internal endpoints under `/api/v1`.
+
+### POST /source-discovery-runs
+
+Return HTTP 201.
+
+Request:
+
+```json
+{
+  "query": "Assam government official geography resources",
+  "adapter_key": "manual-test-v1",
+  "status": "SUCCEEDED",
+  "error_message": null,
+  "candidates": [
+    {
+      "location": "https://example.gov/assam/geography",
+      "title": "Official Assam Geography",
+      "publisher": "Government of Assam",
+      "snippet": "Official geographic reference"
+    }
+  ]
+}
+```
+
+Rules:
+
+- trim surrounding whitespace from query, adapter key, location, and supplied optional text before persistence;
+- `SUCCEEDED` accepts zero or more candidates and requires null error_message;
+- `FAILED` requires non-blank error_message and requires an empty candidate list;
+- duplicate candidate locations after trimming return HTTP 422;
+- candidates are persisted in request order with zero-based positions;
+- return the stored run with candidates ordered by position.
+
+Creation must be atomic:
+
+1. validate the request;
+2. create the run and all candidates;
+3. flush database constraints;
+4. commit exactly once;
+5. roll back every failure;
+6. reload the stored aggregate after commit.
+
+Do not lock unrelated rows. Do not create or update Source records.
+
+Do not translate unrelated integrity or programming errors. If a named per-run uniqueness constraint is encountered, roll back and return a stable HTTP 409 detail:
+
+`SourceDiscoveryRun candidate positions or locations conflict`
+
+Schema validation should normally return 422 before this path for duplicate locations in one request; database constraints remain authoritative.
+
+### GET /source-discovery-runs/{source_discovery_run_id}
+
+Return the exact stored run and ordered candidates.
+
+Missing ID returns HTTP 404 with exact detail:
+
+`SourceDiscoveryRun <id> not found`
+
+The read must use no locks or writes. Load the run and ordered candidates without N+1 queries.
+
+## Schemas
+
+Add explicit enums and schemas for:
+
+- discovery status;
+- SourceCandidate create input;
+- SourceCandidate response;
+- SourceDiscoveryRun create input;
+- SourceDiscoveryRun response.
+
+Validate and normalize whitespace deterministically. Preserve response ordering. Do not expose ORM internals.
+
+## Layering
+
+Preserve:
+
+```text
+Route
+  ↓
+Pydantic schema
+  ↓
+Service
+  ↓
+Repository
+  ↓
+PostgreSQL
+```
+
+Routes must remain thin.
+
+Repository responsibilities:
+
+- add one run aggregate;
+- retrieve one run with candidates eagerly loaded in stored position order.
+
+Service responsibilities:
+
+- assign candidate positions;
+- construct the aggregate;
+- manage one transaction;
+- translate only the named expected uniqueness conflict;
+- serialize the exact stored response.
+
+## Migration
+
+Add exactly one Alembic migration:
+
+- parent: `a5d2c8f1e736`;
+- create `source_discovery_runs` before `source_candidates`;
+- use model-equivalent columns, named constraints, indexes only where justified, and restricted deletion;
+- downgrade drops `source_candidates` before `source_discovery_runs`;
+- do not edit historical migrations;
+- do not infer or backfill discovery history from existing Sources.
+
+## Required tests
+
+Use PostgreSQL with a database name ending in `_test`. Do not use SQLite.
+
+Cover at minimum:
+
+- successful run with zero candidates;
+- successful run with multiple candidates retains exact zero-based request order;
+- failed run with non-blank error and no candidates;
+- 422 for blank query, adapter key, location, or supplied optional text;
+- 422 for invalid status/lifecycle combinations;
+- 422 for duplicate locations after trimming;
+- whitespace normalization is stored and returned consistently;
+- GET returns the exact stored aggregate with candidates in position order;
+- stable 404 for a missing run;
+- one-commit atomic success;
+- rollback leaves no run or candidate rows after a failure occurring after pending rows have been flushed;
+- direct PostgreSQL rejection of invalid status and lifecycle;
+- direct PostgreSQL rejection of blank required or supplied optional text;
+- direct PostgreSQL rejection of negative or duplicate positions;
+- direct PostgreSQL rejection of duplicate location within one run;
+- direct PostgreSQL rejection of a candidate attached to a FAILED run through the composite status reference;
+- direct PostgreSQL rejection of a missing run reference;
+- deletion restriction protects candidate provenance;
+- same query/adapter and same candidate location are allowed in separate runs;
+- no Source row is created or modified;
+- existing Source/Evidence/Claim/Verification and T-047 deliverable behavior remain compatible.
+
+Migration validation must prove:
+
+- fresh upgrade through the new head;
+- upgrade from `a5d2c8f1e736`;
+- downgrade to `a5d2c8f1e736`;
+- re-upgrade;
+- existing seeded pre-T-048 data survives unchanged;
+- no SourceDiscoveryRun or SourceCandidate is inferred from existing Sources;
+- downgrade removes only T-048 objects.
+
+## Dependencies, configuration, and infrastructure
+
+Inspect:
+
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+No new dependency, API key, secret, environment variable, configuration value, Docker service, browser, search provider, queue, object storage, or infrastructure is required. Leave these files unchanged and report that unless a genuine repository inconsistency requires otherwise.
+
+## Documentation
+
+Update only implemented reality:
+
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append the T-048 implementation record to `docs/task_log.md`;
+- append the T-048 implementation note to `docs/next_task.md`.
+
+Keep task history append-only. Record T-048 only as **Ready for review**, never approved. Do not define T-049.
+
+Update `AGENTS.md` only if a genuinely new durable rule is required; none is expected. README changes are not expected.
+
+## Scope exclusions
+
+Do not add:
+
+- actual network discovery, web search, crawling, scraping, robots handling, allowlists, retries, rate limiting, or external adapters;
+- candidate approval, rejection, review timestamps, human-review endpoints, or Source promotion;
+- Source creation from candidates;
+- fetch attempts, source snapshots, file/object storage, checksums, parsing, extraction, chunking, Evidence or Claim generation;
+- LLM/provider abstraction, prompts, API keys, embeddings, RAG, agents, orchestration, queues, or background jobs;
+- learner/public delivery, authentication, authorization, profiles, mocks, personalization, frontend, payments, deployment, or production infrastructure;
+- T-049.
+
+The existing Source remains trusted/curated input. SourceCandidate remains an untrusted lead.
+
+## Required validation
+
+Run and report:
+
+- focused T-048 API/model/constraint tests;
+- migration-specific tests;
+- existing Source/Evidence/Claim/Verification tests;
+- T-047 internal deliverable smoke test;
+- complete test suite;
+- Ruff on all changed Python;
+- `uv lock --check`;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh upgrade through the new migration head;
+- seeded upgrade/downgrade/re-upgrade cycle;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Report developer-run evidence accurately and do not call it GitHub CI.
+
+## Expected handoff
+
+Report:
+
+- starting and final Git state;
+- exact files changed;
+- model fields and named constraints;
+- migration revision and parent;
+- API request/response and stable errors;
+- ordering, immutability, deduplication, and failure atomicity;
+- migration-cycle evidence;
+- focused/regression/full-suite validation;
+- dependency/configuration/Docker/AGENTS.md/README decisions;
+- explicit excluded scope.
+
+Leave T-048 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-049.
+
+The next likely task after T-048, subject to independent review, is a separate human-review boundary for untrusted SourceCandidates before any Source promotion or ingestion.
