@@ -21,6 +21,7 @@ from app.models import (
     NoteDraft,
     PdfArtifact,
     QuestionBankItem,
+    Verification,
 )
 from app.repositories import KnowledgeRepository
 from app.services.pdf_renderer import (
@@ -189,6 +190,7 @@ def _released_document(client: TestClient, suffix: str) -> dict:
         "item": item,
         "package": package,
         "document": document,
+        "source": source,
         "version": version,
     }
 
@@ -1803,6 +1805,39 @@ def test_released_pdf_artifact_delivery_depends_only_on_own_release_state(
 ) -> None:
     fixture, created = _create_artifact(client, "delivery-independent")
     released = _approve_and_release_artifact(client, created["id"])
+    claim_before_verification = client.get(
+        f"/api/v1/claims/{fixture['claim']['id']}"
+    )
+    assert claim_before_verification.status_code == 200
+    assert claim_before_verification.json()["verification_status"] == "UNVERIFIED"
+    evidence = _post(
+        client,
+        "/api/v1/evidence",
+        {
+            "source_id": fixture["source"]["id"],
+            "content": "Post-release verification evidence.",
+        },
+    )
+    verification = _post(
+        client,
+        "/api/v1/verifications",
+        {
+            "claim_id": fixture["claim"]["id"],
+            "verdict": "SUPPORTED",
+            "confidence": 0.97,
+            "reasoning": "Created after the artifact release decision.",
+            "evidence": [
+                {
+                    "evidence_id": evidence["id"],
+                    "evidence_role": "SUPPORTS",
+                    "position": 0,
+                }
+            ],
+        },
+    )
+    assert verification["claim"]["verification_status"] == "SUPPORTED"
+    assert verification["claim"]["confidence"] == 0.97
+    assert verification["claim"]["last_verified_at"] == verification["created_at"]
     state_changes = (
         (
             f"/api/v1/content-documents/{fixture['document']['id']}/release",
@@ -1837,8 +1872,17 @@ def test_released_pdf_artifact_delivery_depends_only_on_own_release_state(
         response = client.post(path, json=payload)
         assert response.status_code == 200, response.text
 
+    verification_response_before = client.get(
+        f"/api/v1/verifications/{verification['id']}"
+    )
+    evidence_response_before = client.get(f"/api/v1/evidence/{evidence['id']}")
+    assert verification_response_before.status_code == 200
+    assert evidence_response_before.status_code == 200
     artifact_before = db_connection.execute(
         select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    verification_before = db_connection.execute(
+        select(Verification.__table__).where(Verification.id == verification["id"])
     ).mappings().one()
     related_before = _related_snapshot(db_connection, fixture)
     collection = client.get("/api/v1/pdf-artifacts/released")
@@ -1849,9 +1893,23 @@ def test_released_pdf_artifact_delivery_depends_only_on_own_release_state(
     assert released in collection.json()
     assert download.status_code == 200
     assert download.content == bytes(artifact_before["pdf_bytes"])
+    assert download.headers["content-type"] == artifact_before["media_type"]
+    assert download.headers["content-length"] == str(artifact_before["byte_size"])
+    assert download.headers["content-disposition"] == (
+        f'attachment; filename="{artifact_before["filename"]}"'
+    )
     assert artifact_before == db_connection.execute(
         select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
     ).mappings().one()
+    assert verification_before == db_connection.execute(
+        select(Verification.__table__).where(Verification.id == verification["id"])
+    ).mappings().one()
+    assert client.get(
+        f"/api/v1/verifications/{verification['id']}"
+    ).json() == verification_response_before.json()
+    assert client.get(
+        f"/api/v1/evidence/{evidence['id']}"
+    ).json() == evidence_response_before.json()
     assert _related_snapshot(db_connection, fixture) == related_before
 
     withdrawal = client.post(
