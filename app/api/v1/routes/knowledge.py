@@ -294,6 +294,37 @@ def create_pdf_artifact(
         raise _conflict(error) from error
 
 
+@router.get(
+    "/pdf-artifacts/released",
+    response_model=list[PdfArtifactResponse],
+)
+def get_released_pdf_artifacts(
+    db: DatabaseSession,
+) -> list[PdfArtifactResponse]:
+    return KnowledgeService(db).get_released_pdf_artifacts()
+
+
+@router.get("/pdf-artifacts/released/{pdf_artifact_id}/download")
+def download_released_pdf_artifact(
+    pdf_artifact_id: int,
+    db: DatabaseSession,
+) -> Response:
+    try:
+        download = KnowledgeService(db).download_released_pdf_artifact(
+            pdf_artifact_id
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    return Response(
+        content=download.pdf_bytes,
+        media_type=download.media_type,
+        headers={
+            "Content-Length": str(download.byte_size),
+            "Content-Disposition": f'attachment; filename="{download.filename}"',
+        },
+    )
+
+
 @router.get("/pdf-artifacts/{pdf_artifact_id}/download")
 def download_pdf_artifact(
     pdf_artifact_id: int,

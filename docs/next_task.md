@@ -7390,3 +7390,5 @@ Do not self-approve.
 Do not define or implement T-047.
 
 Leave T-046 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-10 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/pdf-artifacts/released` and `GET /api/v1/pdf-artifacts/released/{pdf_artifact_id}/download`. The collection filters exact current RELEASED state in PostgreSQL and orders stored metadata by ascending artifact ID; the download returns exact stored bytes and stored headers only for a currently RELEASED artifact, with missing and non-RELEASED targets sharing the established stable 404. Each endpoint uses one PdfArtifact-only, lock-free, no-autoflush SELECT and performs no write, render, hash, or related-state evaluation. No model, schema, migration, renderer, dependency, configuration, Docker, external-storage, publication, public/learner delivery, AI, personalization, end-to-end smoke, or T-047 work was added. Exact validation results are recorded in `docs/workflow.md` and `docs/task_log.md`. T-046 is Ready for review, not approved.

@@ -209,6 +209,26 @@ class KnowledgeRepository:
         with self.session.no_autoflush:
             return self.session.scalar(statement)
 
+    def get_released_pdf_artifacts(self) -> list[PdfArtifact]:
+        statement = (
+            select(PdfArtifact)
+            .where(PdfArtifact.release_status == "RELEASED")
+            .order_by(PdfArtifact.id)
+        )
+        with self.session.no_autoflush:
+            return list(self.session.scalars(statement))
+
+    def get_released_pdf_artifact(
+        self,
+        pdf_artifact_id: int,
+    ) -> PdfArtifact | None:
+        statement = select(PdfArtifact).where(
+            PdfArtifact.id == pdf_artifact_id,
+            PdfArtifact.release_status == "RELEASED",
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
     def get_pdf_artifact_for_update(
         self,
         pdf_artifact_id: int,

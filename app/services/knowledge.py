@@ -701,6 +701,26 @@ class KnowledgeService:
             pdf_bytes=bytes(pdf_artifact.pdf_bytes),
         )
 
+    def get_released_pdf_artifacts(self) -> list[PdfArtifactResponse]:
+        return [
+            self._pdf_artifact_response(pdf_artifact)
+            for pdf_artifact in self.repository.get_released_pdf_artifacts()
+        ]
+
+    def download_released_pdf_artifact(
+        self,
+        pdf_artifact_id: int,
+    ) -> PdfArtifactDownload:
+        pdf_artifact = self.repository.get_released_pdf_artifact(pdf_artifact_id)
+        if pdf_artifact is None:
+            raise ResourceNotFoundError("PdfArtifact", pdf_artifact_id)
+        return PdfArtifactDownload(
+            filename=pdf_artifact.filename,
+            media_type=pdf_artifact.media_type,
+            byte_size=pdf_artifact.byte_size,
+            pdf_bytes=bytes(pdf_artifact.pdf_bytes),
+        )
+
     def record_pdf_artifact_approval(
         self,
         pdf_artifact_id: int,

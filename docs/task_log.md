@@ -1512,3 +1512,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Released Artifact Delivery Boundary |
 | Scope | Released metadata collection and released-only exact-byte download only; no persistence, publication record, authentication, public learner delivery, external storage, or T-047 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-046 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only `GET /api/v1/pdf-artifacts/released` and `GET /api/v1/pdf-artifacts/released/{pdf_artifact_id}/download` as current-RELEASED, read-only stored-artifact boundaries |
+| Persistence | No model or migration change; Alembic head remains `a5d2c8f1e736` |
+| Tests | Focused T-046: 4 passed, 51 deselected, 1 warning in 2.01s. Complete PdfArtifact: 55 passed, 1 warning in 8.77s. ContentPackage/ContentDocument: 61 passed, 1 warning in 9.73s. T-041 released documents: 2 passed, 59 deselected, 1 warning in 1.27s. ContentVersion/T-030: 15 passed, 1 warning in 1.64s. NoteDraft: 43 passed, 1 warning in 3.27s. QuestionBankItem: 54 passed, 1 warning in 3.29s. Full suite: 304 passed, 1 warning in 25.39s. |
+| Validation | Fresh upgrade through unchanged head, changed-file Ruff, dependency-lock verification, Alembic head/check, and diff checks passed on dedicated `_test` databases. |
+| Notes | Collection filtering and ordering occur in PostgreSQL; released download returns exact stored bytes and headers. Each boundary uses one lock-free, no-autoflush PdfArtifact-only SELECT and ignores related state. T-046 is Ready for review, not approved. No publication, public/learner delivery, external storage, AI, personalization, end-to-end smoke workflow, or T-047 was added. |

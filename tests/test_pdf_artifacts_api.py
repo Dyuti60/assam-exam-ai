@@ -9,6 +9,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import app.services.knowledge as knowledge_service_module
 from app.core.database import engine, get_db
 from app.main import app
 from app.models import (
@@ -203,6 +204,20 @@ def _create_artifact(client: TestClient, suffix: str) -> tuple[dict, dict]:
     )
     assert response.status_code == 201, response.text
     return fixture, response.json()
+
+
+def _approve_and_release_artifact(client: TestClient, artifact_id: int) -> dict:
+    approval = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "delivery approved"},
+    )
+    assert approval.status_code == 200, approval.text
+    release = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/release",
+        json={"release_status": "RELEASED", "release_note": "delivery release"},
+    )
+    assert release.status_code == 200, release.text
+    return release.json()
 
 
 def _related_snapshot(connection: Connection, fixture: dict) -> tuple[object, ...]:
@@ -1743,3 +1758,250 @@ def test_pdf_artifact_download_is_unchanged_by_release_state(
         assert download.headers["content-disposition"] == unreleased.headers[
             "content-disposition"
         ]
+
+
+def test_released_pdf_artifact_collection_empty_and_exact_ordered_metadata(
+    client: TestClient,
+) -> None:
+    empty = client.get("/api/v1/pdf-artifacts/released")
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    _, first = _create_artifact(client, "delivery-first")
+    _, unreleased = _create_artifact(client, "delivery-unreleased")
+    _, second = _create_artifact(client, "delivery-second")
+    first_released = _approve_and_release_artifact(client, first["id"])
+    unreleased_approval = client.post(
+        f"/api/v1/pdf-artifacts/{unreleased['id']}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert unreleased_approval.status_code == 200, unreleased_approval.text
+    second_released = _approve_and_release_artifact(client, second["id"])
+    _, withdrawn = _create_artifact(client, "delivery-withdrawn")
+    _approve_and_release_artifact(client, withdrawn["id"])
+    withdrawal = client.post(
+        f"/api/v1/pdf-artifacts/{withdrawn['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawal.status_code == 200, withdrawal.text
+
+    response = client.get("/api/v1/pdf-artifacts/released")
+
+    assert response.status_code == 200
+    assert response.json() == [first_released, second_released]
+    assert [artifact["id"] for artifact in response.json()] == sorted(
+        [first["id"], second["id"]]
+    )
+    assert all("pdf_bytes" not in artifact for artifact in response.json())
+    assert unreleased["id"] not in [artifact["id"] for artifact in response.json()]
+    assert withdrawn["id"] not in [artifact["id"] for artifact in response.json()]
+
+
+def test_released_pdf_artifact_delivery_depends_only_on_own_release_state(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    fixture, created = _create_artifact(client, "delivery-independent")
+    released = _approve_and_release_artifact(client, created["id"])
+    state_changes = (
+        (
+            f"/api/v1/content-documents/{fixture['document']['id']}/release",
+            {"release_status": "WITHDRAWN"},
+        ),
+        (
+            f"/api/v1/content-packages/{fixture['package']['id']}/release",
+            {"release_status": "WITHDRAWN"},
+        ),
+        (
+            f"/api/v1/note-drafts/{fixture['draft']['id']}/release",
+            {"release_status": "WITHDRAWN"},
+        ),
+        (
+            f"/api/v1/note-drafts/{fixture['draft']['id']}/approval",
+            {"approval_status": "REJECTED"},
+        ),
+        (
+            f"/api/v1/question-bank-items/{fixture['item']['id']}/release",
+            {"release_status": "WITHDRAWN"},
+        ),
+        (
+            f"/api/v1/question-bank-items/{fixture['item']['id']}/approval",
+            {"approval_status": "REJECTED"},
+        ),
+        (
+            f"/api/v1/claims/{fixture['claim']['id']}/approval",
+            {"approval_status": "REJECTED"},
+        ),
+    )
+    for path, payload in state_changes:
+        response = client.post(path, json=payload)
+        assert response.status_code == 200, response.text
+
+    artifact_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    related_before = _related_snapshot(db_connection, fixture)
+    collection = client.get("/api/v1/pdf-artifacts/released")
+    download = client.get(
+        f"/api/v1/pdf-artifacts/released/{created['id']}/download"
+    )
+    assert collection.status_code == 200
+    assert released in collection.json()
+    assert download.status_code == 200
+    assert download.content == bytes(artifact_before["pdf_bytes"])
+    assert artifact_before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    assert _related_snapshot(db_connection, fixture) == related_before
+
+    withdrawal = client.post(
+        f"/api/v1/pdf-artifacts/{created['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawal.status_code == 200, withdrawal.text
+    assert created["id"] not in [
+        artifact["id"]
+        for artifact in client.get("/api/v1/pdf-artifacts/released").json()
+    ]
+    unavailable = client.get(
+        f"/api/v1/pdf-artifacts/released/{created['id']}/download"
+    )
+    assert unavailable.status_code == 404
+    assert unavailable.json() == {
+        "detail": f"PdfArtifact {created['id']} not found"
+    }
+
+
+def test_released_pdf_artifact_download_exact_bytes_headers_and_stable_404(
+    client: TestClient,
+) -> None:
+    missing = client.get("/api/v1/pdf-artifacts/released/999999/download")
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "PdfArtifact 999999 not found"}
+
+    _, created = _create_artifact(client, "delivery-download")
+    artifact_id = created["id"]
+    internal_unreleased = client.get(f"/api/v1/pdf-artifacts/{artifact_id}/download")
+    unreleased = client.get(
+        f"/api/v1/pdf-artifacts/released/{artifact_id}/download"
+    )
+    assert unreleased.status_code == 404
+    assert unreleased.json() == {"detail": f"PdfArtifact {artifact_id} not found"}
+
+    released = _approve_and_release_artifact(client, artifact_id)
+    delivery = client.get(f"/api/v1/pdf-artifacts/released/{artifact_id}/download")
+    assert delivery.status_code == 200
+    assert delivery.content == internal_unreleased.content
+    assert delivery.headers["content-type"] == released["media_type"]
+    assert delivery.headers["content-length"] == str(released["byte_size"])
+    assert delivery.headers["content-disposition"] == (
+        f'attachment; filename="{released["filename"]}"'
+    )
+
+    withdrawal = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawal.status_code == 200, withdrawal.text
+    withdrawn = client.get(f"/api/v1/pdf-artifacts/released/{artifact_id}/download")
+    assert withdrawn.status_code == 404
+    assert withdrawn.json() == {"detail": f"PdfArtifact {artifact_id} not found"}
+    internal_withdrawn = client.get(f"/api/v1/pdf-artifacts/{artifact_id}/download")
+    assert internal_withdrawn.content == internal_unreleased.content
+    assert internal_withdrawn.headers["content-type"] == internal_unreleased.headers[
+        "content-type"
+    ]
+    assert internal_withdrawn.headers["content-length"] == internal_unreleased.headers[
+        "content-length"
+    ]
+    assert internal_withdrawn.headers["content-disposition"] == (
+        internal_unreleased.headers["content-disposition"]
+    )
+
+
+def test_released_pdf_artifact_reads_use_one_pdf_only_query_and_no_writes(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture, created = _create_artifact(client, "delivery-query")
+    _approve_and_release_artifact(client, created["id"])
+    artifact_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    related_before = _related_snapshot(db_connection, fixture)
+    artifact_count = _artifact_count(db_connection)
+    statements: list[str] = []
+    flushes = 0
+    commits = 0
+
+    def fail_render(*args: object, **kwargs: object) -> bytes:
+        raise AssertionError("released delivery must not render")
+
+    def fail_hash(*args: object, **kwargs: object) -> object:
+        raise AssertionError("released delivery must not hash")
+
+    def record_statement(*args: object) -> None:
+        statements.append(str(args[2]))
+
+    def record_flush(*args: object) -> None:
+        nonlocal flushes
+        flushes += 1
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    monkeypatch.setattr(
+        knowledge_service_module,
+        "render_content_document_pdf",
+        fail_render,
+    )
+    monkeypatch.setattr(knowledge_service_module, "sha256", fail_hash)
+    event.listen(db_connection, "before_cursor_execute", record_statement)
+    event.listen(Session, "after_flush", record_flush)
+    event.listen(Session, "after_commit", record_commit)
+    try:
+        collection = client.get("/api/v1/pdf-artifacts/released")
+        collection_statements = list(statements)
+        statements.clear()
+        download = client.get(
+            f"/api/v1/pdf-artifacts/released/{created['id']}/download"
+        )
+        download_statements = list(statements)
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_statement)
+        event.remove(Session, "after_flush", record_flush)
+        event.remove(Session, "after_commit", record_commit)
+
+    assert collection.status_code == 200
+    assert download.status_code == 200
+    captured_selects: list[str] = []
+    for captured in (collection_statements, download_statements):
+        selects = [
+            " ".join(statement.split())
+            for statement in captured
+            if statement.lstrip().upper().startswith("SELECT")
+        ]
+        writes = [
+            statement
+            for statement in captured
+            if statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        assert len(selects) == 1
+        assert " from pdf_artifacts " in f" {selects[0].lower()} "
+        assert " JOIN " not in selects[0].upper()
+        assert "FOR UPDATE" not in selects[0].upper()
+        assert writes == []
+        captured_selects.append(selects[0])
+    assert "release_status" in captured_selects[0]
+    assert "ORDER BY pdf_artifacts.id" in captured_selects[0]
+    assert "pdf_artifacts.id" in captured_selects[1]
+    assert "release_status" in captured_selects[1]
+    assert flushes == 0
+    assert commits == 0
+    assert _artifact_count(db_connection) == artifact_count
+    assert artifact_before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    assert _related_snapshot(db_connection, fixture) == related_before
