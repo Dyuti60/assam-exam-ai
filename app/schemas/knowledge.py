@@ -318,6 +318,17 @@ class ContentDocumentReleaseDecision(StrEnum):
     WITHDRAWN = "WITHDRAWN"
 
 
+class PdfArtifactReleaseStatus(StrEnum):
+    UNRELEASED = "UNRELEASED"
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
+class PdfArtifactReleaseDecision(StrEnum):
+    RELEASED = "RELEASED"
+    WITHDRAWN = "WITHDRAWN"
+
+
 class ContentPackageResponse(BaseModel):
     id: int
     content_version_id: int
@@ -389,11 +400,20 @@ class PdfArtifactResponse(BaseModel):
     approval_status: ClaimApprovalStatus
     approval_decided_at: datetime | None
     reviewer_note: str | None
+    release_status: PdfArtifactReleaseStatus
+    released_at: datetime | None
+    withdrawn_at: datetime | None
+    release_note: str | None
 
 
 class PdfArtifactApprovalCreate(BaseModel):
     approval_status: ClaimApprovalStatus
     reviewer_note: str | None = None
+
+
+class PdfArtifactReleaseCreate(BaseModel):
+    release_status: PdfArtifactReleaseDecision
+    release_note: str | None = None
 
 
 class EvidenceCreate(BaseModel):

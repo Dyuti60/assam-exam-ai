@@ -303,6 +303,10 @@ def test_create_pdf_artifact_persists_deterministic_readable_bytes_and_ownership
         "approval_status": "DRAFT",
         "approval_decided_at": None,
         "reviewer_note": None,
+        "release_status": "UNRELEASED",
+        "released_at": None,
+        "withdrawn_at": None,
+        "release_note": None,
     }
     assert datetime.fromisoformat(body["created_at"]) == artifact["created_at"]
     assert pdf_bytes.startswith(b"%PDF-1.4")
@@ -656,6 +660,10 @@ def test_pdf_artifact_metadata_and_download_return_exact_stored_values(
         "approval_status": "DRAFT",
         "approval_decided_at": None,
         "reviewer_note": None,
+        "release_status": "UNRELEASED",
+        "released_at": None,
+        "withdrawn_at": None,
+        "release_note": None,
     }
 
     metadata = client.get(f"/api/v1/pdf-artifacts/{stored['id']}")
@@ -1260,3 +1268,478 @@ def test_pdf_artifact_review_database_constraints(
             update(PdfArtifact).where(PdfArtifact.id == created["id"]).values(**values)
         )
     assert error.value.orig.diag.constraint_name == constraint_name
+
+
+def test_pdf_artifact_release_is_target_only_and_related_state_independent(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    fixture, target = _create_artifact(client, "release-target")
+    other_fixture, other = _create_artifact(client, "release-other")
+    approved = client.post(
+        f"/api/v1/pdf-artifacts/{target['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "artifact approved"},
+    )
+    assert approved.status_code == 200, approved.text
+
+    state_changes = (
+        (
+            f"/api/v1/content-documents/{fixture['document']['id']}/release",
+            {"release_status": "WITHDRAWN"},
+        ),
+        (
+            f"/api/v1/content-packages/{fixture['package']['id']}/release",
+            {"release_status": "WITHDRAWN"},
+        ),
+        (
+            f"/api/v1/note-drafts/{fixture['draft']['id']}/release",
+            {"release_status": "WITHDRAWN"},
+        ),
+        (
+            f"/api/v1/note-drafts/{fixture['draft']['id']}/approval",
+            {"approval_status": "REJECTED"},
+        ),
+        (
+            f"/api/v1/question-bank-items/{fixture['item']['id']}/release",
+            {"release_status": "WITHDRAWN"},
+        ),
+        (
+            f"/api/v1/question-bank-items/{fixture['item']['id']}/approval",
+            {"approval_status": "REJECTED"},
+        ),
+        (
+            f"/api/v1/claims/{fixture['claim']['id']}/approval",
+            {"approval_status": "REJECTED"},
+        ),
+    )
+    for path, payload in state_changes:
+        response = client.post(path, json=payload)
+        assert response.status_code == 200, response.text
+
+    target_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == target["id"])
+    ).mappings().one()
+    other_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == other["id"])
+    ).mappings().one()
+    target_related_before = _related_snapshot(db_connection, fixture)
+    other_related_before = _related_snapshot(db_connection, other_fixture)
+    statements: list[tuple[str, object]] = []
+    commits = 0
+
+    def record_statement(
+        connection: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: object,
+    ) -> None:
+        statements.append((statement, parameters))
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    event.listen(db_connection, "before_cursor_execute", record_statement)
+    event.listen(Session, "after_commit", record_commit)
+    try:
+        response = client.post(
+            f"/api/v1/pdf-artifacts/{target['id']}/release",
+            json={"release_status": "RELEASED", "release_note": "release artifact"},
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_statement)
+        event.remove(Session, "after_commit", record_commit)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["release_status"] == "RELEASED"
+    assert body["release_note"] == "release artifact"
+    assert body["withdrawn_at"] is None
+    assert datetime.fromisoformat(body["released_at"]).utcoffset() == UTC.utcoffset(None)
+    assert body["approval_status"] == "APPROVED"
+    assert body["approval_decided_at"] == approved.json()["approval_decided_at"]
+    assert body["reviewer_note"] == "artifact approved"
+    assert "pdf_bytes" not in body
+
+    operations = [
+        (" ".join(statement.split()), parameters)
+        for statement, parameters in statements
+        if statement.lstrip().upper().startswith(("SELECT", "UPDATE", "INSERT", "DELETE"))
+    ]
+    assert len(operations) == 3
+    assert "FOR UPDATE OF PDF_ARTIFACTS" in operations[0][0].upper()
+    assert operations[1][0].upper().startswith("UPDATE PDF_ARTIFACTS SET ")
+    assert "FOR UPDATE" not in operations[2][0].upper()
+    assert all(" JOIN " not in statement.upper() for statement, _ in operations)
+    assert all(" from pdf_artifacts " in f" {statement.lower()} " for statement, _ in (operations[0], operations[2]))
+    assert "approval_status" not in operations[1][0]
+    assert "approval_decided_at" not in operations[1][0]
+    assert "reviewer_note" not in operations[1][0]
+    for _, parameters in operations:
+        values = tuple(parameters.values()) if isinstance(parameters, dict) else tuple(parameters)
+        assert target["id"] in values
+        assert other["id"] not in values
+    assert commits == 1
+
+    target_after = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == target["id"])
+    ).mappings().one()
+    assert {
+        column
+        for column in target_before
+        if target_before[column] != target_after[column]
+    } == {"release_status", "released_at", "release_note"}
+    assert other_before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == other["id"])
+    ).mappings().one()
+    assert _related_snapshot(db_connection, fixture) == target_related_before
+    assert _related_snapshot(db_connection, other_fixture) == other_related_before
+
+
+@pytest.mark.parametrize("approval_status", ["DRAFT", "REJECTED"])
+def test_pdf_artifact_release_requires_own_approval_without_mutation(
+    client: TestClient,
+    db_connection: Connection,
+    approval_status: str,
+) -> None:
+    fixture, created = _create_artifact(client, f"release-{approval_status.lower()}")
+    if approval_status == "REJECTED":
+        response = client.post(
+            f"/api/v1/pdf-artifacts/{created['id']}/approval",
+            json={"approval_status": "REJECTED", "reviewer_note": "not ready"},
+        )
+        assert response.status_code == 200, response.text
+    before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    related_before = _related_snapshot(db_connection, fixture)
+
+    response = client.post(
+        f"/api/v1/pdf-artifacts/{created['id']}/release",
+        json={"release_status": "RELEASED"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": f"PdfArtifact {created['id']} must be approved before release"
+    }
+    assert before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    assert _related_snapshot(db_connection, fixture) == related_before
+
+
+def test_pdf_artifact_release_transitions_and_approval_lock(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    _, skipped = _create_artifact(client, "release-skipped")
+    skipped_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == skipped["id"])
+    ).mappings().one()
+    skipped_response = client.post(
+        f"/api/v1/pdf-artifacts/{skipped['id']}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert skipped_response.status_code == 409
+    assert skipped_response.json() == {
+        "detail": (
+            f"PdfArtifact {skipped['id']} cannot transition "
+            "from UNRELEASED to WITHDRAWN"
+        )
+    }
+    assert skipped_before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == skipped["id"])
+    ).mappings().one()
+
+    _, created = _create_artifact(client, "release-transitions")
+    artifact_id = created["id"]
+    approved = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "approved"},
+    )
+    assert approved.status_code == 200, approved.text
+    released = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/release",
+        json={"release_status": "RELEASED", "release_note": "first release"},
+    )
+    assert released.status_code == 200, released.text
+    released_body = released.json()
+
+    for decision in ("DRAFT", "REJECTED"):
+        before = db_connection.execute(
+            select(PdfArtifact.__table__).where(PdfArtifact.id == artifact_id)
+        ).mappings().one()
+        response = client.post(
+            f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+            json={"approval_status": decision},
+        )
+        assert response.status_code == 409
+        assert response.json() == {
+            "detail": (
+                f"PdfArtifact {artifact_id} must be withdrawn before changing approval"
+            )
+        }
+        assert before == db_connection.execute(
+            select(PdfArtifact.__table__).where(PdfArtifact.id == artifact_id)
+        ).mappings().one()
+
+    repeated_approval = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "still approved"},
+    )
+    assert repeated_approval.status_code == 200, repeated_approval.text
+    assert repeated_approval.json()["release_status"] == "RELEASED"
+    assert repeated_approval.json()["released_at"] == released_body["released_at"]
+
+    duplicate_before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == artifact_id)
+    ).mappings().one()
+    duplicate = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {
+        "detail": (
+            f"PdfArtifact {artifact_id} cannot transition from RELEASED to RELEASED"
+        )
+    }
+    assert duplicate_before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == artifact_id)
+    ).mappings().one()
+
+    withdrawn = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/release",
+        json={"release_status": "WITHDRAWN", "release_note": "withdraw artifact"},
+    )
+    assert withdrawn.status_code == 200, withdrawn.text
+    withdrawn_body = withdrawn.json()
+    assert withdrawn_body["release_status"] == "WITHDRAWN"
+    assert withdrawn_body["released_at"] == released_body["released_at"]
+    assert withdrawn_body["release_note"] == "withdraw artifact"
+    assert datetime.fromisoformat(withdrawn_body["withdrawn_at"]).utcoffset() == UTC.utcoffset(None)
+
+    for requested in ("WITHDRAWN", "RELEASED"):
+        before = db_connection.execute(
+            select(PdfArtifact.__table__).where(PdfArtifact.id == artifact_id)
+        ).mappings().one()
+        response = client.post(
+            f"/api/v1/pdf-artifacts/{artifact_id}/release",
+            json={"release_status": requested},
+        )
+        assert response.status_code == 409
+        assert response.json() == {
+            "detail": (
+                f"PdfArtifact {artifact_id} cannot transition "
+                f"from WITHDRAWN to {requested}"
+            )
+        }
+        assert before == db_connection.execute(
+            select(PdfArtifact.__table__).where(PdfArtifact.id == artifact_id)
+        ).mappings().one()
+
+    release_snapshot = {
+        key: withdrawn_body[key]
+        for key in ("release_status", "released_at", "withdrawn_at", "release_note")
+    }
+    rejected = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "post withdrawal"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["approval_status"] == "REJECTED"
+    assert {
+        key: rejected.json()[key]
+        for key in ("release_status", "released_at", "withdrawn_at", "release_note")
+    } == release_snapshot
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [None, {}, {"release_status": "UNRELEASED"}, {"release_status": "UNKNOWN"}],
+)
+def test_pdf_artifact_release_missing_and_invalid_requests(
+    client: TestClient,
+    payload: dict | None,
+) -> None:
+    if payload is None:
+        response = client.post("/api/v1/pdf-artifacts/999999/release")
+    else:
+        response = client.post("/api/v1/pdf-artifacts/999999/release", json=payload)
+    assert response.status_code == 422
+
+    missing = client.post(
+        "/api/v1/pdf-artifacts/999999/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "PdfArtifact 999999 not found"}
+
+
+def test_pdf_artifact_release_failure_after_flush_rolls_back_every_change(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture, created = _create_artifact(client, "release-flushed-failure")
+    approved = client.post(
+        f"/api/v1/pdf-artifacts/{created['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "approved"},
+    )
+    assert approved.status_code == 200, approved.text
+    before = db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    related_before = _related_snapshot(db_connection, fixture)
+    original_update = KnowledgeRepository.update_pdf_artifact_release
+    commits = 0
+    rollbacks = 0
+
+    def fail_after_flush(
+        repository: KnowledgeRepository,
+        pdf_artifact: PdfArtifact,
+        release_status: str,
+        released_at: datetime | None,
+        withdrawn_at: datetime | None,
+        release_note: str | None,
+    ) -> None:
+        original_update(
+            repository,
+            pdf_artifact,
+            release_status,
+            released_at,
+            withdrawn_at,
+            release_note,
+        )
+        repository.session.flush()
+        raise RuntimeError("injected failure after release flush")
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    def record_rollback(*args: object) -> None:
+        nonlocal rollbacks
+        rollbacks += 1
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "update_pdf_artifact_release",
+        fail_after_flush,
+    )
+    event.listen(Session, "after_commit", record_commit)
+    event.listen(Session, "after_rollback", record_rollback)
+    try:
+        with pytest.raises(RuntimeError, match="injected failure after release flush"):
+            client.post(
+                f"/api/v1/pdf-artifacts/{created['id']}/release",
+                json={"release_status": "RELEASED", "release_note": "rolled back"},
+            )
+    finally:
+        event.remove(Session, "after_commit", record_commit)
+        event.remove(Session, "after_rollback", record_rollback)
+
+    assert commits == 0
+    assert rollbacks == 1
+    assert before == db_connection.execute(
+        select(PdfArtifact.__table__).where(PdfArtifact.id == created["id"])
+    ).mappings().one()
+    assert _related_snapshot(db_connection, fixture) == related_before
+
+
+@pytest.mark.parametrize(
+    ("values", "constraint_name"),
+    [
+        ({"release_status": "UNKNOWN"}, "ck_pdf_artifacts_release_status"),
+        (
+            {"release_status": "UNRELEASED", "release_note": "invalid"},
+            "ck_pdf_artifacts_release_lifecycle",
+        ),
+        (
+            {"release_status": "UNRELEASED", "released_at": func.now()},
+            "ck_pdf_artifacts_release_lifecycle",
+        ),
+        (
+            {"release_status": "UNRELEASED", "withdrawn_at": func.now()},
+            "ck_pdf_artifacts_release_lifecycle",
+        ),
+        (
+            {
+                "release_status": "RELEASED",
+                "approval_status": "APPROVED",
+                "approval_decided_at": func.now(),
+                "released_at": None,
+            },
+            "ck_pdf_artifacts_release_lifecycle",
+        ),
+        (
+            {
+                "release_status": "RELEASED",
+                "approval_status": "APPROVED",
+                "approval_decided_at": func.now(),
+                "released_at": func.now(),
+                "withdrawn_at": func.now(),
+            },
+            "ck_pdf_artifacts_release_lifecycle",
+        ),
+        (
+            {"release_status": "RELEASED", "released_at": func.now()},
+            "ck_pdf_artifacts_release_lifecycle",
+        ),
+        (
+            {"release_status": "WITHDRAWN", "withdrawn_at": func.now()},
+            "ck_pdf_artifacts_release_lifecycle",
+        ),
+        (
+            {"release_status": "WITHDRAWN", "released_at": func.now()},
+            "ck_pdf_artifacts_release_lifecycle",
+        ),
+    ],
+)
+def test_pdf_artifact_release_database_constraints(
+    client: TestClient,
+    db_connection: Connection,
+    values: dict,
+    constraint_name: str,
+) -> None:
+    _, created = _create_artifact(client, f"release-db-{len(str(values))}")
+    with pytest.raises(IntegrityError) as error, db_connection.begin_nested():
+        db_connection.execute(
+            update(PdfArtifact).where(PdfArtifact.id == created["id"]).values(**values)
+        )
+    assert error.value.orig.diag.constraint_name == constraint_name
+
+
+def test_pdf_artifact_download_is_unchanged_by_release_state(
+    client: TestClient,
+) -> None:
+    _, created = _create_artifact(client, "release-download")
+    artifact_id = created["id"]
+    unreleased = client.get(f"/api/v1/pdf-artifacts/{artifact_id}/download")
+    approved = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert approved.status_code == 200, approved.text
+    released = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/release",
+        json={"release_status": "RELEASED"},
+    )
+    assert released.status_code == 200, released.text
+    released_download = client.get(f"/api/v1/pdf-artifacts/{artifact_id}/download")
+    withdrawn = client.post(
+        f"/api/v1/pdf-artifacts/{artifact_id}/release",
+        json={"release_status": "WITHDRAWN"},
+    )
+    assert withdrawn.status_code == 200, withdrawn.text
+    withdrawn_download = client.get(f"/api/v1/pdf-artifacts/{artifact_id}/download")
+    for download in (released_download, withdrawn_download):
+        assert download.content == unreleased.content
+        assert download.headers["content-type"] == unreleased.headers["content-type"]
+        assert download.headers["content-length"] == unreleased.headers["content-length"]
+        assert download.headers["content-disposition"] == unreleased.headers[
+            "content-disposition"
+        ]

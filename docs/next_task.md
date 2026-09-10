@@ -7189,3 +7189,5 @@ Do not self-approve.
 Do not define or implement T-046.
 
 Leave T-045 uncommitted and unpushed in the working tree for independent review.
+
+Implementation note (2026-09-10 Asia/Kolkata, UTC+05:30): added only the controlled PdfArtifact release lifecycle, migration `a5d2c8f1e736`, and `POST /api/v1/pdf-artifacts/{pdf_artifact_id}/release`. Existing and new artifacts default to UNRELEASED/null/null/null without inferred release. Only an independently APPROVED artifact can be released; withdrawal preserves the original UTC release time, records its own UTC time, replaces the note, and prevents in-place re-release. Release and conflicting review decisions lock only the target artifact, commit once on success, and roll back failures. Immutable bytes, checksum, ownership, metadata reads, and ungated internal download remain unchanged. T-045 is Ready for review, not approved. No released-artifact collection, released-only download, publication, external storage, public/learner delivery, dependency, configuration, Docker, renderer, AI, personalization, or T-046 work was added.

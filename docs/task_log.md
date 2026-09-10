@@ -1470,3 +1470,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / Artifact Release Boundary |
 | Scope | PdfArtifact release metadata, constraints, one release endpoint, approval conflict guard, migration, and tests only; no released collection, publication, public delivery, or T-046 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-045 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only controlled UNRELEASED/RELEASED/WITHDRAWN PdfArtifact release metadata, `POST /api/v1/pdf-artifacts/{pdf_artifact_id}/release`, and the required currently-RELEASED approval guard |
+| Migration | `a5d2c8f1e736` after `f3c8a1d6e924`; existing artifacts become UNRELEASED/null/null/null without inferred release or payload/review changes |
+| Tests | Focused T-045: 18 passed, 33 deselected, 1 warning in 3.64s. Complete PdfArtifact: 51 passed, 1 warning in 8.20s. ContentPackage/ContentDocument: 61 passed, 1 warning in 11.15s. T-041 released documents: 2 passed, 59 deselected, 1 warning in 1.29s. ContentVersion/T-030: 15 passed, 1 warning in 1.71s. NoteDraft: 43 passed, 1 warning in 3.36s. QuestionBankItem: 54 passed, 1 warning in 3.60s. Full suite: 300 passed, 1 warning in 27.59s. |
+| Validation | Fresh and seeded migration cycles, direct PostgreSQL release-constraint tests, changed-file Ruff, dependency-lock verification, Alembic head/check, and diff checks passed against dedicated `_test` databases. |
+| Notes | Initial release requires the artifact's own APPROVED state. Release/withdrawal locks only the target artifact, commits once, rolls back failure, preserves immutable bytes/ownership and review metadata, and leaves download ungated. Withdrawal is terminal. T-045 is Ready for review, not approved; no collection, publication, external storage, public/learner delivery, AI, personalization, or T-046 work was added. |

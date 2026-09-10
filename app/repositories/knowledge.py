@@ -231,6 +231,19 @@ class KnowledgeRepository:
         pdf_artifact.approval_decided_at = decided_at
         pdf_artifact.reviewer_note = reviewer_note
 
+    def update_pdf_artifact_release(
+        self,
+        pdf_artifact: PdfArtifact,
+        release_status: str,
+        released_at: datetime | None,
+        withdrawn_at: datetime | None,
+        release_note: str | None,
+    ) -> None:
+        pdf_artifact.release_status = release_status
+        pdf_artifact.released_at = released_at
+        pdf_artifact.withdrawn_at = withdrawn_at
+        pdf_artifact.release_note = release_note
+
     def add_pdf_artifact(self, pdf_artifact: PdfArtifact) -> PdfArtifact:
         self.session.add(pdf_artifact)
         self.session.flush()

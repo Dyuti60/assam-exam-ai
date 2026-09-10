@@ -56,6 +56,25 @@ class PdfArtifact(Base):
             "AND approval_decided_at IS NOT NULL)",
             name="ck_pdf_artifacts_approval_lifecycle",
         ),
+        CheckConstraint(
+            "release_status IN ('UNRELEASED', 'RELEASED', 'WITHDRAWN')",
+            name="ck_pdf_artifacts_release_status",
+        ),
+        CheckConstraint(
+            "release_status NOT IN ('UNRELEASED', 'RELEASED', 'WITHDRAWN') "
+            "OR (release_status = 'UNRELEASED' "
+            "AND released_at IS NULL "
+            "AND withdrawn_at IS NULL "
+            "AND release_note IS NULL) "
+            "OR (release_status = 'RELEASED' "
+            "AND released_at IS NOT NULL "
+            "AND withdrawn_at IS NULL "
+            "AND approval_status = 'APPROVED') "
+            "OR (release_status = 'WITHDRAWN' "
+            "AND released_at IS NOT NULL "
+            "AND withdrawn_at IS NOT NULL)",
+            name="ck_pdf_artifacts_release_lifecycle",
+        ),
         UniqueConstraint(
             "content_document_id",
             name="uq_pdf_artifacts_content_document_id",
@@ -104,6 +123,15 @@ class PdfArtifact(Base):
         DateTime(timezone=True),
     )
     reviewer_note: Mapped[str | None] = mapped_column(Text)
+    release_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="UNRELEASED",
+        server_default="UNRELEASED",
+    )
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    release_note: Mapped[str | None] = mapped_column(Text)
 
     content_document: Mapped["ContentDocument"] = relationship(
         back_populates="pdf_artifact",

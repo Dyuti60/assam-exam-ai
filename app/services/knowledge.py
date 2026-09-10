@@ -57,6 +57,8 @@ from app.schemas.knowledge import (
     NoteDraftReleaseDecision,
     NoteDraftResponse,
     PdfArtifactApprovalCreate,
+    PdfArtifactReleaseCreate,
+    PdfArtifactReleaseDecision,
     PdfArtifactResponse,
     PreviousPaperCreate,
     PreviousPaperResponse,
@@ -708,6 +710,16 @@ class KnowledgeService:
         if pdf_artifact is None:
             raise ResourceNotFoundError("PdfArtifact", pdf_artifact_id)
 
+        if (
+            pdf_artifact.release_status == "RELEASED"
+            and request.approval_status
+            in (ClaimApprovalStatus.DRAFT, ClaimApprovalStatus.REJECTED)
+        ):
+            raise ResourceConflictError(
+                f"PdfArtifact {pdf_artifact_id} must be withdrawn "
+                "before changing approval"
+            )
+
         is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
         try:
             self.repository.update_pdf_artifact_approval(
@@ -725,6 +737,59 @@ class KnowledgeService:
         if stored_artifact is None:
             raise RuntimeError(
                 f"PdfArtifact {pdf_artifact_id} missing after successful review"
+            )
+        return self._pdf_artifact_response(stored_artifact)
+
+    def record_pdf_artifact_release(
+        self,
+        pdf_artifact_id: int,
+        request: PdfArtifactReleaseCreate,
+    ) -> PdfArtifactResponse:
+        pdf_artifact = self.repository.get_pdf_artifact_for_update(pdf_artifact_id)
+        if pdf_artifact is None:
+            raise ResourceNotFoundError("PdfArtifact", pdf_artifact_id)
+
+        requested_status = request.release_status.value
+        current_status = pdf_artifact.release_status
+        if (
+            request.release_status == PdfArtifactReleaseDecision.RELEASED
+            and current_status == "UNRELEASED"
+        ):
+            if pdf_artifact.approval_status != "APPROVED":
+                raise ResourceConflictError(
+                    f"PdfArtifact {pdf_artifact_id} must be approved before release"
+                )
+            released_at = datetime.now(UTC)
+            withdrawn_at = None
+        elif (
+            request.release_status == PdfArtifactReleaseDecision.WITHDRAWN
+            and current_status == "RELEASED"
+        ):
+            released_at = pdf_artifact.released_at
+            withdrawn_at = datetime.now(UTC)
+        else:
+            raise ResourceConflictError(
+                f"PdfArtifact {pdf_artifact_id} cannot transition "
+                f"from {current_status} to {requested_status}"
+            )
+
+        try:
+            self.repository.update_pdf_artifact_release(
+                pdf_artifact,
+                requested_status,
+                released_at,
+                withdrawn_at,
+                request.release_note,
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_artifact = self.repository.get_pdf_artifact(pdf_artifact_id)
+        if stored_artifact is None:
+            raise RuntimeError(
+                f"PdfArtifact {pdf_artifact_id} missing after successful release"
             )
         return self._pdf_artifact_response(stored_artifact)
 
@@ -1451,6 +1516,10 @@ class KnowledgeService:
             approval_status=pdf_artifact.approval_status,
             approval_decided_at=pdf_artifact.approval_decided_at,
             reviewer_note=pdf_artifact.reviewer_note,
+            release_status=pdf_artifact.release_status,
+            released_at=pdf_artifact.released_at,
+            withdrawn_at=pdf_artifact.withdrawn_at,
+            release_note=pdf_artifact.release_note,
         )
 
     def _get_pdf_artifact_or_raise(self, pdf_artifact_id: int) -> PdfArtifact:
