@@ -1568,3 +1568,33 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | Focused T-047: 1 passed, 1 warning in 0.86s. PdfArtifact: 55 passed in 8.97s. ContentPackage/ContentDocument: 61 passed in 9.95s. Knowledge API: 29 passed in 1.20s. ContentVersion/released-assets: 15 passed in 1.63s. NoteDraft: 43 passed in 3.23s. QuestionBankItem: 54 passed in 3.44s. Full suite: 305 passed in 26.04s. Each suite reported one existing warning. |
 | Validation | Fresh dedicated `_test` upgrade through unchanged head `a5d2c8f1e736`, Ruff, dependency-lock verification, Alembic head/check, and diff/whitespace checks passed. |
 | Notes | The test preserves exact provenance/ownership IDs, explicit independent review/release decisions, deterministic Markdown and PDF hashes, and exact stored-byte released delivery. T-047 is Ready for review, not approved. No production capability, SourceDiscoveryRun, AI, learner/public delivery, publication, infrastructure, or T-048 was added. |
+
+
+---
+
+## T-047 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-047` |
+| Implementation commit | `38eb63189c66167258ad2cbc54b5d9d3d79f4fe8` |
+| Base/task-issuance commit | `e18ad840ac98ef174289673c470266b092bf8b9e` |
+| Review state | **APPROVED** |
+| Approved capability | PostgreSQL-backed API smoke validation of the complete existing trusted internal deliverable chain through released exact-byte PDF delivery |
+| Production behavior | Unchanged |
+| Persistence | No model or migration change; Alembic head remains `a5d2c8f1e736` |
+| Validation evidence | Developer-recorded: 1 focused T-047 test, 55 PdfArtifact tests, 61 ContentPackage/ContentDocument tests, 29 knowledge API tests, 15 ContentVersion/released-assets tests, 43 NoteDraft tests, 54 QuestionBankItem tests, and 305 full-suite tests, each with one existing warning; Ruff, dependency-lock verification, Alembic head/check, fresh upgrade, and diff checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The exact one-commit diff is validation/documentation only. It uses existing HTTP APIs and real PostgreSQL, preserves one coherent provenance/ownership chain, keeps Verification and every human approval/release boundary distinct, and proves deterministic Markdown plus exact stored PDF delivery. |
+| Boundaries | No production code, schema, migration, dependency, SourceDiscoveryRun, source discovery, AI, learner/public delivery, publication, storage, infrastructure, or T-048 behavior was added. |
+
+---
+
+## T-048 issued — Persist SourceDiscoveryRun and SourceCandidate snapshots
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Establish auditable immutable persistence for completed source-discovery attempts and their ordered candidate snapshots before any source is trusted or ingested |
+| Architectural phase | Content Factory / Source Discovery Foundation |
+| Scope | Models, constraints, one migration, atomic create and read APIs, schemas, repository/service, tests, and documentation only; no discovery adapter, network fetch, approval, Source promotion, ingestion, AI, or T-049 |
+| Full implementation prompt | Appended to `docs/next_task.md` |
