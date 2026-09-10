@@ -1483,3 +1483,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | Focused T-045: 18 passed, 33 deselected, 1 warning in 3.64s. Complete PdfArtifact: 51 passed, 1 warning in 8.20s. ContentPackage/ContentDocument: 61 passed, 1 warning in 11.15s. T-041 released documents: 2 passed, 59 deselected, 1 warning in 1.29s. ContentVersion/T-030: 15 passed, 1 warning in 1.71s. NoteDraft: 43 passed, 1 warning in 3.36s. QuestionBankItem: 54 passed, 1 warning in 3.60s. Full suite: 300 passed, 1 warning in 27.59s. |
 | Validation | Fresh and seeded migration cycles, direct PostgreSQL release-constraint tests, changed-file Ruff, dependency-lock verification, Alembic head/check, and diff checks passed against dedicated `_test` databases. |
 | Notes | Initial release requires the artifact's own APPROVED state. Release/withdrawal locks only the target artifact, commits once, rolls back failure, preserves immutable bytes/ownership and review metadata, and leaves download ungated. Withdrawal is terminal. T-045 is Ready for review, not approved; no collection, publication, external storage, public/learner delivery, AI, personalization, or T-046 work was added. |
+
+
+---
+
+## T-045 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-045` |
+| Implementation commit | `72cb1316980e49444292744629276d7b513985f1` |
+| Base/task-issuance commit | `4677c5af806146f35155026db6d53deca0064f1f` |
+| Review state | **APPROVED** |
+| Approved capability | Database-enforced UNRELEASED/RELEASED/WITHDRAWN lifecycle for independently reviewed immutable PdfArtifacts |
+| Migration | `a5d2c8f1e736` after `f3c8a1d6e924` |
+| Validation evidence | Developer-recorded: 18 focused T-045 tests, 51 complete PdfArtifact tests, 61 ContentPackage/ContentDocument tests, 2 T-041 tests, 15 ContentVersion/T-030 tests, 43 NoteDraft tests, 54 QuestionBankItem tests, and 300 full-suite tests, each with one existing warning; Ruff; lock verification; Alembic head/check; fresh/seeded migration cycles; PostgreSQL probes; and diff checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The immutable commit is exactly one commit over the issued base. Model/migration parity, constraints, approval eligibility, transitions, errors, target-only locking, one-commit atomicity, post-flush rollback, related-state independence, compatibility, tests, documentation, and exclusions match the canonical task with no blocking finding. |
+| Boundaries | No released artifact collection, released-only download, publication, external storage, public/learner delivery, AI, personalization, dependency, configuration, Docker, AGENTS.md, README, or T-046 behavior was included. |
+
+---
+
+## T-046 issued — Add released PdfArtifact delivery boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add read-only metadata listing and exact-byte download that expose only currently RELEASED PdfArtifacts |
+| Architectural phase | Canonical Content / Released Artifact Delivery Boundary |
+| Scope | Released metadata collection and released-only exact-byte download only; no persistence, publication record, authentication, public learner delivery, external storage, or T-047 |
+| Full implementation prompt | Appended to `docs/next_task.md` |
