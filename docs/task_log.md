@@ -1555,3 +1555,16 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Canonical Content / End-to-End Deliverable Validation |
 | Scope | Automated integration validation and documentation only; no new production behavior, schema, dependency, AI, learner, or infrastructure work |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-047 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add only one PostgreSQL-backed API-level smoke test for the complete existing internal deliverable workflow |
+| Production behavior | Unchanged; no model, schema, route, service, repository, renderer, or migration change |
+| Tests | Focused T-047: 1 passed, 1 warning in 0.86s. PdfArtifact: 55 passed in 8.97s. ContentPackage/ContentDocument: 61 passed in 9.95s. Knowledge API: 29 passed in 1.20s. ContentVersion/released-assets: 15 passed in 1.63s. NoteDraft: 43 passed in 3.23s. QuestionBankItem: 54 passed in 3.44s. Full suite: 305 passed in 26.04s. Each suite reported one existing warning. |
+| Validation | Fresh dedicated `_test` upgrade through unchanged head `a5d2c8f1e736`, Ruff, dependency-lock verification, Alembic head/check, and diff/whitespace checks passed. |
+| Notes | The test preserves exact provenance/ownership IDs, explicit independent review/release decisions, deterministic Markdown and PDF hashes, and exact stored-byte released delivery. T-047 is Ready for review, not approved. No production capability, SourceDiscoveryRun, AI, learner/public delivery, publication, infrastructure, or T-048 was added. |
