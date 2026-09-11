@@ -46,6 +46,19 @@ class SourceCandidate(Base):
             "snippet IS NULL OR btrim(snippet) <> ''",
             name="ck_source_candidates_snippet_non_blank",
         ),
+        CheckConstraint(
+            "approval_status IN ('DRAFT', 'APPROVED', 'REJECTED')",
+            name="ck_source_candidates_approval_status",
+        ),
+        CheckConstraint(
+            "approval_status NOT IN ('DRAFT', 'APPROVED', 'REJECTED') "
+            "OR (approval_status = 'DRAFT' "
+            "AND approval_decided_at IS NULL "
+            "AND reviewer_note IS NULL) "
+            "OR (approval_status IN ('APPROVED', 'REJECTED') "
+            "AND approval_decided_at IS NOT NULL)",
+            name="ck_source_candidates_approval_lifecycle",
+        ),
         UniqueConstraint(
             "source_discovery_run_id",
             "position",
@@ -77,6 +90,16 @@ class SourceCandidate(Base):
         server_default=func.now(),
         nullable=False,
     )
+    approval_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="DRAFT",
+        server_default="DRAFT",
+    )
+    approval_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+    )
+    reviewer_note: Mapped[str | None] = mapped_column(Text)
 
     source_discovery_run: Mapped["SourceDiscoveryRun"] = relationship(
         back_populates="candidates",

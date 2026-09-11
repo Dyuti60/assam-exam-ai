@@ -20,6 +20,7 @@ from app.models import (
     PreviousQuestion,
     QuestionBankItem,
     Source,
+    SourceCandidate,
     SourceDiscoveryRun,
     SyllabusVersion,
     Topic,
@@ -68,6 +69,38 @@ class KnowledgeRepository:
         )
         with self.session.no_autoflush:
             return self.session.scalar(statement)
+
+    def get_source_candidate(
+        self,
+        source_candidate_id: int,
+    ) -> SourceCandidate | None:
+        statement = select(SourceCandidate).where(
+            SourceCandidate.id == source_candidate_id
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
+    def get_source_candidate_for_update(
+        self,
+        source_candidate_id: int,
+    ) -> SourceCandidate | None:
+        statement = (
+            select(SourceCandidate)
+            .where(SourceCandidate.id == source_candidate_id)
+            .with_for_update(of=SourceCandidate)
+        )
+        return self.session.scalar(statement)
+
+    def update_source_candidate_approval(
+        self,
+        source_candidate: SourceCandidate,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        source_candidate.approval_status = approval_status
+        source_candidate.approval_decided_at = decided_at
+        source_candidate.reviewer_note = reviewer_note
 
     def add_exam(self, exam: Exam) -> Exam:
         self.session.add(exam)

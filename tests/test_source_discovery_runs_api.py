@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, event, func, insert, select
+from sqlalchemy import delete, event, func, insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -129,6 +129,12 @@ def test_succeeded_runs_store_zero_or_ordered_normalized_candidates(
         "https://example.gov/second",
         "https://example.gov/first",
     ]
+    assert all(
+        candidate["approval_status"] == "DRAFT"
+        and candidate["approval_decided_at"] is None
+        and candidate["reviewer_note"] is None
+        for candidate in created["candidates"]
+    )
     assert created["candidates"][0]["title"] == "Second title"
     assert created["candidates"][0]["publisher"] == "Government of Assam"
     assert created["candidates"][0]["snippet"] == "Second result"
@@ -142,6 +148,325 @@ def test_succeeded_runs_store_zero_or_ordered_normalized_candidates(
     assert retrieved.status_code == 200
     assert retrieved.json() == created
     assert db_connection.scalar(select(func.count()).select_from(Source)) == source_count
+
+
+def test_source_candidate_review_transitions_preserve_snapshot_and_target_only(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    first_run = _post_run(
+        client,
+        _run_payload(
+            candidates=[
+                _candidate("https://example.gov/target"),
+                _candidate("https://example.gov/same-run-other"),
+            ]
+        ),
+    )
+    second_run = _post_run(
+        client,
+        _run_payload(candidates=[_candidate("https://example.gov/other-run")]),
+    )
+    target = first_run["candidates"][0]
+    target_id = target["id"]
+    immutable_fields = {
+        key: target[key]
+        for key in (
+            "id",
+            "source_discovery_run_id",
+            "run_status",
+            "position",
+            "location",
+            "title",
+            "publisher",
+            "snippet",
+            "created_at",
+        )
+    }
+    run_rows_before = db_connection.execute(
+        select(SourceDiscoveryRun.__table__).order_by(SourceDiscoveryRun.id)
+    ).mappings().all()
+    other_candidates_before = db_connection.execute(
+        select(SourceCandidate.__table__)
+        .where(SourceCandidate.id != target_id)
+        .order_by(SourceCandidate.id)
+    ).mappings().all()
+
+    approved = client.post(
+        f"/api/v1/source-candidates/{target_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "accepted lead"},
+    )
+    assert approved.status_code == 200, approved.text
+    approved_body = approved.json()
+    assert {key: approved_body[key] for key in immutable_fields} == immutable_fields
+    assert approved_body["approval_status"] == "APPROVED"
+    assert approved_body["reviewer_note"] == "accepted lead"
+    assert datetime.fromisoformat(
+        approved_body["approval_decided_at"]
+    ).utcoffset() == UTC.utcoffset(None)
+
+    rejected = client.post(
+        f"/api/v1/source-candidates/{target_id}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "not suitable"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["approval_status"] == "REJECTED"
+    assert rejected.json()["reviewer_note"] == "not suitable"
+    assert datetime.fromisoformat(
+        rejected.json()["approval_decided_at"]
+    ).utcoffset() == UTC.utcoffset(None)
+
+    reset = client.post(
+        f"/api/v1/source-candidates/{target_id}/approval",
+        json={"approval_status": "DRAFT", "reviewer_note": "ignored"},
+    )
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["approval_status"] == "DRAFT"
+    assert reset.json()["approval_decided_at"] is None
+    assert reset.json()["reviewer_note"] is None
+    assert {key: reset.json()[key] for key in immutable_fields} == immutable_fields
+
+    retrieved = client.get(f"/api/v1/source-discovery-runs/{first_run['id']}")
+    assert retrieved.status_code == 200
+    assert [candidate["id"] for candidate in retrieved.json()["candidates"]] == [
+        candidate["id"] for candidate in first_run["candidates"]
+    ]
+    assert retrieved.json()["candidates"][0]["approval_status"] == "DRAFT"
+    assert retrieved.json()["candidates"][1] == first_run["candidates"][1]
+    assert db_connection.execute(
+        select(SourceDiscoveryRun.__table__).order_by(SourceDiscoveryRun.id)
+    ).mappings().all() == run_rows_before
+    assert db_connection.execute(
+        select(SourceCandidate.__table__)
+        .where(SourceCandidate.id != target_id)
+        .order_by(SourceCandidate.id)
+    ).mappings().all() == other_candidates_before
+    assert second_run["candidates"][0]["id"] not in [
+        candidate["id"] for candidate in retrieved.json()["candidates"]
+    ]
+
+
+def test_source_candidate_review_errors_do_not_mutate(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    created = _post_run(
+        client,
+        _run_payload(candidates=[_candidate("https://example.gov/errors")]),
+    )
+    candidate_id = created["candidates"][0]["id"]
+    before = db_connection.execute(
+        select(SourceCandidate.__table__).where(SourceCandidate.id == candidate_id)
+    ).mappings().one()
+
+    invalid = client.post(
+        f"/api/v1/source-candidates/{candidate_id}/approval",
+        json={"approval_status": "UNKNOWN"},
+    )
+    assert invalid.status_code == 422
+    missing_status = client.post(
+        f"/api/v1/source-candidates/{candidate_id}/approval",
+        json={"reviewer_note": "missing decision"},
+    )
+    assert missing_status.status_code == 422
+    missing = client.post(
+        "/api/v1/source-candidates/999999/approval",
+        json={"approval_status": "APPROVED"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "SourceCandidate 999999 not found"}
+    assert db_connection.execute(
+        select(SourceCandidate.__table__).where(SourceCandidate.id == candidate_id)
+    ).mappings().one() == before
+
+
+def test_source_candidate_review_uses_target_only_sql_and_one_commit(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    created = _post_run(
+        client,
+        _run_payload(
+            candidates=[
+                _candidate("https://example.gov/sql-target"),
+                _candidate("https://example.gov/sql-other"),
+            ]
+        ),
+    )
+    target_id = created["candidates"][0]["id"]
+    other_id = created["candidates"][1]["id"]
+    row_counts_before = {
+        table.name: db_connection.scalar(select(func.count()).select_from(table))
+        for table in SourceCandidate.metadata.sorted_tables
+    }
+    statements: list[tuple[str, object]] = []
+    commits = 0
+
+    def record_statement(
+        connection: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: object,
+    ) -> None:
+        statements.append((statement, parameters))
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    event.listen(db_connection, "before_cursor_execute", record_statement)
+    event.listen(Session, "after_commit", record_commit)
+    try:
+        response = client.post(
+            f"/api/v1/source-candidates/{target_id}/approval",
+            json={"approval_status": "APPROVED", "reviewer_note": "target only"},
+        )
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_statement)
+        event.remove(Session, "after_commit", record_commit)
+
+    assert response.status_code == 200, response.text
+    operations = [
+        (" ".join(statement.split()), parameters)
+        for statement, parameters in statements
+        if statement.lstrip().upper().startswith(("SELECT", "UPDATE", "INSERT", "DELETE"))
+    ]
+    assert len(operations) == 3
+    assert "FOR UPDATE OF SOURCE_CANDIDATES" in operations[0][0].upper()
+    assert operations[1][0].upper().startswith("UPDATE SOURCE_CANDIDATES SET ")
+    assert "FOR UPDATE" not in operations[2][0].upper()
+    assert all(" JOIN " not in statement.upper() for statement, _ in operations)
+    assert all("source_candidates" in statement.lower() for statement, _ in operations)
+    for _, parameters in operations:
+        values = (
+            tuple(parameters.values())
+            if isinstance(parameters, dict)
+            else tuple(parameters)
+        )
+        assert target_id in values
+        assert other_id not in values
+    assert commits == 1
+    assert {
+        table.name: db_connection.scalar(select(func.count()).select_from(table))
+        for table in SourceCandidate.metadata.sorted_tables
+    } == row_counts_before
+
+
+def test_source_candidate_review_rolls_back_after_flushed_update(
+    client: TestClient,
+    db_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created = _post_run(
+        client,
+        _run_payload(candidates=[_candidate("https://example.gov/rollback")]),
+    )
+    candidate_id = created["candidates"][0]["id"]
+    candidate_before = db_connection.execute(
+        select(SourceCandidate.__table__).where(SourceCandidate.id == candidate_id)
+    ).mappings().one()
+    run_before = db_connection.execute(
+        select(SourceDiscoveryRun.__table__).where(
+            SourceDiscoveryRun.id == created["id"]
+        )
+    ).mappings().one()
+    original = KnowledgeRepository.update_source_candidate_approval
+    commits = 0
+    rollbacks = 0
+
+    def fail_after_flush(
+        repository: KnowledgeRepository,
+        candidate: SourceCandidate,
+        approval_status: str,
+        reviewer_note: str | None,
+        decided_at: datetime | None,
+    ) -> None:
+        original(repository, candidate, approval_status, reviewer_note, decided_at)
+        repository.session.flush()
+        raise RuntimeError("injected failure after candidate review flush")
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    def record_rollback(*args: object) -> None:
+        nonlocal rollbacks
+        rollbacks += 1
+
+    monkeypatch.setattr(
+        KnowledgeRepository,
+        "update_source_candidate_approval",
+        fail_after_flush,
+    )
+    event.listen(Session, "after_commit", record_commit)
+    event.listen(Session, "after_rollback", record_rollback)
+    try:
+        with pytest.raises(
+            RuntimeError,
+            match="injected failure after candidate review flush",
+        ):
+            client.post(
+                f"/api/v1/source-candidates/{candidate_id}/approval",
+                json={"approval_status": "APPROVED", "reviewer_note": "rollback"},
+            )
+    finally:
+        event.remove(Session, "after_commit", record_commit)
+        event.remove(Session, "after_rollback", record_rollback)
+
+    assert commits == 0
+    assert rollbacks == 1
+    assert db_connection.execute(
+        select(SourceCandidate.__table__).where(SourceCandidate.id == candidate_id)
+    ).mappings().one() == candidate_before
+    assert db_connection.execute(
+        select(SourceDiscoveryRun.__table__).where(
+            SourceDiscoveryRun.id == created["id"]
+        )
+    ).mappings().one() == run_before
+
+
+@pytest.mark.parametrize(
+    ("values", "constraint_name"),
+    [
+        ({"approval_status": "UNKNOWN"}, "ck_source_candidates_approval_status"),
+        (
+            {"approval_status": "DRAFT", "approval_decided_at": func.now()},
+            "ck_source_candidates_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "DRAFT", "reviewer_note": "not allowed"},
+            "ck_source_candidates_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "APPROVED", "approval_decided_at": None},
+            "ck_source_candidates_approval_lifecycle",
+        ),
+        (
+            {"approval_status": "REJECTED", "approval_decided_at": None},
+            "ck_source_candidates_approval_lifecycle",
+        ),
+    ],
+)
+def test_source_candidate_review_database_constraints(
+    client: TestClient,
+    db_connection: Connection,
+    values: dict,
+    constraint_name: str,
+) -> None:
+    created = _post_run(
+        client,
+        _run_payload(candidates=[_candidate(f"https://example.gov/db-{len(str(values))}")]),
+    )
+    candidate_id = created["candidates"][0]["id"]
+    with pytest.raises(IntegrityError) as error, db_connection.begin_nested():
+        db_connection.execute(
+            update(SourceCandidate)
+            .where(SourceCandidate.id == candidate_id)
+            .values(**values)
+        )
+    assert error.value.orig.diag.constraint_name == constraint_name
 
 
 def test_failed_run_and_repeated_audit_events_are_retained(client: TestClient) -> None:

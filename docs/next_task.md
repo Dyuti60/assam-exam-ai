@@ -8284,3 +8284,7 @@ Do not self-approve.
 Do not define or implement T-050.
 
 The next likely task after T-049, subject to independent review, is a separate approved-candidate read boundary or controlled Source-promotion design; the architect must choose from live repository state.
+
+## T-049 implementation note
+
+Implementation note (2026-09-11 Asia/Kolkata, UTC+05:30): added independent DRAFT/APPROVED/REJECTED review fields and lifecycle constraints to stored untrusted SourceCandidates through migration `d4a7c2e9f518`, parent `c8e4f2a9d617`. The single approval endpoint locks and updates only its target candidate, commits once, rolls back failures including post-flush failure, and reloads without a lock; SourceDiscoveryRun responses retain ordered candidates with current review metadata. Focused T-049 tests passed 9, the complete source-discovery suite passed 39, Source/Evidence/Claim/Verification regressions passed 34, T-047 passed 1, and the full suite passed 344; Ruff, lock, fresh/seeded migration cycle, Alembic, PostgreSQL constraints, and diff checks passed on dedicated `_test` databases. T-049 is Ready for review, not approved. No approved-candidate collection, Source creation/promotion, fetching, ingestion, release, AI/LLM, external provider, dependency, configuration, Docker, learner/public behavior, T-050 definition, or T-050 implementation was added.

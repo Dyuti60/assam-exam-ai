@@ -1641,3 +1641,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Content Factory / Source Review Foundation |
 | Scope | Candidate review fields, one migration, one target-only approval endpoint, response compatibility, PostgreSQL constraints, tests, and documentation only |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-049 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add independent DRAFT/APPROVED/REJECTED human review to each untrusted SourceCandidate and one target-only approval endpoint |
+| Persistence | Migration `d4a7c2e9f518`, parent `c8e4f2a9d617`; adds only three review fields and named status/lifecycle constraints |
+| API | `POST /api/v1/source-candidates/{source_candidate_id}/approval`; complete candidate response, exact missing-candidate 404, standard invalid-decision 422 |
+| Tests | Focused T-049: 9 passed, 30 deselected, 1 warning in 0.90s. Complete source-discovery: 39 passed in 1.16s. Source/Evidence/Claim/Verification: 34 passed in 1.51s. T-047: 1 passed in 0.88s. Full suite: 344 passed in 31.40s. Each suite reported one existing warning. |
+| Migration checks | Fresh upgrade reached `d4a7c2e9f518`; seeded successful/failed runs and candidates survived upgrade/downgrade/re-upgrade exactly, with DRAFT/null/null produced on each upgrade and no inferred approval. Alembic reports one head and no schema drift. |
+| Validation | Target-only SQL, one commit, post-flush rollback, direct PostgreSQL constraints, changed-file Ruff, `uv lock --check`, Alembic head/check, migration cycle, and diff/whitespace checks passed. |
+| Notes | Decisions change only the target candidate's review fields. Discovery snapshots and all related state remain unchanged. Approval does not confer Source trust or authorize fetching/ingestion. T-049 is not approved; no T-050 was defined or implemented. |

@@ -71,6 +71,8 @@ from app.schemas.knowledge import (
     QuestionBankItemReleaseCreate,
     QuestionBankItemReleaseDecision,
     QuestionBankItemResponse,
+    SourceCandidateApprovalCreate,
+    SourceCandidateResponse,
     SourceCreate,
     SourceDiscoveryRunCreate,
     SourceDiscoveryRunResponse,
@@ -172,6 +174,37 @@ class KnowledgeService:
                 source_discovery_run_id,
             )
         return self._source_discovery_run_response(source_discovery_run)
+
+    def record_source_candidate_approval(
+        self,
+        source_candidate_id: int,
+        request: SourceCandidateApprovalCreate,
+    ) -> SourceCandidateResponse:
+        source_candidate = self.repository.get_source_candidate_for_update(
+            source_candidate_id
+        )
+        if source_candidate is None:
+            raise ResourceNotFoundError("SourceCandidate", source_candidate_id)
+
+        is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
+        try:
+            self.repository.update_source_candidate_approval(
+                source_candidate,
+                request.approval_status.value,
+                None if is_draft else request.reviewer_note,
+                None if is_draft else datetime.now(UTC),
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_candidate = self.repository.get_source_candidate(source_candidate_id)
+        if stored_candidate is None:
+            raise RuntimeError(
+                f"SourceCandidate {source_candidate_id} missing after successful review"
+            )
+        return self._source_candidate_response(stored_candidate)
 
     def create_exam(self, request: ExamCreate) -> ExamResponse:
         exam = Exam(**request.model_dump())
@@ -1588,6 +1621,12 @@ class KnowledgeService:
         source_discovery_run: SourceDiscoveryRun,
     ) -> SourceDiscoveryRunResponse:
         return SourceDiscoveryRunResponse.model_validate(source_discovery_run)
+
+    @staticmethod
+    def _source_candidate_response(
+        source_candidate: SourceCandidate,
+    ) -> SourceCandidateResponse:
+        return SourceCandidateResponse.model_validate(source_candidate)
 
     @staticmethod
     def _pdf_artifact_response(pdf_artifact: PdfArtifact) -> PdfArtifactResponse:

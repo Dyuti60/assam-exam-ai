@@ -110,6 +110,14 @@ class SourceCandidateResponse(BaseModel):
     publisher: str | None
     snippet: str | None
     created_at: datetime
+    approval_status: ClaimApprovalStatus
+    approval_decided_at: datetime | None
+    reviewer_note: str | None
+
+
+class SourceCandidateApprovalCreate(BaseModel):
+    approval_status: ClaimApprovalStatus
+    reviewer_note: str | None = None
 
 
 class SourceDiscoveryRunResponse(BaseModel):

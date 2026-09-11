@@ -38,6 +38,8 @@ from app.schemas.knowledge import (
     QuestionBankItemCreate,
     QuestionBankItemReleaseCreate,
     QuestionBankItemResponse,
+    SourceCandidateApprovalCreate,
+    SourceCandidateResponse,
     SourceCreate,
     SourceDiscoveryRunCreate,
     SourceDiscoveryRunResponse,
@@ -91,6 +93,24 @@ def get_source_discovery_run(
     try:
         return KnowledgeService(db).get_source_discovery_run(
             source_discovery_run_id
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.post(
+    "/source-candidates/{source_candidate_id}/approval",
+    response_model=SourceCandidateResponse,
+)
+def record_source_candidate_approval(
+    source_candidate_id: int,
+    request: SourceCandidateApprovalCreate,
+    db: DatabaseSession,
+) -> SourceCandidateResponse:
+    try:
+        return KnowledgeService(db).record_source_candidate_approval(
+            source_candidate_id,
+            request,
         )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
