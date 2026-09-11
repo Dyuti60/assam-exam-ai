@@ -8529,3 +8529,370 @@ The next likely task after T-050, subject to independent review, is a separately
 ## T-050 implementation note
 
 Implementation note (2026-09-11 Asia/Kolkata, UTC+05:30): added only `GET /api/v1/source-candidates/approved` through the existing route, `SourceCandidateResponse`, service, repository, and PostgreSQL flow. One SourceCandidate-only query filters exact current APPROVED state and orders by ascending candidate ID under `session.no_autoflush`, with no joins, related-table reads, locks, flushes, commits, writes, fetching, enrichment, or trust promotion. Approval/reset/rejection changes collection membership immediately while stored discovery and review fields are returned unchanged and unrelated domain state remains irrelevant. Focused T-050 tests passed 2, the complete source-discovery suite passed 42, Source/Evidence/Claim/Verification regressions passed 34, T-047 passed 1, ContentPackage/PdfArtifact regressions passed 116, and the full suite passed 347; Ruff, lock, fresh upgrade through unchanged Alembic head `d4a7c2e9f518`, Alembic check, and diff checks passed on the dedicated `_test` database. T-050 is Ready for review, not approved. No model, schema, migration, Source creation/promotion, candidate fetching, ingestion, external provider, AI/LLM, dependency, configuration, Docker, learner/public behavior, T-051 definition, or T-051 implementation was added.
+
+
+---
+
+# T-050 independent review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-050` |
+| Implementation commit | `7b0a7b423c705069fa27602944ef76bf58666438` |
+| Base/task-issuance commit | `21ab18adeebdaaeb12d628b694a898d62dece568` |
+| Review result | **APPROVED** |
+| Approved capability | Read-only selection of currently APPROVED SourceCandidate snapshots using one candidate-only PostgreSQL query |
+| Validation | Developer-recorded 347-test full suite plus focused/regression, Ruff, lock, Alembic and fresh-upgrade checks. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+
+The review found no blocker in ancestry, changed-file scope, route placement, exact state filtering, SQL ordering, no-autoflush behavior, stored serialization, transition visibility, related-state independence, tests, documentation, or excluded scope.
+
+Do not modify or reinterpret T-050 while implementing the next task.
+
+# T-051 — Controlled SourceCandidate promotion
+
+## Role
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read the live repository before editing and follow `AGENTS.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt.
+
+Repository code is authoritative. Preserve append-only history in `docs/task_log.md` and `docs/next_task.md`.
+
+## Architectural classification
+
+Content Factory / Trusted Source Intake.
+
+T-048 persists untrusted discovery snapshots, T-049 records a candidate’s independent human review, and T-050 exposes currently APPROVED candidates. T-051 adds the separate, explicit decision that creates a trusted Source.
+
+Candidate approval remains only eligibility for promotion. Promotion is the action that creates the curated Source. It does not prove the Source’s factual contents, fetch bytes, create Evidence, or authorize automatic downstream processing.
+
+## Starting-state verification
+
+Before editing:
+
+1. Confirm branch `main`, fetch `origin/main`, and confirm a clean working tree.
+2. Confirm HEAD is the documentation commit approving T-050 and issuing T-051.
+3. Confirm T-050 implementation commit `7b0a7b423c705069fa27602944ef76bf58666438` has exact parent `21ab18adeebdaaeb12d628b694a898d62dece568`.
+4. Read the Source, SourceCandidate and SourceDiscoveryRun models, schemas, repository, service, routes, migrations, tests, and documentation.
+5. Confirm Alembic has one head: `d4a7c2e9f518`.
+6. Inspect existing Source creation compatibility, but do not change its public contract unless response reuse requires no change.
+7. Stop and report repository divergence that materially changes the task.
+
+## Objective
+
+Add one controlled API operation that atomically:
+
+1. locks one SourceCandidate;
+2. requires its current review state to be APPROVED;
+3. creates one trusted Source using explicit curated metadata while copying the candidate’s exact stored location;
+4. creates one immutable SourceCandidatePromotion provenance record;
+5. commits both records exactly once.
+
+A SourceCandidate may be promoted at most once. One promotion creates exactly one new Source. Do not attach a candidate to an existing Source in T-051.
+
+## API contract
+
+Add exactly:
+
+`POST /api/v1/source-candidates/{source_candidate_id}/promote`
+
+Return HTTP 201 with `SourceCandidatePromotionResponse`.
+
+Request schema:
+
+```json
+{
+  "title": "required curated Source title",
+  "publisher": "optional curated publisher",
+  "source_type": "required Source classification",
+  "authority_tier": 1,
+  "license_status": "required license classification"
+}
+```
+
+Requirements:
+
+- `title`: trimmed, nonblank, maximum 500 characters;
+- `publisher`: nullable; when supplied, trimmed, nonblank, maximum 255 characters;
+- `source_type`: trimmed, nonblank, maximum 100 characters;
+- `authority_tier`: integer from 1 through 4;
+- `license_status`: trimmed, nonblank, maximum 100 characters;
+- do not accept `location`, `content_hash`, candidate ID, Source ID, approval fields, or timestamps from the client;
+- copy `Source.location` exactly from the stored SourceCandidate location;
+- create the Source with `content_hash = NULL` because no content has been fetched.
+
+The response must contain:
+
+- promotion ID;
+- SourceCandidate ID;
+- Source ID;
+- exact promoted location;
+- snapshotted candidate approval status, exactly APPROVED;
+- snapshotted candidate approval decision timestamp;
+- snapshotted candidate reviewer note;
+- promotion creation timestamp;
+- the complete created `SourceResponse`.
+
+Do not add promotion retrieval/list/update/delete endpoints.
+
+## Stable errors
+
+Use:
+
+- missing candidate: HTTP 404, `{"detail": "SourceCandidate <id> not found"}`;
+- candidate not currently APPROVED: HTTP 409, `{"detail": "SourceCandidate <id> must be approved before promotion"}`;
+- already promoted: HTTP 409, `{"detail": "SourceCandidate <id> already has a Source"}`;
+- invalid request metadata: standard HTTP 422.
+
+Check missing candidate first, then approval eligibility, then ordinary duplicate state, before creating rows.
+
+The named database uniqueness constraint is the concurrency authority. Translate only its expected duplicate-candidate violation into the same stable duplicate 409. Roll back and re-raise unrelated integrity and persistence failures.
+
+## Persistence model
+
+Add a `SourceCandidatePromotion` model/table with:
+
+- integer primary-key `id`;
+- non-null unique `source_candidate_id`;
+- non-null unique `source_id`;
+- non-null `location`;
+- non-null `candidate_approval_status`, fixed to `APPROVED`;
+- non-null timezone-aware `candidate_approval_decided_at`;
+- nullable `candidate_reviewer_note`;
+- non-null timezone-aware `created_at`.
+
+The promotion record is immutable and has no mutation endpoint.
+
+Add only the supporting composite uniqueness required to enforce exact location provenance:
+
+- `source_candidates(id, location)`;
+- `sources(id, location)`.
+
+Enforce through named composite foreign keys that the promotion’s one stored `location` agrees with both:
+
+- its referenced SourceCandidate;
+- its referenced Source.
+
+Use `ON DELETE RESTRICT` for SourceCandidate and Source references. A promotion must prevent deletion of either referenced record.
+
+Add named PostgreSQL checks requiring:
+
+- nonblank promotion location;
+- `candidate_approval_status = 'APPROVED'`;
+- non-null candidate approval decision time.
+
+Model metadata and migration definitions must match exactly.
+
+Do not add Source approval/release fields, candidate release state, fetch state, or generic audit/event infrastructure.
+
+## Promotion semantics
+
+The Source fields are created as follows:
+
+- `title`, `publisher`, `source_type`, `authority_tier`, and `license_status` come only from the validated promotion request;
+- `location` comes only from the immutable SourceCandidate snapshot;
+- `content_hash` is null;
+- `created_at` is database-generated using existing Source behavior.
+
+The promotion record snapshots the candidate’s current APPROVED decision timestamp and reviewer note. Later permitted candidate review changes must not mutate, delete, or reinterpret the trusted Source or promotion snapshot.
+
+Promotion does not:
+
+- compare or merge other candidates;
+- deduplicate candidates or Sources by global URL/location;
+- update an existing Source;
+- infer Source metadata from candidate title, publisher, or snippet;
+- use the candidate snippet as Source content;
+- fetch or validate the URL;
+- verify facts;
+- create Evidence, Claims, Verification, canonical content, documents, or artifacts;
+- automatically trigger another process.
+
+## Layering
+
+Preserve:
+
+```text
+Route
+  ↓
+Pydantic promotion request/response
+  ↓
+KnowledgeService
+  ↓
+KnowledgeRepository
+  ↓
+PostgreSQL
+```
+
+Routes remain thin and map only established missing/conflict domain errors.
+
+Repository responsibilities:
+
+- load the target SourceCandidate using `SELECT ... FOR UPDATE OF source_candidates`;
+- query ordinary existing promotion state without locking unrelated rows;
+- add and flush the new Source plus promotion atomically;
+- retrieve the stored promotion with only the relationships required for the response.
+
+Service responsibilities:
+
+- validate in the required order before mutation;
+- construct the Source and promotion from the exact sources defined above;
+- commit exactly once;
+- roll back every failure;
+- translate only the named duplicate-candidate constraint;
+- reload and return stored response data.
+
+Do not lock SourceDiscoveryRun, Source, Evidence, Claim, Verification, content, document, artifact, or unrelated candidate rows.
+
+## Review-state interaction
+
+The target row lock must serialize promotion against concurrent candidate review.
+
+Promotion eligibility is evaluated from the candidate state observed under that lock.
+
+The promotion snapshots the approval decision that authorized creation. Later candidate review decisions remain governed by the existing T-049 endpoint and must not mutate the promotion or Source. Do not add automatic Source revocation or deletion.
+
+## Migration requirements
+
+Create exactly one Alembic revision whose parent is `d4a7c2e9f518`.
+
+It must add only:
+
+- the two supporting composite unique constraints;
+- the `source_candidate_promotions` table and its named constraints.
+
+Do not create promotions or Sources for existing candidates. No promotion may be inferred from candidate approval.
+
+Downgrade must:
+
+1. drop the promotion table;
+2. drop only the two T-051 supporting unique constraints;
+3. preserve all pre-existing Sources, SourceCandidates, discovery runs, and review metadata.
+
+Edit no historical migration.
+
+Validate:
+
+`d4a7c2e9f518 -> T-051 head -> d4a7c2e9f518 -> T-051 head`
+
+Seed approved, rejected, and DRAFT candidates before upgrade. Verify all candidates and review metadata survive, no Source or promotion is inferred, and both later upgrades remain clean.
+
+## Required tests
+
+Use PostgreSQL with database names ending in `_test`. Do not use SQLite.
+
+Cover at minimum:
+
+- an APPROVED candidate creates exactly one Source and one promotion with HTTP 201;
+- Source fields use only request metadata except exact candidate location and null content hash;
+- response and database rows contain exact candidate/Source IDs, location, approval snapshot, reviewer note, and timestamps;
+- DRAFT and REJECTED candidates return the exact eligibility 409 with zero Source/promotion rows;
+- missing candidate returns exact 404;
+- invalid/blank/out-of-range metadata returns 422 without persistence;
+- duplicate promotion returns exact 409 and leaves the original Source/promotion unchanged;
+- a simulated concurrency uniqueness violation maps only the named candidate uniqueness constraint to duplicate 409;
+- unrelated database failures roll back and are re-raised;
+- post-flush injected failure leaves no Source or promotion;
+- success commits exactly once;
+- failure rolls back;
+- only the target candidate is row-locked;
+- parent SourceDiscoveryRun and all unrelated candidates/domain rows remain unchanged;
+- later DRAFT/REJECTED/reapproval changes do not alter the stored promotion or trusted Source;
+- PostgreSQL rejects duplicate candidate/source membership, candidate-location mismatch, Source-location mismatch, blank promotion location, non-APPROVED approval snapshot, and null decision time;
+- deletion of either referenced SourceCandidate or Source is restricted;
+- direct Source creation remains compatible and does not create promotion provenance;
+- T-050 approved collection remains candidate-review-only and is not filtered by promotion existence;
+- migration cycle preserves prior data and infers no Source/promotion;
+- T-047 internal deliverable workflow and all earlier source/provenance/canonical-artifact regressions remain compatible.
+
+Any SQLAlchemy event listener used for query, lock, flush, commit, or rollback inspection must be removed in `finally`.
+
+## Dependencies, configuration, and infrastructure
+
+Inspect:
+
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+T-051 requires no new dependency, API key, secret, environment variable, configuration value, Docker service, queue, object storage, external provider, or infrastructure. Leave those files unchanged unless a genuine repository inconsistency requires otherwise.
+
+## Documentation
+
+Update only implemented reality:
+
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append the T-051 implementation record to `docs/task_log.md`;
+- append the T-051 implementation note to `docs/next_task.md`.
+
+Keep task history append-only. Record T-051 only as **Ready for review**, never approved. Do not define T-052.
+
+## Scope exclusions
+
+Do not add:
+
+- SourceCandidate release or publication state;
+- automatic promotion of every approved candidate;
+- bulk promotion;
+- promotion retrieval/list/update/delete;
+- attachment to an existing Source;
+- global URL/domain/hash deduplication or Source merging;
+- Source review, release, update, or deletion APIs;
+- network discovery, web search, crawling, scraping, robots handling, allowlist enforcement, URL requests, fetching, redirects, retries, rate limiting, or external adapters;
+- SourceFetchRun, source snapshots, downloaded bytes, object storage, checksums, parsing, extraction, or chunking;
+- Evidence, Claim, Verification, note, question, package, document, or artifact creation;
+- LLM/provider configuration, API keys, embeddings, RAG, autonomous agents, orchestration, queues, or background jobs;
+- learner/public APIs, authentication, authorization, frontend, mocks, personalization, analytics, payments, CI/CD, deployment, or production infrastructure;
+- T-052.
+
+## Required validation
+
+Run and report:
+
+- focused T-051 promotion tests;
+- complete T-048 through T-051 source-discovery/review/promotion suite;
+- existing Source/Evidence/Claim/Verification tests;
+- T-047 internal deliverable smoke test;
+- relevant canonical-content and artifact regressions;
+- complete test suite;
+- Ruff on every changed Python file;
+- `uv lock --check`;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh database upgrade through the new head;
+- seeded upgrade/downgrade/re-upgrade cycle;
+- direct PostgreSQL constraint probes;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Confirm one Alembic head whose parent is `d4a7c2e9f518`, no schema drift, no historical migration edit, and no dependency/configuration/environment/Docker/API-key/provider/storage/infrastructure change.
+
+Report developer-run evidence accurately and do not call it GitHub CI.
+
+## Expected handoff
+
+Report:
+
+- starting and final Git state;
+- exact files changed;
+- model, registration, migration, constraints, and downgrade;
+- endpoint request/response/errors;
+- exact candidate-to-Source field mapping;
+- promotion provenance and review-snapshot semantics;
+- target-only locking, one-commit success, rollback, and concurrency handling;
+- immutability and later candidate-review independence;
+- focused/regression/full-suite validation;
+- dependency/configuration/Docker/AGENTS.md/README decisions;
+- explicit excluded scope.
+
+Leave T-051 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-052.

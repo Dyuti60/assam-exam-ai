@@ -1700,3 +1700,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | Focused T-050: 2 passed, 40 deselected, 1 warning in 0.73s. Complete source-discovery: 42 passed in 1.19s. Source/Evidence/Claim/Verification: 34 passed in 1.31s. T-047: 1 passed in 0.88s. ContentPackage/PdfArtifact regressions: 116 passed in 20.24s. Full suite: 347 passed in 33.33s. Each suite reported one existing warning. |
 | Validation | Fresh upgrade reached unchanged head `d4a7c2e9f518`; changed-file Ruff, `uv lock --check`, Alembic head/check, and diff checks passed on the dedicated `_test` database. |
 | Notes | Membership follows only the candidate's current independent review state and updates immediately after approval/reset/rejection. Returned records remain immutable untrusted discovery leads. T-050 is not approved; no fetch, Source promotion, ingestion, AI, infrastructure, or T-051 work was added. |
+
+
+---
+
+## T-050 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-050` |
+| Implementation commit | `7b0a7b423c705069fa27602944ef76bf58666438` |
+| Base/task-issuance commit | `21ab18adeebdaaeb12d628b694a898d62dece568` |
+| Review state | **APPROVED** |
+| Approved capability | Read-only deterministic collection of currently APPROVED untrusted SourceCandidate snapshots |
+| Persistence | No model or migration change; Alembic head remains `d4a7c2e9f518` |
+| Validation evidence | Developer-recorded: 2 focused T-050 tests, 42 complete source-discovery tests, 34 Source/Evidence/Claim/Verification regressions, 1 T-047 smoke test, 116 ContentPackage/PdfArtifact regressions, and 347 full-suite tests; Ruff, dependency-lock, fresh upgrade, Alembic head/check, and diff checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | The implementation is exactly one commit over the issued base. Static-route placement, exact approval filtering, ID ordering, one-query/no-autoflush behavior, transition visibility, immutable response preservation, zero-write behavior, tests, documentation, and exclusions match the canonical task with no blocking finding. |
+| Boundaries | No Source promotion, fetch, Source creation, ingestion, external provider, AI/LLM, learner/public behavior, dependency, configuration, Docker, infrastructure, or T-051 behavior was included. |
+
+---
+
+## T-051 issued — Controlled SourceCandidate promotion
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Atomically create one trusted Source from one currently APPROVED SourceCandidate and retain immutable promotion provenance |
+| Architectural phase | Content Factory / Trusted Source Intake |
+| Scope | Explicit request-supplied Source classification, candidate location preservation, one Source and one promotion record, database ownership constraints, tests, and documentation; no network fetch, ingestion, extraction, AI, or T-052 |
+| Full implementation prompt | Appended to `docs/next_task.md` |

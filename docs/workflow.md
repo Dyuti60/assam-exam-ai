@@ -1644,3 +1644,15 @@ flowchart LR
 - Focused T-050: 2 passed, 40 deselected, 1 warning in 0.73s. Complete source-discovery suite: 42 passed, 1 warning in 1.19s. Source/Evidence/Claim/Verification regressions: 34 passed, 1 warning in 1.31s. T-047 smoke: 1 passed, 1 warning in 0.88s. ContentPackage/PdfArtifact regressions: 116 passed, 1 warning in 20.24s. Full suite: 347 passed, 1 warning in 33.33s.
 - Fresh upgrade reached unchanged Alembic head `d4a7c2e9f518`. Ruff, dependency-lock verification, Alembic head/check, and diff checks passed on the dedicated `assam_exam_ai_t050_test` PostgreSQL database.
 - T-050 is Ready for review, not approved. No model, schema, migration, Source promotion, candidate fetch, ingestion, external provider, AI/LLM, dependency, configuration, Docker, infrastructure, learner/public behavior, or T-051 work was added.
+
+
+### T-050 post-push review and T-051 issuance
+
+- **APPROVED** at immutable implementation commit `7b0a7b423c705069fa27602944ef76bf58666438`, whose exact parent is T-050 issuance commit `21ab18adeebdaaeb12d628b694a898d62dece568`.
+- The commit adds only the static approved-candidate route, one SourceCandidate-only repository query, shared stored-response serialization, focused PostgreSQL tests, and current-state documentation.
+- PostgreSQL filters exactly current APPROVED candidate review state and orders by candidate ID under `session.no_autoflush`. The query has no join, related-table load, row lock, flush, commit, refresh, or write.
+- Approval, DRAFT reset, reapproval, and rejection immediately change collection membership without changing immutable discovery snapshots. Returned records remain untrusted leads and are not Sources or factual evidence.
+- Developer-recorded evidence is 2 focused T-050 tests, 42 complete source-discovery tests, 34 Source/Evidence/Claim/Verification regressions, 1 T-047 smoke test, 116 ContentPackage/PdfArtifact regressions, and 347 full-suite tests, each with one existing warning where reported, plus successful Ruff, dependency-lock, fresh upgrade, Alembic head/check, and diff checks.
+- GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No model, schema, migration, Source promotion, fetch, ingestion, provider, AI, learner/public behavior, dependency, configuration, Docker, infrastructure, or T-051 behavior was included.
+- T-051 is the separate controlled promotion boundary. Promotion creates a trusted Source and durable candidate-to-Source provenance but does not fetch or ingest content.
