@@ -39,6 +39,8 @@ from app.schemas.knowledge import (
     QuestionBankItemReleaseCreate,
     QuestionBankItemResponse,
     SourceCreate,
+    SourceDiscoveryRunCreate,
+    SourceDiscoveryRunResponse,
     SourceResponse,
     SyllabusVersionCreate,
     SyllabusVersionResponse,
@@ -61,6 +63,37 @@ def _not_found(error: ResourceNotFoundError) -> HTTPException:
 
 def _conflict(error: ResourceConflictError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+
+
+@router.post(
+    "/source-discovery-runs",
+    response_model=SourceDiscoveryRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_source_discovery_run(
+    request: SourceDiscoveryRunCreate,
+    db: DatabaseSession,
+) -> SourceDiscoveryRunResponse:
+    try:
+        return KnowledgeService(db).create_source_discovery_run(request)
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.get(
+    "/source-discovery-runs/{source_discovery_run_id}",
+    response_model=SourceDiscoveryRunResponse,
+)
+def get_source_discovery_run(
+    source_discovery_run_id: int,
+    db: DatabaseSession,
+) -> SourceDiscoveryRunResponse:
+    try:
+        return KnowledgeService(db).get_source_discovery_run(
+            source_discovery_run_id
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
 
 
 @router.post("/sources", response_model=SourceResponse, status_code=201)

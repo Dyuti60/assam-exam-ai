@@ -30,7 +30,7 @@ The Content Factory is being built incrementally. The Learning Engine, user prof
 
 ## Current confirmed implementation
 
-This section describes only the repository inspected on 2026-09-10 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
+This section describes only the repository inspected on 2026-09-11 in Asia/Kolkata (UTC+05:30). Test results recorded in `workflow.md` and `task_log.md` were run against dedicated PostgreSQL test databases.
 
 | Area | Confirmed state |
 | --- | --- |
@@ -40,10 +40,10 @@ This section describes only the repository inspected on 2026-09-10 in Asia/Kolka
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; twenty-four migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, versioned NoteDraft ownership, complete internal MCQ candidates, independent review and controlled release for candidates and drafts, immutable ContentPackage membership/review/release, immutable render-ready ContentDocument snapshots with independent review and controlled release, and deterministic PDF artifact persistence with independent review and controlled release |
-| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, ordered `QuestionBankOption` records, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, `Source`, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, `ContentPackage`, `ContentPackageNoteDraft`, `ContentPackageQuestionBankItem`, `ContentDocument`, `PdfArtifact`, and ordered provenance associations |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; twenty-five migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, versioned NoteDraft ownership, complete internal MCQ candidates, independent review and controlled release for candidates and drafts, immutable ContentPackage membership/review/release, immutable render-ready ContentDocument snapshots with independent review and controlled release, deterministic PDF artifact persistence with independent review and controlled release, and immutable source-discovery audit snapshots |
+| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, ordered `QuestionBankOption` records, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, trusted `Source`, untrusted `SourceDiscoveryRun` and ordered `SourceCandidate` audit records, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, `ContentPackage`, `ContentPackageNoteDraft`, `ContentPackageQuestionBankItem`, `ContentDocument`, `PdfArtifact`, and ordered provenance associations |
 | Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Three hundred five tests cover the foundation, ContentVersion ownership and complete internal MCQ-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, independent approval/release boundaries, version-scoped released-asset manifests, ContentPackage membership/review/release/read boundaries, deterministic ContentDocument rendering/checksums, individual retrieval, independent document review/release and released reads, deterministic PDF bytes/checksums, exact ownership, read-only internal and released-only retrieval/download, independent artifact review and controlled artifact release, PostgreSQL constraints, stored snapshots, locking, transactional failure atomicity, and the complete internal deliverable workflow |
+| Tests | Three hundred thirty-five tests cover the foundation, immutable source-discovery run/candidate snapshots, ContentVersion ownership and complete internal MCQ-candidate constraints, sourced exam inputs, deterministic Topic priority, provenance, knowledge APIs, independent approval/release boundaries, version-scoped released-asset manifests, ContentPackage membership/review/release/read boundaries, deterministic ContentDocument rendering/checksums, individual retrieval, independent document review/release and released reads, deterministic PDF bytes/checksums, exact ownership, read-only internal and released-only retrieval/download, independent artifact review and controlled artifact release, PostgreSQL constraints, stored snapshots, locking, transactional failure atomicity, and the complete internal deliverable workflow |
 | Agents | Package placeholders only; no agent behavior is implemented |
 
 ### Current runtime flow
@@ -85,6 +85,7 @@ erDiagram
     PREVIOUS_PAPER ||--o{ PREVIOUS_QUESTION : "contains"
     TOPIC ||--o{ PREVIOUS_QUESTION : "classifies"
     TOPIC ||--o{ CLAIM : "optional topic_id"
+    SOURCE_DISCOVERY_RUN ||--o{ SOURCE_CANDIDATE : "captures in position order"
     SOURCE ||--o{ EVIDENCE : "source_id"
     CLAIM ||--o{ VERIFICATION : "claim_id"
     CLAIM ||--o{ CLAIM_EVIDENCE : "claim_id"
@@ -95,6 +96,8 @@ erDiagram
     NOTE_DRAFT ||--|{ NOTE_DRAFT_CLAIM : "records in position order"
     CLAIM ||--o{ NOTE_DRAFT_CLAIM : "used by draft"
 ```
+
+`SourceDiscoveryRun` is an immutable audit record for one already-completed discovery attempt. A successful run stores zero or more normalized, position-ordered `SourceCandidate` leads; a failed run stores an error and no candidates. PostgreSQL enforces lifecycle consistency, candidate normalization, per-run position and location uniqueness, and a composite same-run `SUCCEEDED` invariant. Create persists the run and all candidates with one commit and rolls back the whole aggregate on failure; retrieval returns the stored order without writes. Candidates are untrusted leads and have no relationship to curated `Source` rows. No external discovery adapter, network request, fetching, ingestion, approval, or Source promotion exists.
 
 ## Planned architecture — not implemented
 

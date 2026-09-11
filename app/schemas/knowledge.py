@@ -28,6 +28,102 @@ class ClaimApprovalStatus(StrEnum):
     REJECTED = "REJECTED"
 
 
+class SourceDiscoveryStatus(StrEnum):
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class SourceCandidateCreate(BaseModel):
+    location: str = Field(min_length=1)
+    title: str | None = None
+    publisher: str | None = Field(default=None, max_length=255)
+    snippet: str | None = None
+
+    @field_validator("location")
+    @classmethod
+    def normalize_location(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("location must not be blank")
+        return normalized
+
+    @field_validator("title", "publisher", "snippet")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("supplied optional text must not be blank")
+        return normalized
+
+
+class SourceDiscoveryRunCreate(BaseModel):
+    query: str = Field(min_length=1)
+    adapter_key: str = Field(min_length=1, max_length=100)
+    status: SourceDiscoveryStatus
+    error_message: str | None = None
+    candidates: list[SourceCandidateCreate] = Field(default_factory=list)
+
+    @field_validator("query", "adapter_key")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("value must not be blank")
+        return normalized
+
+    @field_validator("error_message")
+    @classmethod
+    def normalize_error_message(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("error_message must not be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_lifecycle_and_candidates(self) -> Self:
+        if self.status == SourceDiscoveryStatus.SUCCEEDED and self.error_message:
+            raise ValueError("SUCCEEDED runs must not have an error_message")
+        if self.status == SourceDiscoveryStatus.FAILED:
+            if self.error_message is None:
+                raise ValueError("FAILED runs require an error_message")
+            if self.candidates:
+                raise ValueError("FAILED runs must not have candidates")
+        locations = [candidate.location for candidate in self.candidates]
+        if len(locations) != len(set(locations)):
+            raise ValueError("candidate locations must be unique")
+        return self
+
+
+class SourceCandidateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    source_discovery_run_id: int
+    run_status: SourceDiscoveryStatus
+    position: int
+    location: str
+    title: str | None
+    publisher: str | None
+    snippet: str | None
+    created_at: datetime
+
+
+class SourceDiscoveryRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    query: str
+    adapter_key: str
+    status: SourceDiscoveryStatus
+    error_message: str | None
+    created_at: datetime
+    candidates: list[SourceCandidateResponse]
+
+
 class SourceCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     publisher: str | None = Field(default=None, max_length=255)

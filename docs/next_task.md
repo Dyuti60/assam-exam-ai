@@ -7994,3 +7994,7 @@ Do not self-approve.
 Do not define or implement T-049.
 
 The next likely task after T-048, subject to independent review, is a separate human-review boundary for untrusted SourceCandidates before any Source promotion or ingestion.
+
+## T-048 implementation note
+
+Implementation note (2026-09-11 Asia/Kolkata, UTC+05:30): persisted immutable completed `SourceDiscoveryRun` aggregates with normalized, position-ordered untrusted `SourceCandidate` snapshots. Migration `c8e4f2a9d617` follows `a5d2c8f1e736` and adds named lifecycle/content, per-run uniqueness, and composite same-run SUCCEEDED-candidate constraints. The create endpoint commits one complete aggregate atomically and the read endpoint returns its stored order; failures roll back fully, with stable missing-resource and named uniqueness responses. Focused T-048 tests passed 30 tests, Source/Evidence/Claim/Verification regressions passed 34, T-047 passed 1, and the full suite passed 335; Ruff, lock, fresh/seeded migration cycle, Alembic, and diff checks passed on dedicated `_test` databases. T-048 is Ready for review, not approved. No network discovery, external adapter, candidate review, Source promotion, ingestion, AI/LLM, embeddings, agents, dependency, configuration, Docker, learner/public behavior, T-049 definition, or T-049 implementation was added.

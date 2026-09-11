@@ -19,6 +19,8 @@ from app.models.question_bank_item import QuestionBankItem
 from app.models.question_bank_item_claim import QuestionBankItemClaim
 from app.models.question_bank_option import QuestionBankOption
 from app.models.source import Source
+from app.models.source_candidate import SourceCandidate
+from app.models.source_discovery_run import SourceDiscoveryRun
 from app.models.syllabus_version import SyllabusVersion
 from app.models.syllabus_version_topic import SyllabusVersionTopic
 from app.models.topic import Topic
@@ -44,6 +46,8 @@ __all__ = [
     "QuestionBankItemClaim",
     "QuestionBankOption",
     "Source",
+    "SourceCandidate",
+    "SourceDiscoveryRun",
     "SyllabusVersion",
     "SyllabusVersionTopic",
     "Topic",

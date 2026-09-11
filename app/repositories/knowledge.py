@@ -20,6 +20,7 @@ from app.models import (
     PreviousQuestion,
     QuestionBankItem,
     Source,
+    SourceDiscoveryRun,
     SyllabusVersion,
     Topic,
     Verification,
@@ -47,6 +48,26 @@ class KnowledgeRepository:
 
     def get_source(self, source_id: int) -> Source | None:
         return self.session.get(Source, source_id)
+
+    def add_source_discovery_run(
+        self,
+        source_discovery_run: SourceDiscoveryRun,
+    ) -> SourceDiscoveryRun:
+        self.session.add(source_discovery_run)
+        self.session.flush()
+        return source_discovery_run
+
+    def get_source_discovery_run(
+        self,
+        source_discovery_run_id: int,
+    ) -> SourceDiscoveryRun | None:
+        statement = (
+            select(SourceDiscoveryRun)
+            .options(selectinload(SourceDiscoveryRun.candidates))
+            .where(SourceDiscoveryRun.id == source_discovery_run_id)
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
 
     def add_exam(self, exam: Exam) -> Exam:
         self.session.add(exam)

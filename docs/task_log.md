@@ -1598,3 +1598,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Content Factory / Source Discovery Foundation |
 | Scope | Models, constraints, one migration, atomic create and read APIs, schemas, repository/service, tests, and documentation only; no discovery adapter, network fetch, approval, Source promotion, ingestion, AI, or T-049 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-048 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Persist immutable completed `SourceDiscoveryRun` aggregates and position-ordered untrusted `SourceCandidate` snapshots; add atomic create and read APIs only |
+| Persistence | Migration `c8e4f2a9d617`, parent `a5d2c8f1e736`; named lifecycle/content checks, per-run unique position/location constraints, and restricted composite same-run SUCCEEDED candidate ownership |
+| API | `POST /api/v1/source-discovery-runs` returns 201; `GET /api/v1/source-discovery-runs/{source_discovery_run_id}` returns the exact stored aggregate; stable 404 and named uniqueness 409 behavior |
+| Tests | Focused T-048: 30 passed, 1 warning in 0.99s. Source/Evidence/Claim/Verification regressions: 34 passed, 1 warning in 1.40s. T-047 smoke: 1 passed, 1 warning in 0.94s. Full suite: 335 passed, 1 warning in 30.15s. |
+| Migration checks | Fresh upgrade reached `c8e4f2a9d617`. A dedicated seeded cycle upgraded from `a5d2c8f1e736`, downgraded, and re-upgraded while preserving the pre-T-048 Source exactly and inferring zero runs/candidates. Alembic reports one head and no schema drift. |
+| Validation | Changed-file Ruff, `uv lock --check`, Alembic head/check, migration cycle, PostgreSQL constraints, rollback atomicity, `git diff --check`, and untracked-file whitespace checks passed. |
+| Notes | Successful run/candidates commit once and reload in stored order; all persistence failures roll back the aggregate. Candidates remain untrusted leads separate from curated Sources. T-048 is not approved. No external discovery, fetching, candidate review, Source promotion, ingestion, AI, dependency, configuration, Docker, infrastructure, or T-049 work was added. |

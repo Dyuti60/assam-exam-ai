@@ -23,6 +23,8 @@ from app.models import (
     QuestionBankItemClaim,
     QuestionBankOption,
     Source,
+    SourceCandidate,
+    SourceDiscoveryRun,
     SyllabusVersion,
     SyllabusVersionTopic,
     Topic,
@@ -70,6 +72,8 @@ from app.schemas.knowledge import (
     QuestionBankItemReleaseDecision,
     QuestionBankItemResponse,
     SourceCreate,
+    SourceDiscoveryRunCreate,
+    SourceDiscoveryRunResponse,
     SyllabusVersionCreate,
     SyllabusVersionResponse,
     TopicCreate,
@@ -110,6 +114,64 @@ class KnowledgeService:
     def create_source(self, request: SourceCreate) -> Source:
         source = Source(**request.model_dump())
         return self._commit(self.repository.add_source(source))
+
+    def create_source_discovery_run(
+        self,
+        request: SourceDiscoveryRunCreate,
+    ) -> SourceDiscoveryRunResponse:
+        source_discovery_run = SourceDiscoveryRun(
+            query=request.query,
+            adapter_key=request.adapter_key,
+            status=request.status.value,
+            error_message=request.error_message,
+            candidates=[
+                SourceCandidate(
+                    run_status="SUCCEEDED",
+                    position=position,
+                    **candidate.model_dump(),
+                )
+                for position, candidate in enumerate(request.candidates)
+            ],
+        )
+        try:
+            self.repository.add_source_discovery_run(source_discovery_run)
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            diagnostic = getattr(error.orig, "diag", None)
+            constraint_name = getattr(diagnostic, "constraint_name", None)
+            if constraint_name not in {
+                "uq_source_candidates_run_position",
+                "uq_source_candidates_run_location",
+            }:
+                raise
+            raise ResourceConflictError(
+                "SourceDiscoveryRun candidate positions or locations conflict"
+            ) from error
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_run = self.repository.get_source_discovery_run(source_discovery_run.id)
+        if stored_run is None:
+            raise RuntimeError(
+                f"SourceDiscoveryRun {source_discovery_run.id} was not stored"
+            )
+        return self._source_discovery_run_response(stored_run)
+
+    def get_source_discovery_run(
+        self,
+        source_discovery_run_id: int,
+    ) -> SourceDiscoveryRunResponse:
+        source_discovery_run = self.repository.get_source_discovery_run(
+            source_discovery_run_id
+        )
+        if source_discovery_run is None:
+            raise ResourceNotFoundError(
+                "SourceDiscoveryRun",
+                source_discovery_run_id,
+            )
+        return self._source_discovery_run_response(source_discovery_run)
 
     def create_exam(self, request: ExamCreate) -> ExamResponse:
         exam = Exam(**request.model_dump())
@@ -1520,6 +1582,12 @@ class KnowledgeService:
             withdrawn_at=content_document.withdrawn_at,
             release_note=content_document.release_note,
         )
+
+    @staticmethod
+    def _source_discovery_run_response(
+        source_discovery_run: SourceDiscoveryRun,
+    ) -> SourceDiscoveryRunResponse:
+        return SourceDiscoveryRunResponse.model_validate(source_discovery_run)
 
     @staticmethod
     def _pdf_artifact_response(pdf_artifact: PdfArtifact) -> PdfArtifactResponse:
