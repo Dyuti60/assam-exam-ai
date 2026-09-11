@@ -207,6 +207,12 @@ class KnowledgeService:
             )
         return self._source_candidate_response(stored_candidate)
 
+    def get_approved_source_candidates(self) -> list[SourceCandidateResponse]:
+        return [
+            self._source_candidate_response(source_candidate)
+            for source_candidate in self.repository.get_approved_source_candidates()
+        ]
+
     def create_exam(self, request: ExamCreate) -> ExamResponse:
         exam = Exam(**request.model_dump())
         try:

@@ -98,6 +98,16 @@ def get_source_discovery_run(
         raise _not_found(error) from error
 
 
+@router.get(
+    "/source-candidates/approved",
+    response_model=list[SourceCandidateResponse],
+)
+def get_approved_source_candidates(
+    db: DatabaseSession,
+) -> list[SourceCandidateResponse]:
+    return KnowledgeService(db).get_approved_source_candidates()
+
+
 @router.post(
     "/source-candidates/{source_candidate_id}/approval",
     response_model=SourceCandidateResponse,

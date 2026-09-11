@@ -18,6 +18,7 @@ from app.schemas.knowledge import (
     SourceCandidateApprovalStatus,
     SourceCandidateResponse,
 )
+from app.services import KnowledgeService
 
 
 @pytest.fixture
@@ -115,6 +116,174 @@ def test_source_candidate_schemas_use_dedicated_approval_status() -> None:
     request = SourceCandidateApprovalCreate(approval_status="APPROVED")
     assert request.approval_status is SourceCandidateApprovalStatus.APPROVED
     assert not isinstance(request.approval_status, ClaimApprovalStatus)
+
+
+def test_approved_source_candidates_follow_current_state_and_id_order(
+    client: TestClient,
+    db_connection: Connection,
+) -> None:
+    assert client.get("/api/v1/source-candidates/approved").json() == []
+    first_run = _post_run(
+        client,
+        _run_payload(
+            candidates=[
+                _candidate("https://example.gov/approved-first"),
+                _candidate("https://example.gov/approved-second"),
+                _candidate("https://example.gov/rejected"),
+            ]
+        ),
+    )
+    second_run = _post_run(
+        client,
+        _run_payload(candidates=[_candidate("https://example.gov/approved-third")]),
+    )
+    first, second, rejected = first_run["candidates"]
+    third = second_run["candidates"][0]
+
+    rejected_response = client.post(
+        f"/api/v1/source-candidates/{rejected['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "not selected"},
+    )
+    assert rejected_response.status_code == 200
+    approved_responses: dict[int, dict] = {}
+    for candidate in (third, second, first):
+        response = client.post(
+            f"/api/v1/source-candidates/{candidate['id']}/approval",
+            json={
+                "approval_status": "APPROVED",
+                "reviewer_note": f"approved {candidate['id']}",
+            },
+        )
+        assert response.status_code == 200, response.text
+        approved_responses[candidate["id"]] = response.json()
+
+    candidate_rows_before = db_connection.execute(
+        select(SourceCandidate.__table__).order_by(SourceCandidate.id)
+    ).mappings().all()
+    run_rows_before = db_connection.execute(
+        select(SourceDiscoveryRun.__table__).order_by(SourceDiscoveryRun.id)
+    ).mappings().all()
+    collection = client.get("/api/v1/source-candidates/approved")
+    assert collection.status_code == 200
+    returned = collection.json()
+    expected_ids = sorted(approved_responses)
+    assert [candidate["id"] for candidate in returned] == expected_ids
+    assert [candidate["position"] for candidate in returned] == [0, 1, 0]
+    assert returned == [approved_responses[candidate_id] for candidate_id in expected_ids]
+    assert rejected["id"] not in expected_ids
+    assert db_connection.execute(
+        select(SourceCandidate.__table__).order_by(SourceCandidate.id)
+    ).mappings().all() == candidate_rows_before
+    assert db_connection.execute(
+        select(SourceDiscoveryRun.__table__).order_by(SourceDiscoveryRun.id)
+    ).mappings().all() == run_rows_before
+
+    reset = client.post(
+        f"/api/v1/source-candidates/{second['id']}/approval",
+        json={"approval_status": "DRAFT", "reviewer_note": "cleared"},
+    )
+    assert reset.status_code == 200
+    assert second["id"] not in {
+        item["id"] for item in client.get("/api/v1/source-candidates/approved").json()
+    }
+    restored = client.post(
+        f"/api/v1/source-candidates/{second['id']}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "restored"},
+    )
+    assert restored.status_code == 200
+    assert second["id"] in {
+        item["id"] for item in client.get("/api/v1/source-candidates/approved").json()
+    }
+    removed = client.post(
+        f"/api/v1/source-candidates/{second['id']}/approval",
+        json={"approval_status": "REJECTED", "reviewer_note": "removed"},
+    )
+    assert removed.status_code == 200
+    assert second["id"] not in {
+        item["id"] for item in client.get("/api/v1/source-candidates/approved").json()
+    }
+
+
+def test_approved_source_candidates_use_one_read_only_candidate_query(
+    client: TestClient,
+    db_connection: Connection,
+    db_session: Session,
+) -> None:
+    created = _post_run(
+        client,
+        _run_payload(candidates=[_candidate("https://example.gov/read-query")]),
+    )
+    candidate_id = created["candidates"][0]["id"]
+    approved = client.post(
+        f"/api/v1/source-candidates/{candidate_id}/approval",
+        json={"approval_status": "APPROVED", "reviewer_note": "query proof"},
+    )
+    assert approved.status_code == 200
+    source_count = db_connection.scalar(select(func.count()).select_from(Source))
+    pending_source = Source(
+        title="Pending unrelated source",
+        publisher=None,
+        source_type="OFFICIAL",
+        authority_tier=1,
+        location="https://example.test/pending-unrelated",
+        license_status="TEST_ONLY",
+        content_hash="t050-pending-source",
+    )
+    db_session.add(pending_source)
+    statements: list[str] = []
+    flushes = 0
+    commits = 0
+
+    def record_statement(
+        connection: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: object,
+    ) -> None:
+        statements.append(statement)
+
+    def record_flush(*args: object) -> None:
+        nonlocal flushes
+        flushes += 1
+
+    def record_commit(*args: object) -> None:
+        nonlocal commits
+        commits += 1
+
+    event.listen(db_connection, "before_cursor_execute", record_statement)
+    event.listen(Session, "after_flush", record_flush)
+    event.listen(Session, "after_commit", record_commit)
+    try:
+        response = KnowledgeService(db_session).get_approved_source_candidates()
+    finally:
+        event.remove(db_connection, "before_cursor_execute", record_statement)
+        event.remove(Session, "after_flush", record_flush)
+        event.remove(Session, "after_commit", record_commit)
+
+    assert [candidate.id for candidate in response] == [candidate_id]
+    operations = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith(
+            ("SELECT", "INSERT", "UPDATE", "DELETE")
+        )
+    ]
+    assert len(operations) == 1
+    normalized_sql = " ".join(operations[0].split()).upper()
+    assert normalized_sql.startswith("SELECT SOURCE_CANDIDATES.")
+    assert "SOURCE_CANDIDATES.APPROVAL_STATUS =" in normalized_sql
+    assert "ORDER BY SOURCE_CANDIDATES.ID" in normalized_sql
+    assert " JOIN " not in normalized_sql
+    assert "FOR UPDATE" not in normalized_sql
+    assert not normalized_sql.startswith(("INSERT", "UPDATE", "DELETE"))
+    assert "SOURCE_DISCOVERY_RUNS" not in normalized_sql
+    assert flushes == 0
+    assert commits == 0
+    assert pending_source in db_session.new
+    assert pending_source.id is None
+    assert db_connection.scalar(select(func.count()).select_from(Source)) == source_count
 
 
 def test_succeeded_runs_store_zero_or_ordered_normalized_candidates(

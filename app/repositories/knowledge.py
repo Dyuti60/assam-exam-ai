@@ -80,6 +80,15 @@ class KnowledgeRepository:
         with self.session.no_autoflush:
             return self.session.scalar(statement)
 
+    def get_approved_source_candidates(self) -> list[SourceCandidate]:
+        statement = (
+            select(SourceCandidate)
+            .where(SourceCandidate.approval_status == "APPROVED")
+            .order_by(SourceCandidate.id)
+        )
+        with self.session.no_autoflush:
+            return list(self.session.scalars(statement))
+
     def get_source_candidate_for_update(
         self,
         source_candidate_id: int,

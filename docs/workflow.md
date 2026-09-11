@@ -1635,3 +1635,12 @@ flowchart LR
 - GitHub exposes no status contexts or workflow runs for the reviewed correction, so no CI pass is claimed.
 - No candidate collection, Source promotion, fetch, ingestion, AI, external provider, learner/public behavior, dependency, configuration, Docker, infrastructure, or T-050 implementation was included.
 - T-050 is issued as the separate read-only approved-SourceCandidate selection boundary. It must not fetch candidates, create Sources, or reinterpret approval as trust.
+
+### T-050 Approved SourceCandidate read boundary
+
+- `GET /api/v1/source-candidates/approved` returns the complete stored `SourceCandidateResponse` for candidates whose own current review state is exactly APPROVED, ordered by ascending candidate ID; no eligible candidates returns HTTP 200 with `[]`.
+- The route delegates through `KnowledgeService` to one SourceCandidate-only repository `SELECT`. PostgreSQL performs the exact status filter and ID ordering under `session.no_autoflush`; the query has no join, eager related-table load, row lock, or write, and the service performs no flush, commit, refresh, transition, or enrichment.
+- Approval-state transitions are visible immediately: APPROVED adds a candidate, DRAFT reset removes it, later approval restores it, and REJECTED removes it. Parent run state and every Source, Evidence, Claim, Verification, canonical-content, document, and artifact state remain irrelevant to membership and cannot alter the stored response.
+- Focused T-050: 2 passed, 40 deselected, 1 warning in 0.73s. Complete source-discovery suite: 42 passed, 1 warning in 1.19s. Source/Evidence/Claim/Verification regressions: 34 passed, 1 warning in 1.31s. T-047 smoke: 1 passed, 1 warning in 0.88s. ContentPackage/PdfArtifact regressions: 116 passed, 1 warning in 20.24s. Full suite: 347 passed, 1 warning in 33.33s.
+- Fresh upgrade reached unchanged Alembic head `d4a7c2e9f518`. Ruff, dependency-lock verification, Alembic head/check, and diff checks passed on the dedicated `assam_exam_ai_t050_test` PostgreSQL database.
+- T-050 is Ready for review, not approved. No model, schema, migration, Source promotion, candidate fetch, ingestion, external provider, AI/LLM, dependency, configuration, Docker, infrastructure, learner/public behavior, or T-051 work was added.

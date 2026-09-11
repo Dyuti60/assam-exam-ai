@@ -1685,3 +1685,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Content Factory / Source Review Foundation |
 | Scope | One candidate-only repository query, service and route boundary, focused tests, and documentation; no migration, Source promotion, fetch, ingestion, provider, AI, or T-051 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-050 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Add one deterministic read-only collection of currently APPROVED untrusted SourceCandidate leads |
+| Persistence | No model or migration change; Alembic head remains `d4a7c2e9f518` and existing candidate review constraints remain authoritative |
+| API | `GET /api/v1/source-candidates/approved`; complete stored candidate responses, ascending candidate-ID order, and HTTP 200 with `[]` when none qualify |
+| Query behavior | One SourceCandidate-only PostgreSQL SELECT filters exact APPROVED state and orders by ID under `session.no_autoflush`; no joins, related-table load, row lock, flush, commit, refresh, or write |
+| Tests | Focused T-050: 2 passed, 40 deselected, 1 warning in 0.73s. Complete source-discovery: 42 passed in 1.19s. Source/Evidence/Claim/Verification: 34 passed in 1.31s. T-047: 1 passed in 0.88s. ContentPackage/PdfArtifact regressions: 116 passed in 20.24s. Full suite: 347 passed in 33.33s. Each suite reported one existing warning. |
+| Validation | Fresh upgrade reached unchanged head `d4a7c2e9f518`; changed-file Ruff, `uv lock --check`, Alembic head/check, and diff checks passed on the dedicated `_test` database. |
+| Notes | Membership follows only the candidate's current independent review state and updates immediately after approval/reset/rejection. Returned records remain immutable untrusted discovery leads. T-050 is not approved; no fetch, Source promotion, ingestion, AI, infrastructure, or T-051 work was added. |
