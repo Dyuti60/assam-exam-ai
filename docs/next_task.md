@@ -8288,3 +8288,240 @@ The next likely task after T-049, subject to independent review, is a separate a
 ## T-049 implementation note
 
 Implementation note (2026-09-11 Asia/Kolkata, UTC+05:30): added independent DRAFT/APPROVED/REJECTED review fields and lifecycle constraints to stored untrusted SourceCandidates through migration `d4a7c2e9f518`, parent `c8e4f2a9d617`. The single approval endpoint locks and updates only its target candidate, commits once, rolls back failures including post-flush failure, and reloads without a lock; SourceDiscoveryRun responses retain ordered candidates with current review metadata. Focused T-049 tests passed 9, the complete source-discovery suite passed 39, Source/Evidence/Claim/Verification regressions passed 34, T-047 passed 1, and the full suite passed 344; Ruff, lock, fresh/seeded migration cycle, Alembic, PostgreSQL constraints, and diff checks passed on dedicated `_test` databases. T-049 is Ready for review, not approved. No approved-candidate collection, Source creation/promotion, fetching, ingestion, release, AI/LLM, external provider, dependency, configuration, Docker, learner/public behavior, T-050 definition, or T-050 implementation was added.
+
+---
+
+# T-049 correction and review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-049` |
+| Implementation commit | `bfe846a2db4e2f089eb0734d64d065a740840f56` |
+| Correction commit | `6467d11133da6e8e5d8d08c1da352b112233ef73` |
+| Base/task-issuance commit | `4fe4fb28d15644877011c71d105ef79b1fb204d8` |
+| Review result | **APPROVED** |
+| Correction | Introduced `SourceCandidateApprovalStatus` with exactly DRAFT/APPROVED/REJECTED and moved SourceCandidate request, response, and transition logic off the Claim-specific enum without changing external API values. |
+| Approved capability | Independent target-only human review of immutable untrusted SourceCandidate snapshots; approval remains separate from Source trust, fetching, ingestion, and factual verification. |
+| Validation evidence | Developer-recorded: 10 focused tests, 40 complete source-discovery tests, and 345 full-suite tests, each with one existing warning; all reported migration, PostgreSQL, Ruff, dependency-lock, Alembic, and diff checks passed. Independent review reran the enum regression (1 passed), Ruff, lock verification, Alembic-head inspection, and diff checks. PostgreSQL-backed tests were not independently rerun because no database service was available. GitHub exposes no status contexts or workflow runs. |
+
+---
+
+# T-050 — Add approved SourceCandidate read boundary
+
+## Role
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read the live repository before editing and follow `AGENTS.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt.
+
+Repository code is authoritative. Preserve append-only history in `docs/task_log.md` and `docs/next_task.md`.
+
+## Architectural classification
+
+Content Factory / Source Review Foundation.
+
+This task exposes the smallest safe downstream selection boundary after independent SourceCandidate review. It does not fetch a candidate, create or update a trusted Source, authorize ingestion, or reinterpret candidate approval as factual trust.
+
+## Starting-state verification
+
+Before editing:
+
+1. Confirm branch `main`, fetch `origin/main`, and confirm a clean working tree.
+2. Confirm HEAD is the documentation commit approving T-049 and issuing T-050.
+3. Confirm T-049 implementation commit `bfe846a2db4e2f089eb0734d64d065a740840f56` has exact issuance parent `4fe4fb28d15644877011c71d105ef79b1fb204d8` and exact correction child `6467d11133da6e8e5d8d08c1da352b112233ef73`.
+4. Read the approved SourceDiscoveryRun/SourceCandidate model, migration chain, schemas, repository, service, routes, tests, and documentation.
+5. Inspect established approved-collection boundaries for Claims and canonical assets, but preserve SourceCandidate-specific semantics and query isolation.
+6. Confirm Alembic has one head: `d4a7c2e9f518`.
+7. Stop and report repository divergence that materially changes this task.
+
+## Objective
+
+Add one deterministic, read-only API boundary that returns exactly the SourceCandidates whose own current review state is `APPROVED`.
+
+The boundary is:
+
+```text
+immutable SourceCandidate snapshot
+        ↓
+independent human review
+        ↓
+GET approved SourceCandidates
+        ↓
+future controlled fetch or Source-promotion task
+```
+
+The returned records remain untrusted discovery leads. Inclusion means only that their own current candidate review state is APPROVED.
+
+## API contract
+
+Add exactly:
+
+```text
+GET /api/v1/source-candidates/approved
+```
+
+Behavior:
+
+- return HTTP 200 with `list[SourceCandidateResponse]`;
+- return only rows whose own stored `approval_status` is exactly `APPROVED`;
+- order results by ascending `SourceCandidate.id`;
+- return `[]` when no candidate qualifies;
+- return each candidate's complete stored immutable discovery snapshot and current review metadata through the existing `SourceCandidateResponse` contract;
+- a candidate appears immediately after approval and disappears immediately after reset to DRAFT or change to REJECTED;
+- do not filter or re-evaluate by parent SourceDiscoveryRun status, query, adapter, publisher, location, domain, metadata completeness, Source existence, Evidence, Claims, Verification, or any content state;
+- do not add pagination, search, filtering parameters, or a single-candidate GET endpoint.
+
+Register the static `/source-candidates/approved` GET route before any present or future dynamic SourceCandidate-ID GET route. Preserve the existing POST approval endpoint and all SourceDiscoveryRun APIs unchanged.
+
+## Layering and query boundary
+
+Preserve:
+
+```text
+Route
+  ↓
+Pydantic response schema
+  ↓
+Service
+  ↓
+Repository
+  ↓
+PostgreSQL
+```
+
+Routes remain thin.
+
+Repository responsibilities:
+
+- perform one SourceCandidate-only `SELECT`;
+- filter in PostgreSQL on exact `approval_status = 'APPROVED'`;
+- order in PostgreSQL by ascending candidate ID;
+- execute under `session.no_autoflush`;
+- do not join, eager-load, or query SourceDiscoveryRun or any other table;
+- do not use `FOR UPDATE`.
+
+Service responsibilities:
+
+- call the repository once;
+- serialize stored rows through the existing `SourceCandidateResponse` contract;
+- perform no current-related-state evaluation;
+- perform no write, flush, commit, refresh, or approval transition.
+
+The read must not normalize, reconstruct, enrich, fetch, hash, or otherwise modify candidate snapshot values.
+
+## Persistence and migration
+
+No database change is expected.
+
+- Do not modify `SourceCandidate`, `SourceDiscoveryRun`, trusted `Source`, or any other model.
+- Do not add or edit a migration.
+- Alembic head must remain `d4a7c2e9f518`.
+- Existing PostgreSQL approval constraints remain authoritative.
+
+## Required tests
+
+Use PostgreSQL with a database name ending in `_test`. Do not use SQLite.
+
+Cover at minimum:
+
+- an empty eligible set returns HTTP 200 and `[]`;
+- DRAFT and REJECTED candidates are excluded;
+- only currently APPROVED candidates are returned;
+- multiple approved candidates from the same and different SourceDiscoveryRuns are ordered by ascending candidate ID, not run position or request order;
+- every returned immutable discovery field and review field equals the exact stored value;
+- a candidate appears after `POST /source-candidates/{id}/approval` sets APPROVED;
+- resetting that candidate to DRAFT removes it immediately;
+- approving again restores it, and changing it to REJECTED removes it immediately;
+- the collection does not alter candidate or run rows;
+- captured SQL proves exactly one SourceCandidate-only SELECT, filtering approval in SQL and ordering by ID;
+- the SELECT has no joins, eager related-table load, `FOR UPDATE`, INSERT, UPDATE, or DELETE;
+- no flush or commit occurs, including when unrelated pending session state exists under `no_autoflush`;
+- changing unrelated Source, Evidence, Claim, Verification, canonical-content, document, or artifact state does not affect collection membership or stored responses;
+- existing SourceCandidate approval locking, errors, transitions, rollback, and SourceDiscoveryRun ordered responses remain compatible;
+- T-047 internal deliverable workflow and earlier knowledge/canonical-deliverable regressions remain compatible.
+
+Any SQLAlchemy event listener used for query or transaction inspection must be removed in `finally`.
+
+## Dependencies, configuration, and infrastructure
+
+Inspect:
+
+- `pyproject.toml`;
+- `uv.lock`;
+- `.env.example`;
+- `app/core/config.py`;
+- `docker-compose.yml`;
+- `AGENTS.md`;
+- `README.md`.
+
+No new dependency, API key, secret, environment variable, configuration value, Docker service, queue, object storage, external provider, or infrastructure is required. Leave these files unchanged and report that unless a genuine repository inconsistency requires otherwise.
+
+## Documentation
+
+Update only implemented reality:
+
+- `docs/architecture.md`;
+- `docs/workflow.md`;
+- append the T-050 implementation record to `docs/task_log.md`;
+- append the T-050 implementation note to `docs/next_task.md`.
+
+Keep task history append-only. Record T-050 only as **Ready for review**, never approved. Do not define T-051.
+
+`AGENTS.md` and README changes are not expected.
+
+## Scope exclusions
+
+Do not add:
+
+- SourceCandidate release/publication state;
+- candidate retrieval by ID, rejected/DRAFT collections, pagination, search, filtering, sorting parameters, or counts;
+- Source creation, Source update, candidate-to-Source linkage, automatic promotion, deduplication against Sources, or trust assignment;
+- network discovery, web search, crawling, scraping, robots handling, allowlists, fetching, redirects, retries, rate limiting, or external adapters;
+- source snapshots, files, object storage, checksums, parsing, extraction, chunking, Evidence, Claim, or Verification creation;
+- automatic processing merely because a candidate is APPROVED;
+- LLM/provider abstraction, prompts, API keys, embeddings, RAG, autonomous agents, orchestration, queues, or background jobs;
+- learner/public delivery, authentication, authorization, profiles, mocks, personalization, frontend, payments, deployment, CI/CD, or production infrastructure;
+- T-051.
+
+## Required validation
+
+Run and report:
+
+- focused T-050 approved-candidate collection tests;
+- complete T-048/T-049/T-050 source-discovery suite;
+- existing Source/Evidence/Claim/Verification tests;
+- T-047 internal deliverable smoke test;
+- relevant canonical-content and artifact regressions;
+- complete test suite;
+- Ruff on every changed Python file;
+- `uv lock --check`;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh database upgrade through unchanged head `d4a7c2e9f518`;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+Report developer-run evidence accurately and do not call it GitHub CI.
+
+## Expected handoff
+
+Report:
+
+- starting and final Git state;
+- exact files changed;
+- endpoint response/filter/order semantics;
+- one-query, no-lock, no-write evidence;
+- state-transition visibility and unrelated-state independence;
+- focused/regression/full-suite validation;
+- unchanged model/migration/Alembic head;
+- dependency/configuration/Docker/AGENTS.md/README decisions;
+- explicit excluded scope.
+
+Leave T-050 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-051.
+
+The next likely task after T-050, subject to independent review, is a separately designed controlled fetch/snapshot boundary for approved candidates or an explicit candidate-to-Source promotion design. The architect must choose from live repository state.

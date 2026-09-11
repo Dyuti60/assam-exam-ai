@@ -1656,3 +1656,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Migration checks | Fresh upgrade reached `d4a7c2e9f518`; seeded successful/failed runs and candidates survived upgrade/downgrade/re-upgrade exactly, with DRAFT/null/null produced on each upgrade and no inferred approval. Alembic reports one head and no schema drift. |
 | Validation | Target-only SQL, one commit, post-flush rollback, direct PostgreSQL constraints, changed-file Ruff, `uv lock --check`, Alembic head/check, migration cycle, and diff/whitespace checks passed. |
 | Notes | Decisions change only the target candidate's review fields. Discovery snapshots and all related state remain unchanged. Approval does not confer Source trust or authorize fetching/ingestion. T-049 is not approved; no T-050 was defined or implemented. |
+
+---
+
+## T-049 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-049` |
+| Implementation commit | `bfe846a2db4e2f089eb0734d64d065a740840f56` |
+| Correction commit | `6467d11133da6e8e5d8d08c1da352b112233ef73` |
+| Base/task-issuance commit | `4fe4fb28d15644877011c71d105ef79b1fb204d8` |
+| Review state | **APPROVED** |
+| Approved capability | Independent, target-only human review for immutable untrusted SourceCandidate snapshots using a SourceCandidate-specific approval enum |
+| Persistence | Migration `d4a7c2e9f518`, parent `c8e4f2a9d617`; model/migration parity and named status/lifecycle constraints verified |
+| Validation evidence | Developer-recorded: 10 focused T-049 tests, 40 complete source-discovery tests, and 345 full-suite tests, each with one existing warning; Ruff, dependency-lock verification, Alembic head/check, fresh/seeded migration cycles, PostgreSQL constraints, and diff checks passed. Independent review reran the enum regression (1 passed), Ruff, lock verification, Alembic-head inspection, and diff checks. PostgreSQL-backed execution was not independently rerun because no database service was available. GitHub exposes no status contexts or workflow runs. |
+| Review findings | Exact ancestry and complete two-commit range verified. The correction is limited to schemas, service enum usage, and a focused test; the dedicated enum preserves external API values and leaves Claim review unchanged. Layering, target-only locking/update/reload, atomic rollback, immutable snapshots, nested responses, migration behavior, documentation, and exclusions satisfy the canonical task. |
+| Boundaries | No approved-candidate collection, Source promotion, network discovery/fetch, ingestion, Evidence/Claim generation, AI/LLM, dependency, configuration, Docker, learner/public behavior, infrastructure, or T-050 implementation was included. |
+
+---
+
+## T-050 issued — Add approved SourceCandidate read boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Expose a deterministic read-only collection of currently APPROVED untrusted SourceCandidate leads for later controlled processing |
+| Architectural phase | Content Factory / Source Review Foundation |
+| Scope | One candidate-only repository query, service and route boundary, focused tests, and documentation; no migration, Source promotion, fetch, ingestion, provider, AI, or T-051 |
+| Full implementation prompt | Appended to `docs/next_task.md` |

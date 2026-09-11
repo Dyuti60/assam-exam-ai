@@ -1623,3 +1623,15 @@ flowchart LR
 - Focused T-049: 9 passed, 30 deselected, 1 warning in 0.90s. Complete source-discovery suite: 39 passed, 1 warning in 1.16s. Source/Evidence/Claim/Verification regressions: 34 passed, 1 warning in 1.51s. T-047 smoke: 1 passed, 1 warning in 0.88s. Full suite: 344 passed, 1 warning in 31.40s.
 - Fresh upgrade reached `d4a7c2e9f518`. A seeded `c8e4f2a9d617 -> d4a7c2e9f518 -> c8e4f2a9d617 -> d4a7c2e9f518` cycle preserved successful/failed runs and every candidate snapshot value/timestamp, while each upgrade produced only DRAFT/null/null review state. Ruff, lock, Alembic head/check, and diff checks passed on dedicated `_test` databases.
 - T-049 is Ready for review, not approved. No candidate collection, release, promotion, trusted Source creation, fetch, ingestion, AI, external provider, learner/public behavior, dependency, configuration, Docker, infrastructure, or T-050 work was added.
+
+
+### T-049 post-correction independent review and T-050 issuance
+
+- **APPROVED** across immutable implementation commit `bfe846a2db4e2f089eb0734d64d065a740840f56` and focused correction commit `6467d11133da6e8e5d8d08c1da352b112233ef73`, over issuance base `4fe4fb28d15644877011c71d105ef79b1fb204d8`.
+- The implementation adds independent SourceCandidate review fields and constraints, migration `d4a7c2e9f518`, one target-only approval endpoint, response compatibility, focused tests, and current-state documentation. The correction changes only the SourceCandidate schemas/service enum usage and its focused regression test.
+- `SourceCandidateApprovalStatus` now independently defines exactly DRAFT, APPROVED, and REJECTED. The request, response, and transition logic use that dedicated enum while preserving the external JSON vocabulary; Claim review behavior remains unchanged.
+- The complete range preserves immutable discovery snapshots, exact target-only locking and updates, one-commit success, post-flush rollback, ordered aggregate responses, PostgreSQL lifecycle enforcement, and separation from trusted Sources and factual verification.
+- Corrected developer-recorded evidence is 10 focused T-049 tests, 40 complete source-discovery tests, and 345 full-suite tests, each with one existing Starlette/httpx warning, plus successful Ruff, dependency-lock, Alembic head/check, migration-cycle, PostgreSQL-constraint, and diff checks. Independent review reran the correction regression (1 passed), Ruff, dependency-lock verification, Alembic-head inspection, and diff checks. No PostgreSQL service was available for an independent database-suite rerun.
+- GitHub exposes no status contexts or workflow runs for the reviewed correction, so no CI pass is claimed.
+- No candidate collection, Source promotion, fetch, ingestion, AI, external provider, learner/public behavior, dependency, configuration, Docker, infrastructure, or T-050 implementation was included.
+- T-050 is issued as the separate read-only approved-SourceCandidate selection boundary. It must not fetch candidates, create Sources, or reinterpret approval as trust.
