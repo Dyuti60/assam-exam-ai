@@ -1666,3 +1666,16 @@ flowchart LR
 - Focused T-051: 30 passed, 1 warning in 1.34s. Complete T-048 through T-051 source suite: 72 passed, 1 warning in 1.92s. Source/Evidence/Claim/Verification regressions: 34 passed, 1 warning in 1.58s. T-047 smoke: 1 passed, 1 warning in 1.07s. ContentPackage/PdfArtifact regressions: 116 passed, 1 warning in 20.26s. Full suite: 377 passed, 1 warning in 27.67s.
 - Fresh upgrade reached `f6b2d8c4a731`. A seeded `d4a7c2e9f518 -> f6b2d8c4a731 -> d4a7c2e9f518 -> f6b2d8c4a731` cycle preserved DRAFT, APPROVED, and REJECTED candidates and existing Sources exactly, inferred no Source or promotion, and retained review metadata. Direct PostgreSQL constraint probes passed.
 - T-051 is Ready for review, not approved. No fetching, ingestion, Evidence/Claim/Verification creation, Source review/release/update, external provider, AI/LLM, dependency, configuration, Docker, infrastructure, learner/public behavior, or T-052 work was added.
+
+
+### T-051 post-push review and T-052 issuance
+
+- **APPROVED** at immutable implementation commit `7bce1693003311dc3e9fcd0cda302aef71f592b0`, whose exact parent is T-051 issuance commit `55153d9d46fb836f709f73c5506cfb032cab8a6c`.
+- The one-commit diff adds only controlled promotion, closed schemas, immutable provenance, matching migration/model constraints, target-only database operations, focused tests, and current-state documentation.
+- The client cannot supply location, content hash, identifiers, approval fields, or timestamps. The Source receives normalized curated metadata plus the candidate's exact stored location and a null content hash.
+- Missing, approval, and duplicate checks occur under the target-candidate lock before mutation. Source and promotion commit atomically; only the named candidate uniqueness constraint maps to duplicate 409, and all other failures roll back and re-raise.
+- Composite restricted references enforce candidate/promotion/Source location agreement. One-to-one uniqueness and approval-snapshot checks preserve authorization provenance despite later candidate review.
+- Developer-recorded evidence is 30 focused tests, 72 complete source tests, 34 Source/Evidence/Claim/Verification regressions, 1 T-047 smoke test, 116 ContentPackage/PdfArtifact regressions, and 377 full-suite tests, plus successful Ruff, lock, migration-cycle, PostgreSQL, Alembic, and diff checks.
+- GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No network, fetch, ingestion, downstream knowledge generation, AI/LLM, learner/public behavior, infrastructure, or T-052 implementation was included.
+- T-052 separately adds one allowlisted, robots-aware official-site sitemap discovery adapter; it does not promote candidates or fetch their content pages.

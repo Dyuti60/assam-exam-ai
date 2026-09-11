@@ -8900,3 +8900,141 @@ Do not define or implement T-052.
 ## T-051 implementation note
 
 Implementation note (2026-09-11 Asia/Kolkata, UTC+05:30): added only controlled one-time promotion through `POST /api/v1/source-candidates/{source_candidate_id}/promote`. An exact target-candidate lock requires current APPROVED review, then creates one new curated Source from validated request metadata plus the candidate's exact stored location and null content hash, together with one immutable snapshot of the authorizing candidate decision. Migration `f6b2d8c4a731`, parent `d4a7c2e9f518`, adds only supporting composite uniqueness and the promotion table with same-location composite references, approval-snapshot checks, one-to-one uniqueness, and restricted deletion. Success commits once; every failure rolls back; only the named concurrent candidate uniqueness violation becomes the stable duplicate 409. Focused T-051 tests passed 30, the complete T-048 through T-051 source suite passed 72, Source/Evidence/Claim/Verification regressions passed 34, T-047 passed 1, ContentPackage/PdfArtifact regressions passed 116, and the full suite passed 377 in 27.67s; migration-cycle, direct PostgreSQL constraints, Ruff, dependency-lock, Alembic, and diff checks passed on dedicated `_test` databases. T-051 is Ready for review, not approved. No fetch, ingestion, source snapshot, Evidence/Claim/Verification creation, AI/LLM, provider, dependency, configuration, Docker, learner/public behavior, T-052 definition, or T-052 implementation was added.
+
+
+# T-052 — Controlled official-site discovery adapter
+
+## Context and objective
+
+T-048 persists immutable completed discovery snapshots supplied by trusted callers. T-049 reviews candidates, T-050 exposes approved candidates, and T-051 promotes one approved candidate into a curated Source with immutable provenance.
+
+Add the first executable discovery adapter. It must inspect only an explicitly allowlisted official HTTPS site's robots policy and sitemap documents, deterministically select query-relevant URLs, and persist exactly one terminal SourceDiscoveryRun with ordered SourceCandidates. Candidate URLs remain untrusted. Do not promote them, fetch their content pages, infer factual trust, or create downstream knowledge.
+
+## Starting-state verification
+
+1. Confirm `main`, fetch `origin/main`, require a clean tree, and confirm HEAD is the docs commit issuing T-052.
+2. Confirm T-051 commit `7bce1693003311dc3e9fcd0cda302aef71f592b0` has exact parent `55153d9d46fb836f709f73c5506cfb032cab8a6c`.
+3. Read the discovery, candidate, promotion and Source layers, migrations, tests, configuration, dependencies, Docker and documentation.
+4. Confirm one Alembic head: `f6b2d8c4a731`. Stop on material divergence.
+
+## API
+
+Add exactly `POST /api/v1/source-discovery-runs/official-site`.
+
+Request:
+
+```json
+{"query":"Assam history syllabus","site_root":"https://example.gov.in"}
+```
+
+Return HTTP 201 with the existing `SourceDiscoveryRunResponse` for either a terminal SUCCEEDED or controlled FAILED attempt.
+
+- Trim query, require nonblank, maximum 500.
+- Canonicalize site_root to an HTTPS origin only.
+- Reject credentials, query, fragment, non-default port, IP literal, localhost, malformed host, or non-HTTPS with 422.
+- Require the hostname in the configured official-host allowlist.
+- Do not accept adapter key, status, error, candidates, positions, approval fields or Source metadata.
+- Store fixed adapter key `official-sitemap-v1`.
+- Preserve all existing manual discovery, retrieval, review, collection and promotion contracts.
+
+## Configuration
+
+Add conservative settings and `.env.example` entries for the official host allowlist, connect/read timeouts, robots/sitemap byte limits, sitemap-document limit, inspected-URL limit, retained-candidate limit, redirect limit, and fixed user-agent. An empty allowlist disables execution safely. No API key or secret is required.
+
+Use an existing HTTP dependency if suitable. If a new dependency is genuinely required, update `pyproject.toml` and `uv.lock` and justify it.
+
+## Outbound security policy
+
+Centralize network behavior in a small injectable adapter/client boundary. Before every connection and redirect:
+
+- require HTTPS, default port and an allowed hostname;
+- resolve every A/AAAA answer and reject if any is loopback, private, link-local, multicast, reserved, unspecified, carrier-grade NAT, documentation-only, or otherwise non-public;
+- reject mixed public/non-public results and resolution failure;
+- revalidate every redirect and cap redirects;
+- disable ambient proxy/environment credential use;
+- enforce connect/read timeouts and exact byte caps;
+- never send secrets or caller-controlled headers.
+
+Mitigate DNS rebinding as far as the chosen client permits and document the exact guarantee without claiming stronger IP pinning.
+
+## Robots, sitemap and XML rules
+
+- Fetch canonical `/robots.txt` for the fixed user-agent under the same policy.
+- Use declared `Sitemap:` URLs, falling back to `/sitemap.xml`.
+- Fetch only policy-compliant HTTPS sitemap URLs.
+- Apply robots allow/disallow rules to candidate page URLs.
+- Support bounded sitemap URL sets and indexes; detect cycles and canonical-URL duplicates.
+- Reject DTD/entity declarations; use no external entity or network resolution.
+- Enforce content type, timeout, redirect, document, byte, inspected-URL and candidate limits.
+- Do not fetch discovered content pages.
+
+Define deterministic handling for robots/sitemap 404, malformed/non-XML data, redirects, timeouts and limit exhaustion. Security or policy failures cannot silently succeed.
+
+## Candidate selection
+
+Canonicalize scheme/host case, remove default port, normalize empty path, discard fragments, and document any safe query-string policy. Require allowed official hosts and deduplicate canonical locations.
+
+Tokenize the normalized query and score relevance deterministically using only URL text and safe sitemap metadata actually present—never HTML or an LLM. Sort by score then canonical URL, retain the configured maximum, and persist zero-based positions. Candidate location is canonical; title/publisher/snippet stay null unless directly supported by sitemap metadata. Zero relevant URLs is SUCCEEDED with no candidates.
+
+## Terminal persistence
+
+- SUCCEEDED means robots/sitemap processing completed under policy; error is null.
+- FAILED means a controlled network/policy/parser/limit failure; candidates are empty and error is stable and sanitized.
+- Use stable codes such as `HOST_NOT_ALLOWED`, `DNS_POLICY_REJECTED`, `ROBOTS_UNAVAILABLE`, `ROBOTS_DENIED`, `SITEMAP_UNAVAILABLE`, `SITEMAP_INVALID`, `REDIRECT_POLICY_REJECTED`, `RESPONSE_TOO_LARGE`, `DISCOVERY_TIMEOUT`, and `DISCOVERY_LIMIT_EXCEEDED`.
+- Never store stack traces, response bodies, arbitrary upstream text, credentials, or resolved private addresses.
+- Complete all network work before opening the persistence transaction.
+- Build the full result in memory, then persist the run/candidates with exactly one commit.
+- Persistence failures roll back and re-raise; no partial rows survive.
+- Repeated identical requests create independent immutable attempts.
+
+Routes stay thin; the service orchestrates; the adapter owns network/policy; the repository performs database work only. Discovery locks no domain rows.
+
+## Persistence and migration
+
+Prefer no model or migration change: existing run/candidate fields should represent the fixed adapter, terminal status, sanitized error and ordered candidates. If a schema change is unavoidable, stop and report instead of broadening scope. Edit no historical migration; retain one Alembic head with no drift.
+
+## Required tests
+
+Use PostgreSQL databases ending in `_test`. Never call the public internet; inject controlled fake transports and resolvers.
+
+Cover:
+
+- allowlisted success, zero-result success, fixed adapter key and exact normalization;
+- robots-declared sitemap and fallback sitemap;
+- URL-set/index parsing, deterministic scoring/order, canonicalization, deduplication and limits;
+- robots-disallowed candidates;
+- invalid URL forms returning 422 before network/database work;
+- empty allowlist, forbidden hosts, IPv4/IPv6 unsafe addresses, mixed DNS answers and DNS failure;
+- redirect revalidation, cross-policy redirect and redirect overflow;
+- timeout, oversized response, malformed XML, DTD/entity, bad type, sitemap cycle and limit exhaustion as sanitized FAILED runs with no candidates;
+- no raw upstream body/error/secret leakage;
+- network completion before persistence transaction;
+- exactly one commit for SUCCEEDED and controlled FAILED results;
+- persistence failure rollback with zero surviving rows;
+- repeated attempts remaining independent;
+- unchanged T-048–T-051 manual creation, retrieval, approval, approved-list and promotion behavior;
+- full source/provenance/canonical-content/document/artifact regressions.
+
+Remove all SQLAlchemy and HTTP instrumentation hooks in `finally`.
+
+## Documentation and validation
+
+Update implemented reality in `docs/architecture.md` and `docs/workflow.md`; append T-052 records to `docs/task_log.md` and `docs/next_task.md`; update `.env.example` only for non-secret settings. Keep history append-only, record T-052 only as **Ready for review**, and do not define T-053.
+
+Run focused T-052, full T-048–T-052, Source/Evidence/Claim/Verification, T-047, canonical/document/artifact, and complete suites; Ruff; `uv lock --check`; Alembic heads/check; fresh upgrade; `git diff --check`; and final status. If dependencies change, prove lock synchronization. Report local results as developer evidence, not CI.
+
+## Exclusions
+
+No general web search, arbitrary crawling, HTML scraping, browser automation, content-page fetch/storage, SourceFetchRun, SourceSnapshot, extraction, chunks, embeddings, object storage, promotion automation, Source mutation/lifecycle, Evidence/Claim/Verification/content generation, LLM/provider/API key/RAG, queue/background job, learner/public API, auth, frontend, personalization, analytics, payment, deployment, infrastructure, or T-053.
+
+## Handoff
+
+Report Git state, changed files, endpoint/configuration, network and robots policy, deterministic selection, terminal persistence, transaction timing, rollback, compatibility, validation, dependency/migration decisions and exclusions.
+
+Leave T-052 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-053.

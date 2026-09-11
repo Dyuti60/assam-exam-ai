@@ -1744,3 +1744,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Tests | Focused T-051: 30 passed, 1 warning in 1.34s. Complete T-048 through T-051 source suite: 72 passed, 1 warning in 1.92s. Source/Evidence/Claim/Verification: 34 passed, 1 warning in 1.58s. T-047: 1 passed, 1 warning in 1.07s. ContentPackage/PdfArtifact regressions: 116 passed, 1 warning in 20.26s. Full suite: 377 passed, 1 warning in 27.67s. |
 | Migration checks | Fresh upgrade reached `f6b2d8c4a731`; seeded DRAFT/APPROVED/REJECTED candidates and an existing Source survived upgrade/downgrade/re-upgrade exactly, and neither Source nor promotion was inferred. Alembic reports one head and no schema drift. |
 | Notes | Promotion creates a curated Source but does not fetch content, verify facts, create downstream knowledge, or confer factual correctness. Later candidate review changes do not alter the Source or promotion snapshot. T-051 is not approved and no T-052 was defined or implemented. |
+
+
+---
+
+## T-051 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-051` |
+| Implementation commit | `7bce1693003311dc3e9fcd0cda302aef71f592b0` |
+| Base/task-issuance commit | `55153d9d46fb836f709f73c5506cfb032cab8a6c` |
+| Review state | **APPROVED** |
+| Approved capability | One-time creation of a curated Source from one currently APPROVED SourceCandidate with immutable authorization provenance |
+| Persistence | Migration `f6b2d8c4a731`, parent `d4a7c2e9f518`; model/migration parity, exact-location references, approval checks, uniqueness, and restricted deletion verified |
+| Validation evidence | Developer-recorded: 30 focused, 72 complete source, 34 provenance regressions, 1 T-047 smoke, 116 canonical/artifact regressions, and 377 full-suite tests; static, lock, migration, PostgreSQL, Alembic, and diff checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | Exact one-commit diff matches the canonical field provenance, validation order, target-only locking, atomicity, concurrency mapping, constraints, immutability, compatibility, tests, documentation, and exclusions with no blocking finding. |
+| Boundaries | No network discovery, fetching, ingestion, Source lifecycle, downstream knowledge creation, provider, AI/LLM, learner/public behavior, infrastructure, or T-052 behavior. |
+
+---
+
+## T-052 issued — Controlled official-site discovery adapter
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Execute a bounded, allowlisted, robots-aware official-site sitemap discovery attempt and persist its immutable SourceDiscoveryRun/SourceCandidate result |
+| Architectural phase | Content Factory / Trusted Source Intake |
+| Scope | One synchronous sitemap adapter, strict URL/network policy, deterministic candidate selection, stored terminal audit result, tests, settings, and documentation; no promotion, content-page fetch, ingestion, AI, or T-053 |
+| Full implementation prompt | Appended to `docs/next_task.md` |

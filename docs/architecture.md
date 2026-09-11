@@ -107,6 +107,9 @@ Every SourceCandidate begins in independent review state `DRAFT`. Its API contra
 
 `POST /api/v1/source-candidates/{source_candidate_id}/promote` is the separate controlled trust-intake decision. It locks one candidate, requires its current review state to be APPROVED, creates one new curated `Source` from explicit request metadata while copying only the candidate's exact stored location, and stores one immutable `SourceCandidatePromotion` snapshot of the authorizing review decision. Composite PostgreSQL references require the promotion location to agree with both records, and uniqueness permits each candidate and created Source in at most one promotion. Promotion commits the Source and provenance together, does not fetch content or establish factual correctness, and later candidate review changes cannot alter the retained Source or authorization snapshot.
 
+
+T-051 was independently reviewed after push at immutable commit `7bce1693003311dc3e9fcd0cda302aef71f592b0` and approved with no blocking finding. GitHub exposes no status contexts or workflow runs, so the approval relies on exact commit inspection and developer-recorded local PostgreSQL validation; no CI pass is claimed. T-052 is issued separately as a bounded official-site discovery adapter and does not change T-051 promotion semantics.
+
 ## Planned architecture — not implemented
 
 The repository instructions describe this target flow:
