@@ -6,6 +6,7 @@ import re
 import socket
 import ssl
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
@@ -15,6 +16,7 @@ from app.core.config import Settings, settings
 
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+MAX_DISCOVERY_URL_LENGTH = 2_048
 
 
 class OfficialDiscoveryError(Exception):
@@ -45,7 +47,8 @@ class OfficialDiscoveryResult:
 
 
 def canonicalize_site_root(value: str) -> str:
-    raw = value.strip()
+    _validate_url_text(value, ValueError)
+    raw = value
     parsed = urlsplit(raw)
     if (
         parsed.scheme.lower() != "https"
@@ -94,25 +97,35 @@ class PinnedHttpsClient:
         self,
         config: Settings = settings,
         resolver: Callable[..., list[tuple]] | None = None,
+        socket_factory: Callable[..., object] | None = None,
+        ssl_context_factory: Callable[[], object] | None = None,
+        connection_factory: Callable[..., object] | None = None,
     ) -> None:
         self.config = config
         self.resolver = resolver or socket.getaddrinfo
+        self.socket_factory = socket_factory or socket.create_connection
+        self.ssl_context_factory = ssl_context_factory or ssl.create_default_context
+        self.connection_factory = connection_factory or http.client.HTTPSConnection
 
     def get(self, url: str, *, max_bytes: int, unavailable_code: str) -> HttpResponse:
         current = url
         for redirect_count in range(self.config.official_discovery_redirect_limit + 1):
             parsed, address = self._validated_target(current)
+            raw_socket = None
+            tls_socket = None
+            connection = None
+            response = None
             try:
-                raw_socket = socket.create_connection(
+                raw_socket = self.socket_factory(
                     (address, 443),
                     timeout=self.config.official_discovery_connect_timeout_seconds,
                 )
-                context = ssl.create_default_context()
+                context = self.ssl_context_factory()
                 tls_socket = context.wrap_socket(raw_socket, server_hostname=parsed.hostname)
                 tls_socket.settimeout(
                     self.config.official_discovery_read_timeout_seconds
                 )
-                connection = http.client.HTTPSConnection(
+                connection = self.connection_factory(
                     parsed.hostname,
                     443,
                     context=context,
@@ -134,23 +147,37 @@ class PinnedHttpsClient:
                 location = response.getheader("Location")
                 content_type = response.getheader("Content-Type", "")
                 body = self._read_bounded(response, max_bytes)
-                connection.close()
+                status = response.status
             except TimeoutError as error:
                 raise OfficialDiscoveryError("DISCOVERY_TIMEOUT") from error
             except OfficialDiscoveryError:
                 raise
             except (OSError, ssl.SSLError, http.client.HTTPException) as error:
                 raise OfficialDiscoveryError(unavailable_code) from error
+            finally:
+                if response is not None:
+                    with suppress(Exception):
+                        response.close()
+                if connection is not None:
+                    with suppress(Exception):
+                        connection.close()
+                if tls_socket is not None:
+                    with suppress(Exception):
+                        tls_socket.close()
+                if raw_socket is not None:
+                    with suppress(Exception):
+                        raw_socket.close()
 
-            if response.status in REDIRECT_STATUSES:
+            if status in REDIRECT_STATUSES:
                 if not location or redirect_count >= self.config.official_discovery_redirect_limit:
                     raise OfficialDiscoveryError("REDIRECT_POLICY_REJECTED")
                 current = urljoin(current, location)
                 continue
-            return HttpResponse(response.status, content_type, body, location)
+            return HttpResponse(status, content_type, body, location)
         raise OfficialDiscoveryError("REDIRECT_POLICY_REJECTED")
 
     def _validated_target(self, url: str):
+        _validate_url_text(url, OfficialDiscoveryError)
         parsed = urlsplit(url)
         try:
             port = parsed.port
@@ -325,7 +352,8 @@ def _canonicalize_discovered_url(
     allowed_hosts: set[str],
     root_host: str | None,
 ) -> str:
-    parsed = urlsplit(value.strip())
+    _validate_url_text(value, OfficialDiscoveryError)
+    parsed = urlsplit(value)
     try:
         port = parsed.port
     except ValueError as error:
@@ -345,7 +373,24 @@ def _canonicalize_discovered_url(
     ):
         raise OfficialDiscoveryError("REDIRECT_POLICY_REJECTED")
     query = urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
-    return urlunsplit(("https", hostname, parsed.path or "/", query, ""))
+    canonical = urlunsplit(("https", hostname, parsed.path or "/", query, ""))
+    _validate_url_text(canonical, OfficialDiscoveryError)
+    return canonical
+
+
+def _validate_url_text(
+    value: str,
+    error_type: type[ValueError | OfficialDiscoveryError],
+) -> None:
+    if len(value) > MAX_DISCOVERY_URL_LENGTH or any(
+        character.isspace()
+        or ord(character) < 32
+        or 127 <= ord(character) <= 159
+        for character in value
+    ):
+        if error_type is OfficialDiscoveryError:
+            raise OfficialDiscoveryError("REDIRECT_POLICY_REJECTED")
+        raise ValueError("URL contains whitespace, control characters, or is too long")
 
 
 def _parse_sitemap(body: bytes) -> tuple[list[str], bool]:

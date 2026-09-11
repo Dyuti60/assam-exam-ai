@@ -108,7 +108,7 @@ class OfficialSiteDiscoveryCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(min_length=1, max_length=500)
-    site_root: str = Field(min_length=1)
+    site_root: str = Field(min_length=1, max_length=2_048)
 
     @field_validator("query")
     @classmethod
