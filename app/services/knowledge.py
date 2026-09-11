@@ -59,6 +59,7 @@ from app.schemas.knowledge import (
     NoteDraftReleaseCreate,
     NoteDraftReleaseDecision,
     NoteDraftResponse,
+    OfficialSiteDiscoveryCreate,
     PdfArtifactApprovalCreate,
     PdfArtifactReleaseCreate,
     PdfArtifactReleaseDecision,
@@ -74,6 +75,7 @@ from app.schemas.knowledge import (
     QuestionBankItemResponse,
     SourceCandidateApprovalCreate,
     SourceCandidateApprovalStatus,
+    SourceCandidateCreate,
     SourceCandidatePromotionCreate,
     SourceCandidatePromotionResponse,
     SourceCandidateResponse,
@@ -89,6 +91,10 @@ from app.schemas.knowledge import (
     VerificationCreate,
     VerificationEvidenceResponse,
     VerificationResponse,
+)
+from app.services.official_site_discovery import (
+    OfficialDiscoveryError,
+    OfficialSiteDiscoveryAdapter,
 )
 from app.services.pdf_renderer import render_content_document_pdf
 
@@ -113,9 +119,14 @@ class PdfArtifactDownload:
 
 
 class KnowledgeService:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        official_site_adapter: OfficialSiteDiscoveryAdapter | None = None,
+    ) -> None:
         self.session = session
         self.repository = KnowledgeRepository(session)
+        self.official_site_adapter = official_site_adapter or OfficialSiteDiscoveryAdapter()
 
     def create_source(self, request: SourceCreate) -> Source:
         source = Source(**request.model_dump())
@@ -164,6 +175,41 @@ class KnowledgeService:
                 f"SourceDiscoveryRun {source_discovery_run.id} was not stored"
             )
         return self._source_discovery_run_response(stored_run)
+
+    def discover_official_site(
+        self,
+        request: OfficialSiteDiscoveryCreate,
+    ) -> SourceDiscoveryRunResponse:
+        try:
+            result = self.official_site_adapter.discover(
+                request.query,
+                request.site_root,
+            )
+        except OfficialDiscoveryError as error:
+            run_request = SourceDiscoveryRunCreate(
+                query=request.query,
+                adapter_key=self.official_site_adapter.adapter_key,
+                status="FAILED",
+                error_message=error.code,
+                candidates=[],
+            )
+        else:
+            run_request = SourceDiscoveryRunCreate(
+                query=request.query,
+                adapter_key=self.official_site_adapter.adapter_key,
+                status="SUCCEEDED",
+                error_message=None,
+                candidates=[
+                    SourceCandidateCreate(
+                        location=candidate.location,
+                        title=candidate.title,
+                        publisher=candidate.publisher,
+                        snippet=candidate.snippet,
+                    )
+                    for candidate in result.candidates
+                ],
+            )
+        return self.create_source_discovery_run(run_request)
 
     def get_source_discovery_run(
         self,

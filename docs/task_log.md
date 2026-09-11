@@ -1773,3 +1773,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Content Factory / Trusted Source Intake |
 | Scope | One synchronous sitemap adapter, strict URL/network policy, deterministic candidate selection, stored terminal audit result, tests, settings, and documentation; no promotion, content-page fetch, ingestion, AI, or T-053 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-052 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | One allowlisted, robots-aware, bounded official-site sitemap adapter that persists terminal immutable discovery snapshots without fetching candidate pages |
+| API | `POST /api/v1/source-discovery-runs/official-site`; normalized query and HTTPS origin only; HTTP 201 existing run response for SUCCEEDED or sanitized controlled FAILED attempts |
+| Network policy | Allowlist and public-DNS enforcement before every IP-pinned TLS connection/redirect; no ambient proxies; bounded time, bytes, redirects, sitemap documents, inspected URLs, and retained candidates |
+| Selection | Robots-declared/fallback XML sitemaps, hardened parsing, same-origin canonical URLs, sorted query parameters, discarded fragments, deduplication, URL-token relevance scoring, stable score/URL order, and zero-based persisted positions |
+| Persistence | No model or migration change; all network work completes before the existing atomic one-commit SourceDiscoveryRun/SourceCandidate persistence path; Alembic head remains `f6b2d8c4a731` |
+| Tests | Focused T-052: 29 passed, 1 warning in 1.05s. Full suite: 406 passed, 1 warning in 36.53s. |
+| Notes | Candidates remain untrusted leads. T-052 is not approved; no content-page fetch, promotion automation, Source mutation, ingestion, downstream knowledge, AI/LLM, queue, public/learner behavior, infrastructure, or T-053 work was added. |

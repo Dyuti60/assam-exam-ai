@@ -1667,6 +1667,16 @@ flowchart LR
 - Fresh upgrade reached `f6b2d8c4a731`. A seeded `d4a7c2e9f518 -> f6b2d8c4a731 -> d4a7c2e9f518 -> f6b2d8c4a731` cycle preserved DRAFT, APPROVED, and REJECTED candidates and existing Sources exactly, inferred no Source or promotion, and retained review metadata. Direct PostgreSQL constraint probes passed.
 - T-051 is Ready for review, not approved. No fetching, ingestion, Evidence/Claim/Verification creation, Source review/release/update, external provider, AI/LLM, dependency, configuration, Docker, infrastructure, learner/public behavior, or T-052 work was added.
 
+### T-052 Allowlisted official-site discovery adapter
+
+- `POST /api/v1/source-discovery-runs/official-site` accepts only a trimmed query and canonical HTTPS origin. The fixed `official-sitemap-v1` adapter retrieves robots and bounded XML sitemap documents, never discovered content pages, and persists one terminal run through the existing atomic aggregate path.
+- Configuration provides an official-host allowlist, connect/read timeouts, robots/sitemap byte caps, sitemap-document, inspected-URL, retained-candidate and redirect limits, and a fixed user-agent. An empty allowlist produces sanitized `HOST_NOT_ALLOWED`; no secret or API key exists.
+- Every connection and redirect revalidates scheme, host, port, allowlist and all DNS answers. Non-global or mixed answers are rejected. The production client connects TLS to a selected validated address with the intended hostname as SNI, preventing a second unvalidated DNS lookup for that connection; no ambient proxy or credential source is used.
+- Robots-declared sitemaps or the `/sitemap.xml` fallback are traversed with bounded index depth/count and cycle detection. DTD/entity declarations and invalid content types/XML are rejected. Canonical candidate queries are sorted, fragments discarded, duplicate URLs removed, and relevance is scored only from normalized query tokens and URL text before deterministic score/URL ordering.
+- Controlled failures store only stable codes and no candidates. Network processing completes before database mutation; SUCCEEDED and FAILED attempts each use one commit, while persistence failures retain the existing full rollback behavior. Repeated requests create independent immutable audit attempts.
+- Focused T-052: 29 passed, 1 warning in 1.05s. Full suite: 406 passed, 1 warning in 36.53s. Ruff, dependency-lock, unchanged Alembic head/check, fresh upgrade, and diff checks passed against dedicated `_test` databases.
+- T-052 is Ready for review, not approved. No general crawler, content-page fetch, Source promotion automation, ingestion, extraction, downstream knowledge, AI/LLM, queue, learner/public behavior, infrastructure, or T-053 work was added.
+
 
 ### T-051 post-push review and T-052 issuance
 

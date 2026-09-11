@@ -27,6 +27,7 @@ from app.schemas.knowledge import (
     NoteDraftPreviewResponse,
     NoteDraftReleaseCreate,
     NoteDraftResponse,
+    OfficialSiteDiscoveryCreate,
     PdfArtifactApprovalCreate,
     PdfArtifactReleaseCreate,
     PdfArtifactResponse,
@@ -80,6 +81,21 @@ def create_source_discovery_run(
 ) -> SourceDiscoveryRunResponse:
     try:
         return KnowledgeService(db).create_source_discovery_run(request)
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.post(
+    "/source-discovery-runs/official-site",
+    response_model=SourceDiscoveryRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def discover_official_site(
+    request: OfficialSiteDiscoveryCreate,
+    db: DatabaseSession,
+) -> SourceDiscoveryRunResponse:
+    try:
+        return KnowledgeService(db).discover_official_site(request)
     except ResourceConflictError as error:
         raise _conflict(error) from error
 

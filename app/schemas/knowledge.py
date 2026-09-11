@@ -104,6 +104,28 @@ class SourceDiscoveryRunCreate(BaseModel):
         return self
 
 
+class OfficialSiteDiscoveryCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=500)
+    site_root: str = Field(min_length=1)
+
+    @field_validator("query")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("query must not be blank")
+        return normalized
+
+    @field_validator("site_root")
+    @classmethod
+    def normalize_site_root(cls, value: str) -> str:
+        from app.services.official_site_discovery import canonicalize_site_root
+
+        return canonicalize_site_root(value)
+
+
 class SourceCandidateResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

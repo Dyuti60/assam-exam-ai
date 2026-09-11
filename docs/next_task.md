@@ -9038,3 +9038,7 @@ Do not push.
 Do not create a PR.
 Do not self-approve.
 Do not define or implement T-053.
+
+## T-052 implementation note
+
+Implementation note (2026-09-12 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/source-discovery-runs/official-site` and an injectable synchronous `official-sitemap-v1` adapter. The endpoint validates a normalized query and HTTPS origin, then the adapter applies configured official-host, DNS, IP-pinned TLS, redirect, robots, content-type, XML, byte, document, inspected-URL and candidate limits while retrieving only robots and sitemap documents. It rejects non-public or mixed DNS answers, DTD/entities, cycles, unsafe redirects and malformed responses; sanitizes controlled failures to stable codes; canonicalizes and deduplicates same-origin locations; and deterministically scores URL text without HTML or AI. Network work completes before the unchanged atomic run/candidate persistence path. Focused T-052 tests passed 29 and the full suite passed 406; Ruff, dependency-lock, unchanged Alembic head/check, fresh upgrade, and diff checks passed on dedicated `_test` databases. T-052 is Ready for review, not approved. No content-page fetch, promotion automation, Source mutation, ingestion, Evidence/Claim/Verification creation, AI/LLM, API key, queue, learner/public behavior, infrastructure, T-053 definition, or T-053 implementation was added.
