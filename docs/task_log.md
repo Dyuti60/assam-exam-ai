@@ -1788,3 +1788,33 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Persistence | No model or migration change; all network work completes before the existing atomic one-commit SourceDiscoveryRun/SourceCandidate persistence path; Alembic head remains `f6b2d8c4a731` |
 | Tests | Focused T-052: 29 passed, 1 warning in 1.05s. Full suite: 406 passed, 1 warning in 36.53s. |
 | Notes | Candidates remain untrusted leads. T-052 is not approved; no content-page fetch, promotion automation, Source mutation, ingestion, downstream knowledge, AI/LLM, queue, public/learner behavior, infrastructure, or T-053 work was added. |
+
+
+---
+
+## T-052 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-052` |
+| Issuance base | `3e268f1de9f05c66ea493849470b9c7f1bd695d1` |
+| Implementation commit | `c6ce91105bde522e159fc1bc87389c5e889951d1` |
+| Corrective/final commit | `775bb96ef2ceedec36f7d2ec0f4bcc582354e7b6` |
+| Review state | **APPROVED** |
+| Approved capability | Bounded allowlisted robots-aware official-site sitemap discovery with immutable terminal run/candidate audit persistence |
+| Persistence | Existing SourceDiscoveryRun/SourceCandidate aggregate; no model or migration change, Alembic head remains `f6b2d8c4a731` |
+| Validation evidence | Developer-recorded final: 65 focused, 137 complete source, and 442 full-suite tests; Ruff, lock, fresh upgrade, Alembic and diff checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | Initial resource-cleanup, configuration-validation, URL-safety and direct-test blockers were resolved by the focused correction. The complete two-commit result now matches the issued API, network policy, terminal persistence, atomicity, tests, documentation and exclusions with no blocking finding. |
+| Boundaries | No content-page fetch/storage, SourceFetchRun/Snapshot, extraction, chunks, promotion automation, downstream knowledge, AI/LLM, queue, public behavior, or infrastructure. |
+
+---
+
+## T-053 issued — Immutable Source fetch-run and snapshot persistence
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Persist one terminal fetch attempt for a curated Source and, on success, its exact immutable bounded byte snapshot with checksum and provenance |
+| Architectural phase | Content Factory / Source Ingestion Foundation |
+| Scope | Models, migration, create/read APIs, lifecycle constraints, exact bytes/checksum metadata, atomicity, tests and documentation; no outbound networking, extraction, chunks, AI, or T-054 |
+| Full implementation prompt | Appended to `docs/next_task.md` |

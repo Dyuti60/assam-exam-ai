@@ -1689,3 +1689,15 @@ flowchart LR
 - GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
 - No network, fetch, ingestion, downstream knowledge generation, AI/LLM, learner/public behavior, infrastructure, or T-052 implementation was included.
 - T-052 separately adds one allowlisted, robots-aware official-site sitemap discovery adapter; it does not promote candidates or fetch their content pages.
+
+
+### T-052 post-correction review and T-053 issuance
+
+- **APPROVED** as the complete range from T-052 issuance base `3e268f1de9f05c66ea493849470b9c7f1bd695d1` through implementation `c6ce91105bde522e159fc1bc87389c5e889951d1` and focused correction `775bb96ef2ceedec36f7d2ec0f4bcc582354e7b6`.
+- The final adapter accepts only a normalized official HTTPS origin, uses a fixed adapter key, applies explicit host/DNS/TLS/redirect/robots/sitemap/XML/size/time/count policies, never fetches candidate pages, and persists one immutable SUCCEEDED or sanitized FAILED run.
+- The correction guarantees response/connection/TLS/raw-socket cleanup on success and every failure, validates every security configuration value, rejects whitespace/control/overlong URLs before request or persistence, and preserves hostname-based TLS verification while connecting to a prevalidated public IP.
+- Direct transport tests cover bounded reads, timeouts, TLS/request/response failures, redirects, limits and cleanup. Transaction tests establish network completion before database work, one commit for terminal results, and full rollback after an injected post-flush failure.
+- Developer-recorded final evidence is 65 focused T-052 tests, 137 complete T-048–T-052 source tests, and 442 full-suite tests, each with the existing warning, plus successful Ruff, dependency-lock, fresh upgrade, Alembic head/check and diff checks.
+- GitHub exposes no status contexts or workflow runs for either T-052 commit, so no CI pass is claimed.
+- No model, migration, provider/API key, content-page fetch, Source promotion automation, ingestion, extraction, AI/LLM, queue, learner/public behavior, or infrastructure was included.
+- T-053 separately introduces terminal fetch-run and immutable source-snapshot persistence. It does not perform outbound networking; the controlled executor remains future scope.

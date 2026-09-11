@@ -112,6 +112,9 @@ Every SourceCandidate begins in independent review state `DRAFT`. Its API contra
 
 T-051 was independently reviewed after push at immutable commit `7bce1693003311dc3e9fcd0cda302aef71f592b0` and approved with no blocking finding. GitHub exposes no status contexts or workflow runs, so the approval relies on exact commit inspection and developer-recorded local PostgreSQL validation; no CI pass is claimed. T-052 is issued separately as a bounded official-site discovery adapter and does not change T-051 promotion semantics.
 
+
+T-052 was independently reviewed as the complete two-commit range from issuance base `3e268f1de9f05c66ea493849470b9c7f1bd695d1` through corrective head `775bb96ef2ceedec36f7d2ec0f4bcc582354e7b6` and approved with no blocking finding. The correction closes network resources on every path, validates security settings and URL bounds, and adds direct transport and transaction evidence. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. T-053 is issued separately as immutable SourceFetchRun/SourceSnapshot persistence only; it performs no network fetch.
+
 ## Planned architecture — not implemented
 
 The repository instructions describe this target flow:

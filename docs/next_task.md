@@ -9042,3 +9042,195 @@ Do not define or implement T-053.
 ## T-052 implementation note
 
 Implementation note (2026-09-12 Asia/Kolkata, UTC+05:30): added only `POST /api/v1/source-discovery-runs/official-site` and an injectable synchronous `official-sitemap-v1` adapter. The endpoint validates a normalized query and HTTPS origin, then the adapter applies configured official-host, DNS, IP-pinned TLS, redirect, robots, content-type, XML, byte, document, inspected-URL and candidate limits while retrieving only robots and sitemap documents. It rejects non-public or mixed DNS answers, DTD/entities, cycles, unsafe redirects and malformed responses; sanitizes controlled failures to stable codes; canonicalizes and deduplicates same-origin locations; and deterministically scores URL text without HTML or AI. Network work completes before the unchanged atomic run/candidate persistence path. Focused T-052 tests passed 29 and the full suite passed 406; Ruff, dependency-lock, unchanged Alembic head/check, fresh upgrade, and diff checks passed on dedicated `_test` databases. T-052 is Ready for review, not approved. No content-page fetch, promotion automation, Source mutation, ingestion, Evidence/Claim/Verification creation, AI/LLM, API key, queue, learner/public behavior, infrastructure, T-053 definition, or T-053 implementation was added.
+
+
+# T-053 — Immutable Source fetch-run and snapshot persistence
+
+## Context
+
+T-048–T-052 provide audited discovery, human candidate review, controlled candidate-to-Source promotion, and a bounded official-site sitemap adapter. The curated Source still has no fetched content.
+
+T-053 adds the persistence foundation for terminal Source fetch attempts and immutable successful snapshots. It intentionally performs no network request. A later controlled executor will use this boundary after independently applying outbound-fetch security policy.
+
+## Starting-state verification
+
+1. Confirm `main`, fetch `origin/main`, require a clean tree, and confirm HEAD is the docs commit approving T-052 and issuing T-053.
+2. Confirm T-052 final corrective commit `775bb96ef2ceedec36f7d2ec0f4bcc582354e7b6` descends directly from implementation `c6ce91105bde522e159fc1bc87389c5e889951d1`, whose parent is issuance base `3e268f1de9f05c66ea493849470b9c7f1bd695d1`.
+3. Read Source, promotion, discovery, Evidence and current content/artifact persistence patterns, migrations, tests, settings and documentation.
+4. Confirm one Alembic head: `f6b2d8c4a731`. Stop on material divergence.
+
+## Objective
+
+Add a controlled internal API that atomically records one already-completed terminal fetch attempt for one existing curated Source:
+
+- FAILED stores stable failure metadata and no snapshot.
+- SUCCEEDED stores exactly one immutable SourceSnapshot containing the exact supplied bytes and metadata.
+- The server independently computes byte size and lowercase SHA-256 from the decoded bytes.
+- Neither status nor snapshot can be mutated through an API.
+- T-053 must not perform DNS resolution, HTTP requests, redirects, retries or other networking.
+
+## API contract
+
+Add exactly:
+
+- `POST /api/v1/sources/{source_id}/fetch-runs`
+- `GET /api/v1/source-fetch-runs/{source_fetch_run_id}`
+- `GET /api/v1/source-snapshots/{source_snapshot_id}`
+
+The create request must be a discriminated terminal result.
+
+Successful example:
+
+```json
+{
+  "status": "SUCCEEDED",
+  "requested_url": "https://example.gov.in/document.pdf",
+  "final_url": "https://example.gov.in/document.pdf",
+  "http_status": 200,
+  "content_type": "application/pdf",
+  "content_base64": "exact base64 bytes"
+}
+```
+
+Failed example:
+
+```json
+{
+  "status": "FAILED",
+  "requested_url": "https://example.gov.in/document.pdf",
+  "final_url": null,
+  "http_status": null,
+  "error_code": "FETCH_TIMEOUT"
+}
+```
+
+Use closed schemas with forbidden extra fields and stable enum vocabularies.
+
+Requirements:
+
+- Source ID comes only from the path.
+- `requested_url` must equal the Source's exact stored location; do not accept another origin or infer it.
+- SUCCEEDED requires final URL, HTTP status 200–299, normalized nonblank supported content type, and nonempty valid base64 bytes; it forbids error_code.
+- FAILED requires a stable nonblank bounded error code, forbids content bytes, content type and snapshot metadata, and may retain a validated final URL and HTTP status when known.
+- Limit decoded content bytes with a conservative explicit non-secret setting and reject oversized/invalid base64 with 422 before persistence.
+- Do not accept byte size, checksum, IDs, timestamps or Source metadata from the client.
+- Missing Source or fetch run/snapshot returns the established exact 404 form.
+- Return HTTP 201 for creation and HTTP 200 for retrieval.
+
+The create response should contain the stored SourceFetchRun and nullable nested SourceSnapshot metadata/content contract. Individual snapshot retrieval returns the same stored snapshot. Choose response names once and reuse them without duplication.
+
+## Persistence model
+
+Add `SourceFetchRun` with:
+
+- integer primary key;
+- non-null Source ID;
+- exact non-null requested URL snapshot;
+- terminal status SUCCEEDED or FAILED;
+- nullable final URL;
+- nullable HTTP status;
+- nullable bounded error code;
+- non-null timezone-aware created/completed timestamp.
+
+Add `SourceSnapshot` with:
+
+- integer primary key;
+- unique non-null fetch-run ID;
+- non-null Source ID;
+- exact requested URL;
+- non-null final URL;
+- normalized nonblank content type;
+- non-null positive byte size;
+- exactly 64 lowercase hexadecimal SHA-256 characters;
+- exact nonempty bytes in PostgreSQL `BYTEA`;
+- non-null timezone-aware creation timestamp.
+
+Use supporting composite uniqueness and named composite foreign keys so PostgreSQL independently enforces:
+
+- run requested URL agrees with its Source;
+- snapshot Source/requested URL agrees with its fetch run;
+- snapshot belongs only to a SUCCEEDED run;
+- one snapshot per run;
+- referenced Source and fetch run deletion is restricted.
+
+Use named checks for terminal run field consistency, HTTP status range, nonblank URLs/content type/error, positive byte size, checksum format, and successful snapshot invariants. Model metadata and migration must match.
+
+Because PostgreSQL cannot cheaply enforce “every SUCCEEDED parent has one child” without a circular/deferred design, enforce creation atomically in the service and document that precise boundary; do not add triggers or misstate database guarantees.
+
+Records are immutable through the API. Do not update `Source.content_hash` in T-053; the Source may have multiple independent fetch attempts.
+
+## Service and transaction behavior
+
+Validate in this order:
+
+1. request schema;
+2. Source existence;
+3. exact requested_url equality;
+4. terminal-result semantics and decoded-byte limit;
+5. construct complete run and optional snapshot;
+6. flush and commit once;
+7. reload stored response.
+
+Compute SHA-256 and byte size from the exact decoded bytes. Persist the run and snapshot atomically. Every integrity or persistence failure rolls back and re-raises unless an explicitly required named conflict is defined; ordinary repeated fetch attempts are allowed and are not duplicates.
+
+Do not lock Source or other domain rows: Source is immutable through current APIs and the exact composite reference is the database authority. Do not open or hold a transaction around decoding/hashing work if avoidable.
+
+Retrieval is read-only under `no_autoflush`, uses fixed queries without per-record N+1 behavior, and never recomputes or repairs stored fields.
+
+## Migration
+
+Create exactly one Alembic revision whose parent is `f6b2d8c4a731`. Add only required supporting uniqueness, `source_fetch_runs`, `source_snapshots`, indexes needed for Source/history retrieval, and named constraints.
+
+Do not infer fetch runs or snapshots for existing Sources. Downgrade drops snapshots before runs and then only T-053 supporting constraints/indexes. Preserve Sources, candidates, promotions, review state and every earlier record. Edit no historical migration.
+
+Validate `f6b2d8c4a731 -> T-053 head -> f6b2d8c4a731 -> T-053 head` with existing promoted and directly created Sources; no run/snapshot may be inferred.
+
+## Required tests
+
+Use PostgreSQL databases ending in `_test`.
+
+Cover at minimum:
+
+- successful PDF and UTF-8 text snapshots with exact bytes, server byte size and lowercase SHA-256;
+- FAILED run with no snapshot;
+- complete create/retrieve response equality and repeated stable reads;
+- missing Source/run/snapshot exact 404;
+- requested URL mismatch, invalid status combinations, invalid/empty base64, unsupported/blank content type, non-2xx success, blank/oversized error code and oversized decoded bytes return 422 with no rows;
+- client-supplied IDs, checksum, byte size, timestamps or Source metadata return 422;
+- repeated attempts for one Source create independent runs/snapshots;
+- direct and promoted Sources are both compatible;
+- success commits exactly once; injected post-flush failures roll back all rows;
+- retrieval performs no locks, writes, flushes, commits, hashing or reconstruction;
+- PostgreSQL rejects invalid lifecycle fields, bad status/HTTP range, blank values, checksum format, nonpositive byte size, duplicate snapshot, failed-run snapshot, mismatched Source/requested URL and restricted deletion;
+- migration cycle preserves prior data and infers nothing;
+- T-048–T-052 and complete source/provenance/canonical-content/document/artifact regressions remain compatible.
+
+Remove event listeners in `finally`.
+
+## Configuration and dependencies
+
+Add only a non-secret maximum decoded snapshot-byte setting to `app/core/config.py` and `.env.example`, validated greater than zero with a conservative default. Prefer standard-library base64 and hashlib; no new dependency, API key, storage service, queue or Docker service should be needed.
+
+Inspect and report decisions for `pyproject.toml`, `uv.lock`, configuration, Docker, AGENTS and README.
+
+## Documentation
+
+Update implemented reality in `docs/architecture.md` and `docs/workflow.md`; append T-053 records to `docs/task_log.md` and `docs/next_task.md`. Keep history append-only. Record T-053 only as **Ready for review**. Do not define T-054.
+
+## Exclusions
+
+No outbound network, URL fetching, DNS, redirects, robots, retry/rate limiting, automatic scheduler, background job, object storage, extraction, OCR, chunking, embeddings, Evidence/Claim/Verification generation, Source review/release/update, AI/LLM/provider/API key/RAG, learner/public API, auth, frontend, deployment, infrastructure, or T-054.
+
+## Validation and handoff
+
+Run focused T-053, complete T-048–T-053, Source/Evidence/Claim/Verification, T-047, canonical/document/artifact and full suites; Ruff; `uv lock --check`; Alembic heads/check; fresh upgrade; seeded migration cycle; direct PostgreSQL probes; diff/whitespace checks; and final status.
+
+Report Git state, files, API schemas/errors, exact checksum/bytes behavior, models/migration/constraints, transaction and read-only behavior, tests, configuration/dependency decisions and exclusions. Call local results developer evidence, not CI.
+
+Leave T-053 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-054.
