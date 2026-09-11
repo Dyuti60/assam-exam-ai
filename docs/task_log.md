@@ -1729,3 +1729,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Content Factory / Trusted Source Intake |
 | Scope | Explicit request-supplied Source classification, candidate location preservation, one Source and one promotion record, database ownership constraints, tests, and documentation; no network fetch, ingestion, extraction, AI, or T-052 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-051 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Controlled one-time promotion of one currently APPROVED SourceCandidate into one new curated Source with immutable authorization provenance |
+| Persistence | Migration `f6b2d8c4a731`, parent `d4a7c2e9f518`; adds supporting candidate/Source `(id, location)` uniqueness and `source_candidate_promotions` with exact-location, approval-snapshot, uniqueness, and restricted-deletion constraints |
+| API | `POST /api/v1/source-candidates/{source_candidate_id}/promote`; validated curated metadata, exact candidate location, null content hash, HTTP 201 stored promotion/Source response, exact 404/409/422 behavior |
+| Transactions | Target candidate is locked; eligibility and duplicate state are checked before mutation; Source and promotion flush atomically, commit once, roll back every failure, and only the named concurrent candidate uniqueness conflict maps to duplicate 409 |
+| Tests | Focused T-051: 30 passed, 1 warning in 1.34s. Complete T-048 through T-051 source suite: 72 passed, 1 warning in 1.92s. Source/Evidence/Claim/Verification: 34 passed, 1 warning in 1.58s. T-047: 1 passed, 1 warning in 1.07s. ContentPackage/PdfArtifact regressions: 116 passed, 1 warning in 20.26s. Full suite: 377 passed, 1 warning in 27.67s. |
+| Migration checks | Fresh upgrade reached `f6b2d8c4a731`; seeded DRAFT/APPROVED/REJECTED candidates and an existing Source survived upgrade/downgrade/re-upgrade exactly, and neither Source nor promotion was inferred. Alembic reports one head and no schema drift. |
+| Notes | Promotion creates a curated Source but does not fetch content, verify facts, create downstream knowledge, or confer factual correctness. Later candidate review changes do not alter the Source or promotion snapshot. T-051 is not approved and no T-052 was defined or implemented. |

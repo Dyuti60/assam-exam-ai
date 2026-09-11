@@ -24,6 +24,7 @@ from app.models import (
     QuestionBankOption,
     Source,
     SourceCandidate,
+    SourceCandidatePromotion,
     SourceDiscoveryRun,
     SyllabusVersion,
     SyllabusVersionTopic,
@@ -73,6 +74,8 @@ from app.schemas.knowledge import (
     QuestionBankItemResponse,
     SourceCandidateApprovalCreate,
     SourceCandidateApprovalStatus,
+    SourceCandidatePromotionCreate,
+    SourceCandidatePromotionResponse,
     SourceCandidateResponse,
     SourceCreate,
     SourceDiscoveryRunCreate,
@@ -212,6 +215,70 @@ class KnowledgeService:
             self._source_candidate_response(source_candidate)
             for source_candidate in self.repository.get_approved_source_candidates()
         ]
+
+    def promote_source_candidate(
+        self,
+        source_candidate_id: int,
+        request: SourceCandidatePromotionCreate,
+    ) -> SourceCandidatePromotionResponse:
+        source_candidate = self.repository.get_source_candidate_for_update(
+            source_candidate_id
+        )
+        if source_candidate is None:
+            raise ResourceNotFoundError("SourceCandidate", source_candidate_id)
+        if source_candidate.approval_status != SourceCandidateApprovalStatus.APPROVED:
+            raise ResourceConflictError(
+                f"SourceCandidate {source_candidate_id} must be approved before promotion"
+            )
+        if (
+            self.repository.get_source_candidate_promotion_by_candidate_id(
+                source_candidate_id
+            )
+            is not None
+        ):
+            raise ResourceConflictError(
+                f"SourceCandidate {source_candidate_id} already has a Source"
+            )
+
+        source = Source(
+            title=request.title,
+            publisher=request.publisher,
+            source_type=request.source_type,
+            authority_tier=request.authority_tier,
+            location=source_candidate.location,
+            license_status=request.license_status,
+            content_hash=None,
+        )
+        promotion = SourceCandidatePromotion(
+            source_candidate_id=source_candidate.id,
+            source=source,
+            location=source_candidate.location,
+            candidate_approval_status=source_candidate.approval_status,
+            candidate_approval_decided_at=source_candidate.approval_decided_at,
+            candidate_reviewer_note=source_candidate.reviewer_note,
+        )
+        try:
+            self.repository.add_source_candidate_promotion(promotion)
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            diagnostic = getattr(error.orig, "diag", None)
+            constraint_name = getattr(diagnostic, "constraint_name", None)
+            if constraint_name != "uq_source_candidate_promotions_source_candidate_id":
+                raise
+            raise ResourceConflictError(
+                f"SourceCandidate {source_candidate_id} already has a Source"
+            ) from error
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_promotion = self.repository.get_source_candidate_promotion(promotion.id)
+        if stored_promotion is None:
+            raise RuntimeError(
+                f"SourceCandidatePromotion {promotion.id} missing after successful commit"
+            )
+        return self._source_candidate_promotion_response(stored_promotion)
 
     def create_exam(self, request: ExamCreate) -> ExamResponse:
         exam = Exam(**request.model_dump())
@@ -1634,6 +1701,12 @@ class KnowledgeService:
         source_candidate: SourceCandidate,
     ) -> SourceCandidateResponse:
         return SourceCandidateResponse.model_validate(source_candidate)
+
+    @staticmethod
+    def _source_candidate_promotion_response(
+        promotion: SourceCandidatePromotion,
+    ) -> SourceCandidatePromotionResponse:
+        return SourceCandidatePromotionResponse.model_validate(promotion)
 
     @staticmethod
     def _pdf_artifact_response(pdf_artifact: PdfArtifact) -> PdfArtifactResponse:

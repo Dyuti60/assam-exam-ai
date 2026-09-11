@@ -69,6 +69,11 @@ class SourceCandidate(Base):
             "location",
             name="uq_source_candidates_run_location",
         ),
+        UniqueConstraint(
+            "id",
+            "location",
+            name="uq_source_candidates_id_location",
+        ),
         ForeignKeyConstraint(
             ["source_discovery_run_id", "run_status"],
             ["source_discovery_runs.id", "source_discovery_runs.status"],

@@ -21,6 +21,7 @@ from app.models import (
     QuestionBankItem,
     Source,
     SourceCandidate,
+    SourceCandidatePromotion,
     SourceDiscoveryRun,
     SyllabusVersion,
     Topic,
@@ -110,6 +111,36 @@ class KnowledgeRepository:
         source_candidate.approval_status = approval_status
         source_candidate.approval_decided_at = decided_at
         source_candidate.reviewer_note = reviewer_note
+
+    def get_source_candidate_promotion_by_candidate_id(
+        self,
+        source_candidate_id: int,
+    ) -> SourceCandidatePromotion | None:
+        statement = select(SourceCandidatePromotion).where(
+            SourceCandidatePromotion.source_candidate_id == source_candidate_id
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
+    def add_source_candidate_promotion(
+        self,
+        promotion: SourceCandidatePromotion,
+    ) -> SourceCandidatePromotion:
+        self.session.add(promotion)
+        self.session.flush()
+        return promotion
+
+    def get_source_candidate_promotion(
+        self,
+        promotion_id: int,
+    ) -> SourceCandidatePromotion | None:
+        statement = (
+            select(SourceCandidatePromotion)
+            .options(joinedload(SourceCandidatePromotion.source))
+            .where(SourceCandidatePromotion.id == promotion_id)
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
 
     def add_exam(self, exam: Exam) -> Exam:
         self.session.add(exam)

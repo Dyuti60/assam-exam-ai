@@ -39,6 +39,8 @@ from app.schemas.knowledge import (
     QuestionBankItemReleaseCreate,
     QuestionBankItemResponse,
     SourceCandidateApprovalCreate,
+    SourceCandidatePromotionCreate,
+    SourceCandidatePromotionResponse,
     SourceCandidateResponse,
     SourceCreate,
     SourceDiscoveryRunCreate,
@@ -124,6 +126,27 @@ def record_source_candidate_approval(
         )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
+
+
+@router.post(
+    "/source-candidates/{source_candidate_id}/promote",
+    response_model=SourceCandidatePromotionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def promote_source_candidate(
+    source_candidate_id: int,
+    request: SourceCandidatePromotionCreate,
+    db: DatabaseSession,
+) -> SourceCandidatePromotionResponse:
+    try:
+        return KnowledgeService(db).promote_source_candidate(
+            source_candidate_id,
+            request,
+        )
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
 
 
 @router.post("/sources", response_model=SourceResponse, status_code=201)

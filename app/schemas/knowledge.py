@@ -148,11 +148,53 @@ class SourceCreate(BaseModel):
     content_hash: str | None = Field(default=None, max_length=128)
 
 
+class SourceCandidatePromotionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=500)
+    publisher: str | None = Field(default=None, max_length=255)
+    source_type: str = Field(min_length=1, max_length=100)
+    authority_tier: int = Field(ge=1, le=4)
+    license_status: str = Field(min_length=1, max_length=100)
+
+    @field_validator("title", "source_type", "license_status")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("value must not be blank")
+        return normalized
+
+    @field_validator("publisher")
+    @classmethod
+    def normalize_optional_publisher(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("publisher must not be blank")
+        return normalized
+
+
 class SourceResponse(SourceCreate):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     created_at: datetime
+
+
+class SourceCandidatePromotionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    source_candidate_id: int
+    source_id: int
+    location: str
+    candidate_approval_status: SourceCandidateApprovalStatus
+    candidate_approval_decided_at: datetime
+    candidate_reviewer_note: str | None
+    created_at: datetime
+    source: SourceResponse
 
 
 class TopicCreate(BaseModel):

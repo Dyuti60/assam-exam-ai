@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -8,6 +8,13 @@ from app.models.base import Base
 
 class Source(Base):
     __tablename__ = "sources"
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "location",
+            name="uq_sources_id_location",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 

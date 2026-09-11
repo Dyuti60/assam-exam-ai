@@ -8896,3 +8896,7 @@ Do not push.
 Do not create a PR.
 Do not self-approve.
 Do not define or implement T-052.
+
+## T-051 implementation note
+
+Implementation note (2026-09-11 Asia/Kolkata, UTC+05:30): added only controlled one-time promotion through `POST /api/v1/source-candidates/{source_candidate_id}/promote`. An exact target-candidate lock requires current APPROVED review, then creates one new curated Source from validated request metadata plus the candidate's exact stored location and null content hash, together with one immutable snapshot of the authorizing candidate decision. Migration `f6b2d8c4a731`, parent `d4a7c2e9f518`, adds only supporting composite uniqueness and the promotion table with same-location composite references, approval-snapshot checks, one-to-one uniqueness, and restricted deletion. Success commits once; every failure rolls back; only the named concurrent candidate uniqueness violation becomes the stable duplicate 409. Focused T-051 tests passed 30, the complete T-048 through T-051 source suite passed 72, Source/Evidence/Claim/Verification regressions passed 34, T-047 passed 1, ContentPackage/PdfArtifact regressions passed 116, and the full suite passed 377 in 27.67s; migration-cycle, direct PostgreSQL constraints, Ruff, dependency-lock, Alembic, and diff checks passed on dedicated `_test` databases. T-051 is Ready for review, not approved. No fetch, ingestion, source snapshot, Evidence/Claim/Verification creation, AI/LLM, provider, dependency, configuration, Docker, learner/public behavior, T-052 definition, or T-052 implementation was added.
