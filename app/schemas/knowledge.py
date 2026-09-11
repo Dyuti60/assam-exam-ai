@@ -33,6 +33,12 @@ class SourceDiscoveryStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class SourceCandidateApprovalStatus(StrEnum):
+    DRAFT = "DRAFT"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class SourceCandidateCreate(BaseModel):
     location: str = Field(min_length=1)
     title: str | None = None
@@ -110,13 +116,13 @@ class SourceCandidateResponse(BaseModel):
     publisher: str | None
     snippet: str | None
     created_at: datetime
-    approval_status: ClaimApprovalStatus
+    approval_status: SourceCandidateApprovalStatus
     approval_decided_at: datetime | None
     reviewer_note: str | None
 
 
 class SourceCandidateApprovalCreate(BaseModel):
-    approval_status: ClaimApprovalStatus
+    approval_status: SourceCandidateApprovalStatus
     reviewer_note: str | None = None
 
 

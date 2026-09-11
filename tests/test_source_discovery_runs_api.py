@@ -12,6 +12,12 @@ from app.core.database import engine, get_db
 from app.main import app
 from app.models import Source, SourceCandidate, SourceDiscoveryRun
 from app.repositories import KnowledgeRepository
+from app.schemas.knowledge import (
+    ClaimApprovalStatus,
+    SourceCandidateApprovalCreate,
+    SourceCandidateApprovalStatus,
+    SourceCandidateResponse,
+)
 
 
 @pytest.fixture
@@ -89,6 +95,26 @@ def _post_run(client: TestClient, payload: dict) -> dict:
     response = client.post("/api/v1/source-discovery-runs", json=payload)
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def test_source_candidate_schemas_use_dedicated_approval_status() -> None:
+    assert (
+        SourceCandidateApprovalCreate.model_fields["approval_status"].annotation
+        is SourceCandidateApprovalStatus
+    )
+    assert (
+        SourceCandidateResponse.model_fields["approval_status"].annotation
+        is SourceCandidateApprovalStatus
+    )
+    assert SourceCandidateApprovalStatus is not ClaimApprovalStatus
+    assert [status.value for status in SourceCandidateApprovalStatus] == [
+        "DRAFT",
+        "APPROVED",
+        "REJECTED",
+    ]
+    request = SourceCandidateApprovalCreate(approval_status="APPROVED")
+    assert request.approval_status is SourceCandidateApprovalStatus.APPROVED
+    assert not isinstance(request.approval_status, ClaimApprovalStatus)
 
 
 def test_succeeded_runs_store_zero_or_ordered_normalized_candidates(

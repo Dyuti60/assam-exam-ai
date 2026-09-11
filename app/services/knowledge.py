@@ -72,6 +72,7 @@ from app.schemas.knowledge import (
     QuestionBankItemReleaseDecision,
     QuestionBankItemResponse,
     SourceCandidateApprovalCreate,
+    SourceCandidateApprovalStatus,
     SourceCandidateResponse,
     SourceCreate,
     SourceDiscoveryRunCreate,
@@ -186,7 +187,7 @@ class KnowledgeService:
         if source_candidate is None:
             raise ResourceNotFoundError("SourceCandidate", source_candidate_id)
 
-        is_draft = request.approval_status == ClaimApprovalStatus.DRAFT
+        is_draft = request.approval_status == SourceCandidateApprovalStatus.DRAFT
         try:
             self.repository.update_source_candidate_approval(
                 source_candidate,
