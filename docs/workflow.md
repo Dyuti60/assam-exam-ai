@@ -1755,3 +1755,14 @@ flowchart LR
 - Migration `b8f4e1c7d526` follows `a9d3f6c2e841`. It adds `SourceExtractionRun`, `SourceChunk`, supporting snapshot uniqueness, exact composite provenance references, terminal metadata, lowercase checksum, range, nonblank, unique position/range, cascade-child, and restricted-parent constraints. Historical snapshots receive no inferred extraction. PostgreSQL cannot cheaply require a successful parent to have a child, so the service guarantees that aggregate invariant.
 - Developer-run local evidence: 31 focused T-055 tests and 554 full-suite tests passed with the existing warning. Fresh upgrade, seeded migration cycle, direct PostgreSQL probes, Ruff, dependency-lock, Alembic, and diff checks passed on dedicated `_test` databases.
 - T-055 is Ready for review, not approved. No network request, OCR, Evidence/Claim/Verification or canonical-content generation, embedding/vector/RAG, AI provider/API key, scheduler/worker, learner/public behavior, deployment, infrastructure, T-056 definition, or T-056 implementation was added.
+### T-055 post-push review and T-056 issuance
+
+- **APPROVED** at immutable implementation commit 83f253efa3fee0b78c24fcb759e7b09b35b89011, whose exact parent is T-055 issuance commit 300b4954057dbd76aaa59007865af71490a69747.
+- The one-commit diff adds only deterministic SourceSnapshot extraction, terminal run/chunk persistence, two APIs, validated limits, constrained and locked pypdf, migration/model registration, focused tests, and current-state documentation.
+- All six stored content types are handled locally. Normalization, one-final-newline behavior, text/chunk SHA-256 values, fixed overlap, offsets and position ordering are explicit and reproducible under deterministic-text-v1.
+- The read transaction ends before parsing. Snapshot identity, Source, content type, byte size and checksum are revalidated before a complete aggregate commits once; named uniqueness handles concurrent duplicates and unknown persistence failures roll back and propagate.
+- Composite references bind each run to the exact snapshot/Source/hash and each chunk to its successful run. Failed runs cannot own chunks; the documented successful-parent-has-child invariant remains service-owned.
+- Developer-recorded evidence is 31 focused T-055 tests, 27 T-053 tests, 54 T-054 tests, 249 complete source-pipeline tests, 35 provenance/T-047 tests, 228 canonical/document/artifact regressions and 554 full-suite tests, plus successful Ruff, dependency-lock, migration cycles, PostgreSQL, Alembic and diff checks.
+- GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No network fetch during extraction, OCR, AI provider, API key, embeddings, RAG, downstream knowledge creation, scheduler, worker, learner/public behavior or infrastructure was included.
+- T-056 separately establishes auditable provider-neutral AI execution with a Gemini adapter. It does not implement any domain generation agent.

@@ -9640,3 +9640,213 @@ Do not self-approve.
 Do not define or implement T-056.
 
 Implementation note (2026-09-12 Asia/Kolkata, UTC+05:30): implemented only T-055. The two internal endpoints create and retrieve one stored `deterministic-text-v1` terminal extraction aggregate for an immutable SourceSnapshot. Local strict parsers cover all six stored media types; deterministic normalization produces exactly one final newline; fixed 1,000-character chunks with 100-character overlap retain exact ordered offsets and UTF-8 hashes. Migration `b8f4e1c7d526` follows `a9d3f6c2e841` and enforces exact snapshot/Source/checksum provenance plus terminal, ordering, range, checksum, uniqueness, cascade-child, and restricted-parent invariants. Snapshot bytes are copied and the read transaction ends before parsing; exact provenance is revalidated before an atomic one-commit aggregate. Controlled failures persist stable codes with no chunks; duplicate versioned extraction returns the stable 409. `pypdf` is constrained to 6.x; no AI provider, Gemini/API key, OCR, network fetch, Evidence/Claim/Verification or canonical-content generation, embedding/vector/RAG, scheduler, learner/public behavior, infrastructure, T-056 definition, or T-056 implementation was added. T-055 remains Ready for review and is not approved. Developer-run validation evidence is recorded in `docs/workflow.md` and `docs/task_log.md`.
+# T-056 — Provider-neutral AI execution and Gemini adapter foundation
+
+## Context and objective
+
+T-055 provides immutable, checksummed SourceChunks derived deterministically from exact SourceSnapshot bytes. Before any agent generates domain records, add a provider-neutral and auditable AI execution foundation with immutable prompt versions, terminal execution records, strict structured-output validation, bounded Gemini calls and exact request/response provenance.
+
+Gemini is the first configured provider, but application and domain services must depend only on a provider interface. This task must not create Evidence, Claims, Verifications, NoteDrafts, QuestionBankItems or any other generated domain object. It must not approve, release or publish anything.
+
+## Starting-state verification
+
+1. Confirm main, fetch origin/main, require a clean tree, and require HEAD to be the documentation commit approving T-055 and issuing T-056.
+2. Confirm T-055 implementation commit 83f253efa3fee0b78c24fcb759e7b09b35b89011 has exact parent 300b4954057dbd76aaa59007865af71490a69747.
+3. Inspect T-055 extraction/chunks, service/repository/schema patterns, migrations, configuration, dependencies, Docker, tests and documentation.
+4. Confirm one Alembic head b8f4e1c7d526. Stop on material divergence.
+
+## Provider-neutral boundary
+
+Create a small AI module with:
+
+- an AiProvider protocol;
+- immutable provider request/result value objects;
+- an AiExecutionCoordinator for prompt rendering, provider invocation, validation and persistence;
+- a Gemini implementation behind that interface;
+- injected provider and clock seams for deterministic tests.
+
+No knowledge-domain service may import Gemini SDK types. Convert provider-specific exceptions, response types and usage metadata at the adapter boundary.
+
+Do not expose an arbitrary public prompt-execution endpoint. T-056 is infrastructure for later narrowly scoped agents. Exercise the coordinator directly in focused service tests.
+
+## Immutable prompt versions
+
+Add AiPromptVersion persistence with:
+
+- stable prompt_key and positive version;
+- nonblank system and user templates;
+- stable input-schema and output-schema key/version fields;
+- server-derived lowercase SHA-256 over one documented canonical UTF-8 representation;
+- UTC creation timestamp.
+
+Enforce named constraints for bounded nonblank fields, positive version, checksum format, unique prompt key/version and restricted deletion once referenced. Do not allow update/delete.
+
+If an HTTP boundary is necessary, add only:
+
+- POST /api/v1/ai-prompt-versions
+- GET /api/v1/ai-prompt-versions/{ai_prompt_version_id}
+
+The create request must forbid extra fields and cannot accept IDs, timestamps or checksums. Only the named duplicate uniqueness conflict maps to a stable 409. Do not add listing, mutation or execution-through-HTTP.
+
+## Immutable execution audit
+
+Add AiExecutionRun with at least:
+
+- exact prompt-version ID, key, version and checksum snapshot;
+- provider key and actual requested model identifier;
+- server-generated request/correlation ID;
+- SUCCEEDED or FAILED terminal status;
+- canonical input JSON and lowercase SHA-256;
+- rendered system/user prompt SHA-256 values;
+- validated structured output JSON and lowercase SHA-256 on success;
+- bounded stable error code on failure;
+- safe provider request ID when available;
+- started/completed UTC timestamps and non-negative duration;
+- nullable non-negative input/output/total tokens when reported;
+- nullable provider-reported cost/currency only when actually supplied—never estimate price;
+- bounded finish reason and safety/block metadata;
+- UTC creation timestamp.
+
+Use PostgreSQL JSONB for structured input/output. Canonical JSON is UTF-8, sorted keys, compact separators, stable Unicode, and forbids NaN/Infinity.
+
+Named constraints must enforce prompt snapshot agreement, terminal success/failure metadata, lowercase hashes, nonnegative duration/tokens, consistent total tokens when all counts exist, and bounded provider/model/request identifiers. Do not infer prompt or execution rows during migration.
+
+Never persist the Gemini API key, authorization headers, raw SDK exceptions, stack traces or unbounded provider payloads.
+
+## Coordinator execution contract
+
+The coordinator accepts only trusted server-side inputs: one stored prompt version, a JSON-compatible input validated against a registered input contract, a registered output Pydantic schema, and server-selected provider/model/options.
+
+It must:
+
+1. Load and copy the immutable prompt contract.
+2. Validate input and render templates deterministically; reject missing or unexpected placeholders before provider I/O.
+3. Canonicalize and hash input and rendered prompts.
+4. End the database transaction before provider I/O.
+5. Execute exactly one provider request; no automatic retry in T-056.
+6. Require structured JSON and strictly validate it against the registered output schema.
+7. Map provider, timeout, safety, malformed JSON and schema failures to bounded stable codes.
+8. Revalidate exact prompt identity/checksum after I/O.
+9. Persist one terminal execution, commit once, and reload its stored audit response.
+10. Roll back and re-raise persistence failures without converting them into provider failures.
+
+A disabled provider or blank key must fail before outbound I/O with a controlled configuration result. Decide and document whether that creates a FAILED audit row, then apply it consistently. Tests need no real key.
+
+## Gemini adapter and configuration
+
+Prefer the official Google Gen AI Python SDK when suitable. Add the minimum constrained dependency and regenerate uv.lock. Otherwise justify a small direct HTTPS adapter with equivalent timeout, TLS and cleanup guarantees.
+
+Add secret-safe settings and .env.example placeholders:
+
+- AI_PROVIDER=gemini
+- GEMINI_API_KEY= with a blank placeholder only
+- GEMINI_MODEL= with an explicit deployment-selected model; do not silently guess one
+- positive request timeout
+- positive maximum output tokens
+- temperature constrained to the SDK range, default zero where supported
+- optional model allowlist
+
+An empty key safely disables real execution. Keys are trimmed but never logged, returned, persisted or placed in exceptions. Model identifiers and allowlist entries are bounded and reject controls or whitespace injection. A configured model must be allowed when the allowlist is nonempty. Generation options are server-owned.
+
+The adapter must request structured output using the provider response-schema mechanism where possible, apply the timeout, send only exact rendered prompts, capture bounded safe audit metadata, avoid retries, and never claim deterministic model output merely because temperature is zero.
+
+Use stable codes including:
+
+- AI_PROVIDER_DISABLED
+- AI_PROVIDER_AUTHENTICATION
+- AI_PROVIDER_RATE_LIMITED
+- AI_PROVIDER_TIMEOUT
+- AI_PROVIDER_SAFETY_BLOCKED
+- AI_PROVIDER_UNAVAILABLE
+- AI_PROVIDER_TRANSPORT
+- AI_PROVIDER_INVALID_RESPONSE
+- AI_OUTPUT_INVALID_JSON
+- AI_OUTPUT_SCHEMA_INVALID
+- AI_PROMPT_RENDER_INVALID
+- AI_MODEL_NOT_ALLOWED
+
+## Read boundary
+
+If audit retrieval is exposed, add only:
+
+GET /api/v1/ai-execution-runs/{ai_execution_run_id}
+
+It returns stored terminal data without provider calls, prompt rendering, output validation, rehashing, locks or writes. Never return the API key or raw provider authorization objects. Do not add a collection endpoint.
+
+## Transactions and concurrency
+
+- Provider I/O occurs with no open database transaction or row lock.
+- Revalidate prompt identity/checksum after I/O.
+- Build the terminal audit row only after the provider attempt.
+- Commit once and roll back every persistence failure.
+- Repeated executions are independent and receive distinct server request IDs.
+- Prompt creation concurrency is protected by database uniqueness.
+- Provider failures cannot leave partial rows.
+- Database failures cannot become provider errors.
+- Existing Source, extraction, knowledge, content and artifact records remain unchanged.
+
+## Tests
+
+Use dedicated PostgreSQL databases ending in _test. Never make a public Gemini call. Inject fake providers/transports and cover:
+
+- prompt canonicalization, checksum, create/read, immutability and duplicate/concurrent duplicate behavior;
+- prompt snapshot constraints and restricted deletion;
+- canonical input/output JSON and recorded hashes;
+- deterministic placeholder rendering and pre-I/O rejection;
+- successful structured output validation;
+- all stable provider error mappings;
+- invalid JSON, wrong types, missing/extra fields and bounded-output failures;
+- disabled provider/key and model allowlist;
+- proof secrets are absent from responses, rows, logs and errors;
+- exactly one provider call with expected model/options/prompts and no retry;
+- no transaction or lock during provider I/O;
+- prompt revalidation after I/O;
+- one-commit terminal persistence and full injected-failure rollback;
+- unknown integrity errors re-raised;
+- repeated independent execution records;
+- read-only retrieval with no provider, rendering, rehash, lock, flush or commit;
+- fixed query counts and no changes to chunks or downstream tables;
+- SDK timeout and cleanup behavior where applicable.
+
+## Migration validation
+
+Create one migration after b8f4e1c7d526. Validate fresh upgrade and a seeded upgrade/downgrade/re-upgrade retaining Source, fetch, snapshot, extraction and chunk records while inferring zero prompts/executions. Verify model/migration parity, direct PostgreSQL terminal/provenance/hash/token/duration/JSON/uniqueness checks and restricted deletion. Downgrade removes only T-056 objects.
+
+## Required validation
+
+Run and report:
+
+- focused T-056 tests;
+- complete T-048 through T-056 source/AI-foundation suite;
+- explicit T-053, T-054 and T-055 regressions;
+- Source/Evidence/Claim/Verification tests;
+- T-047 smoke test;
+- canonical content/document/artifact regressions;
+- full suite;
+- Ruff on every changed/new Python file;
+- uv lock --check;
+- Alembic heads and check;
+- fresh and seeded migration cycles;
+- direct PostgreSQL probes;
+- git diff --check and untracked whitespace checks;
+- final git status --short.
+
+Report local evidence accurately and do not call it GitHub CI.
+
+## Documentation and exclusions
+
+Update current architecture/workflow documents and append task evidence without rewriting history. Record T-056 only as Ready for review.
+
+Exclude Evidence/Claim extraction, verification agents, note/question generation, embeddings/vector/RAG, automatic approval/release/publication, arbitrary prompt execution API, scheduler/queue/worker/retries, live Gemini calls in tests, learner/public APIs, authentication, deployment, infrastructure, and T-057.
+
+## Expected handoff
+
+Report Git state, files, dependencies/lock, secret configuration, models/migration/constraints, prompt canonicalization, provider interface, Gemini adapter, audit fields, stable errors, transaction/concurrency behavior, fake-provider tests, migration cycles, validation, documentation and exclusions.
+
+Leave T-056 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-057.

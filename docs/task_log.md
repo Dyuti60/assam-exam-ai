@@ -1919,3 +1919,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Transactions | Snapshot data is copied and the read transaction ended before parsing; exact provenance is revalidated; one complete SUCCEEDED or FAILED aggregate commits once, and persistence failures roll back fully |
 | Validation | Developer-run local evidence: 31 focused and 554 full-suite tests passed with one existing warning; migration, PostgreSQL, Ruff, lock, Alembic, and diff checks passed on dedicated `_test` databases |
 | Notes | T-055 is not approved. No network, OCR, evidence/claim generation, canonical content, embeddings/RAG, AI/provider/API key, scheduler, learner/public behavior, infrastructure, T-056 definition, or T-056 implementation was added. |
+---
+
+## T-055 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | T-055 |
+| Implementation commit | 83f253efa3fee0b78c24fcb759e7b09b35b89011 |
+| Base/task-issuance commit | 300b4954057dbd76aaa59007865af71490a69747 |
+| Review state | **APPROVED** |
+| Approved capability | Deterministic local extraction of immutable SourceSnapshot bytes into terminal audit runs and exact checksummed position-ordered chunks |
+| Persistence | Migration b8f4e1c7d526, parent a9d3f6c2e841; SourceExtractionRun/SourceChunk lifecycle, uniqueness, offsets, hashes, successful-run provenance and restricted deletion match model metadata |
+| Dependency | pypdf 6.x, resolved and locked to 6.18.1, for local stored-order PDF text extraction; no OCR or network behavior |
+| Validation evidence | Developer-recorded: 31 focused, 27 T-053, 54 T-054, 249 complete source, 35 provenance/T-047, 228 canonical/document/artifact and 554 full-suite tests; Ruff, lock, fresh/seeded migrations, PostgreSQL, Alembic and diff checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | Exact one-commit diff matches the issued APIs, deterministic parsing/normalization/chunking, snapshot revalidation, transaction separation, atomicity, duplicate handling, model/migration constraints, dependency lock, tests, documentation and exclusions with no blocking finding. |
+| Boundaries | No AI/Gemini/API key, embeddings, RAG, Evidence/Claim/Verification generation, note/question generation, approval/release, scheduling, worker, public/learner API or infrastructure. |
+
+---
+
+## T-056 issued — Provider-neutral AI execution and Gemini adapter foundation
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Add an auditable, bounded provider-neutral AI execution layer with immutable prompt versions, terminal execution records and a Gemini adapter hidden behind the provider contract |
+| Architectural phase | Content Factory / AI Infrastructure |
+| Scope | Prompt/execution persistence, migration, provider protocol/coordinator, Gemini adapter, secret-safe configuration, structured-output validation, transaction separation, tests and documentation; no domain agent, generated knowledge, automatic decisions or T-057 |
+| API key | Real Gemini execution requires GEMINI_API_KEY; tests must use injected fakes and make no public provider calls |
+| Full implementation prompt | Appended to docs/next_task.md |
