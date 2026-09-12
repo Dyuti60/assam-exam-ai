@@ -31,6 +31,29 @@ class HttpResponse:
     content_type: str
     body: bytes
     location: str | None = None
+    final_url: str | None = None
+
+
+@dataclass(frozen=True)
+class PinnedHttpsPolicy:
+    allowed_hosts: frozenset[str]
+    connect_timeout_seconds: float
+    read_timeout_seconds: float
+    redirect_limit: int
+    user_agent: str
+    accept: str
+
+
+@dataclass(frozen=True)
+class PinnedHttpsErrorCodes:
+    url_policy: str
+    dns_policy: str
+    timeout: str
+    tls: str
+    connect: str
+    redirect_policy: str
+    response_too_large: str
+    transport: str
 
 
 @dataclass(frozen=True)
@@ -100,17 +123,53 @@ class PinnedHttpsClient:
         socket_factory: Callable[..., object] | None = None,
         ssl_context_factory: Callable[[], object] | None = None,
         connection_factory: Callable[..., object] | None = None,
+        policy: PinnedHttpsPolicy | None = None,
     ) -> None:
         self.config = config
         self.resolver = resolver or socket.getaddrinfo
         self.socket_factory = socket_factory or socket.create_connection
         self.ssl_context_factory = ssl_context_factory or ssl.create_default_context
         self.connection_factory = connection_factory or http.client.HTTPSConnection
+        self.policy = policy or PinnedHttpsPolicy(
+            allowed_hosts=frozenset(_allowed_hosts(config)),
+            connect_timeout_seconds=getattr(
+                config, "official_discovery_connect_timeout_seconds", 5.0
+            ),
+            read_timeout_seconds=getattr(
+                config, "official_discovery_read_timeout_seconds", 10.0
+            ),
+            redirect_limit=config.official_discovery_redirect_limit,
+            user_agent=getattr(
+                config,
+                "official_discovery_user_agent",
+                "AssamExamAI-OfficialDiscovery/1.0",
+            ),
+            accept="text/plain, application/xml, text/xml",
+        )
 
-    def get(self, url: str, *, max_bytes: int, unavailable_code: str) -> HttpResponse:
+    def get(
+        self,
+        url: str,
+        *,
+        max_bytes: int,
+        unavailable_code: str,
+        error_codes: PinnedHttpsErrorCodes | None = None,
+        read_non_success_body: bool = True,
+    ) -> HttpResponse:
+        codes = error_codes or PinnedHttpsErrorCodes(
+            url_policy="REDIRECT_POLICY_REJECTED",
+            dns_policy="DNS_POLICY_REJECTED",
+            timeout="DISCOVERY_TIMEOUT",
+            tls=unavailable_code,
+            connect=unavailable_code,
+            redirect_policy="REDIRECT_POLICY_REJECTED",
+            response_too_large="RESPONSE_TOO_LARGE",
+            transport=unavailable_code,
+        )
         current = url
-        for redirect_count in range(self.config.official_discovery_redirect_limit + 1):
-            parsed, address = self._validated_target(current)
+        for redirect_count in range(self.policy.redirect_limit + 1):
+            parsed, address = self._validated_target(current, codes)
+            hostname = (parsed.hostname or "").rstrip(".").lower()
             raw_socket = None
             tls_socket = None
             connection = None
@@ -118,18 +177,18 @@ class PinnedHttpsClient:
             try:
                 raw_socket = self.socket_factory(
                     (address, 443),
-                    timeout=self.config.official_discovery_connect_timeout_seconds,
+                    timeout=self.policy.connect_timeout_seconds,
                 )
                 context = self.ssl_context_factory()
-                tls_socket = context.wrap_socket(raw_socket, server_hostname=parsed.hostname)
+                tls_socket = context.wrap_socket(raw_socket, server_hostname=hostname)
                 tls_socket.settimeout(
-                    self.config.official_discovery_read_timeout_seconds
+                    self.policy.read_timeout_seconds
                 )
                 connection = self.connection_factory(
-                    parsed.hostname,
+                    hostname,
                     443,
                     context=context,
-                    timeout=self.config.official_discovery_connect_timeout_seconds,
+                    timeout=self.policy.connect_timeout_seconds,
                 )
                 connection.sock = tls_socket
                 target = urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
@@ -137,23 +196,34 @@ class PinnedHttpsClient:
                     "GET",
                     target,
                     headers={
-                        "Host": parsed.hostname,
-                        "User-Agent": self.config.official_discovery_user_agent,
-                        "Accept": "text/plain, application/xml, text/xml",
+                        "Host": hostname,
+                        "User-Agent": self.policy.user_agent,
+                        "Accept": self.policy.accept,
                         "Connection": "close",
                     },
                 )
                 response = connection.getresponse()
                 location = response.getheader("Location")
                 content_type = response.getheader("Content-Type", "")
-                body = self._read_bounded(response, max_bytes)
                 status = response.status
+                is_redirect = status in REDIRECT_STATUSES
+                body = (
+                    self._read_bounded(response, max_bytes, codes.response_too_large)
+                    if not is_redirect and (read_non_success_body or 200 <= status <= 299)
+                    else b""
+                )
             except TimeoutError as error:
-                raise OfficialDiscoveryError("DISCOVERY_TIMEOUT") from error
+                raise OfficialDiscoveryError(codes.timeout) from error
             except OfficialDiscoveryError:
                 raise
-            except (OSError, ssl.SSLError, http.client.HTTPException) as error:
-                raise OfficialDiscoveryError(unavailable_code) from error
+            except ssl.SSLError as error:
+                raise OfficialDiscoveryError(codes.tls) from error
+            except OSError as error:
+                raise OfficialDiscoveryError(codes.connect) from error
+            except http.client.HTTPException as error:
+                raise OfficialDiscoveryError(codes.transport) from error
+            except Exception as error:
+                raise OfficialDiscoveryError(codes.transport) from error
             finally:
                 if response is not None:
                     with suppress(Exception):
@@ -169,22 +239,38 @@ class PinnedHttpsClient:
                         raw_socket.close()
 
             if status in REDIRECT_STATUSES:
-                if not location or redirect_count >= self.config.official_discovery_redirect_limit:
-                    raise OfficialDiscoveryError("REDIRECT_POLICY_REJECTED")
+                if not location or redirect_count >= self.policy.redirect_limit:
+                    raise OfficialDiscoveryError(codes.redirect_policy)
                 current = urljoin(current, location)
                 continue
-            return HttpResponse(status, content_type, body, location)
-        raise OfficialDiscoveryError("REDIRECT_POLICY_REJECTED")
+            return HttpResponse(status, content_type, body, location, current)
+        raise OfficialDiscoveryError(codes.redirect_policy)
 
-    def _validated_target(self, url: str):
-        _validate_url_text(url, OfficialDiscoveryError)
+    def _validated_target(
+        self,
+        url: str,
+        codes: PinnedHttpsErrorCodes | None = None,
+    ):
+        codes = codes or PinnedHttpsErrorCodes(
+            url_policy="REDIRECT_POLICY_REJECTED",
+            dns_policy="DNS_POLICY_REJECTED",
+            timeout="DISCOVERY_TIMEOUT",
+            tls="DISCOVERY_UNAVAILABLE",
+            connect="DISCOVERY_UNAVAILABLE",
+            redirect_policy="REDIRECT_POLICY_REJECTED",
+            response_too_large="RESPONSE_TOO_LARGE",
+            transport="DISCOVERY_UNAVAILABLE",
+        )
+        try:
+            _validate_url_text(url, ValueError)
+        except ValueError as error:
+            raise OfficialDiscoveryError(codes.url_policy) from error
         parsed = urlsplit(url)
         try:
             port = parsed.port
         except ValueError as error:
-            raise OfficialDiscoveryError("REDIRECT_POLICY_REJECTED") from error
+            raise OfficialDiscoveryError(codes.url_policy) from error
         hostname = (parsed.hostname or "").rstrip(".").lower()
-        allowed = _allowed_hosts(self.config)
         if (
             parsed.scheme.lower() != "https"
             or not hostname
@@ -193,27 +279,32 @@ class PinnedHttpsClient:
             or hostname == "localhost"
             or parsed.username is not None
             or parsed.password is not None
+            or parsed.fragment
             or port not in (None, 443)
-            or hostname not in allowed
+            or hostname not in self.policy.allowed_hosts
         ):
-            raise OfficialDiscoveryError("REDIRECT_POLICY_REJECTED")
+            raise OfficialDiscoveryError(codes.url_policy)
         try:
             answers = self.resolver(hostname, 443, type=socket.SOCK_STREAM)
         except OSError as error:
-            raise OfficialDiscoveryError("DNS_POLICY_REJECTED") from error
+            raise OfficialDiscoveryError(codes.dns_policy) from error
         addresses = sorted({answer[4][0] for answer in answers})
         if not addresses:
-            raise OfficialDiscoveryError("DNS_POLICY_REJECTED")
+            raise OfficialDiscoveryError(codes.dns_policy)
         try:
             parsed_addresses = [ipaddress.ip_address(address) for address in addresses]
         except ValueError as error:
-            raise OfficialDiscoveryError("DNS_POLICY_REJECTED") from error
+            raise OfficialDiscoveryError(codes.dns_policy) from error
         if any(not address.is_global for address in parsed_addresses):
-            raise OfficialDiscoveryError("DNS_POLICY_REJECTED")
+            raise OfficialDiscoveryError(codes.dns_policy)
         return parsed, addresses[0]
 
     @staticmethod
-    def _read_bounded(response: http.client.HTTPResponse, max_bytes: int) -> bytes:
+    def _read_bounded(
+        response: http.client.HTTPResponse,
+        max_bytes: int,
+        response_too_large_code: str = "RESPONSE_TOO_LARGE",
+    ) -> bytes:
         chunks: list[bytes] = []
         total = 0
         while True:
@@ -223,7 +314,7 @@ class PinnedHttpsClient:
             chunks.append(chunk)
             total += len(chunk)
             if total > max_bytes:
-                raise OfficialDiscoveryError("RESPONSE_TOO_LARGE")
+                raise OfficialDiscoveryError(response_too_large_code)
 
 
 class OfficialSiteDiscoveryAdapter:

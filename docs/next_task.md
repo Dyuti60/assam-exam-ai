@@ -9433,3 +9433,7 @@ Do not push.
 Do not create a PR.
 Do not self-approve.
 Do not define or implement T-055.
+
+## T-054 implementation note
+
+Implementation note (2026-09-12 Asia/Kolkata, UTC+05:30): added exactly `POST /api/v1/sources/{source_id}/fetch`, accepting no body and recording one synchronous terminal attempt through the existing T-053 response and persistence boundary. The executor uses only the stored Source URL, a dedicated validated allowlist/user-agent/time/byte/redirect configuration, the generalized cleanup-safe T-052 pinned HTTPS client, all-answer public-IP validation, hostname-verified TLS, redirect revalidation, and a fresh bounded canonical robots decision. Stable sanitized failures persist without snapshots; successful supported responses preserve exact raw bytes and normalized type while T-053 derives size and lowercase SHA-256. The Source lookup transaction ends before network I/O, exact identity/location is revalidated before persistence, the aggregate commits once, and persistence failures roll back. Developer-run local evidence: 54 focused, 218 complete source, and 523 full-suite tests passed with one existing warning; required regressions, Ruff, lock, unchanged Alembic head/check, fresh upgrade, and diff checks passed on dedicated `_test` databases. T-054 is Ready for review, not approved. No migration/model/dependency change, sitemap traversal, crawler, retry, scheduler, extraction, Source mutation, downstream knowledge, AI/LLM, learner/public API, infrastructure, T-055 definition, or T-055 implementation was added.

@@ -1861,3 +1861,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Content Factory / Source Ingestion Foundation |
 | Scope | One synchronous fetch endpoint, allowlist/SSRF/TLS/redirect/robots/content policy, terminal persistence reuse, tests, settings and documentation; no extraction, chunks, AI, background jobs or T-055 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-054 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | One synchronous allowlisted, robots-aware, bounded fetch of an existing curated Source, recorded through T-053 terminal persistence |
+| API | `POST /api/v1/sources/{source_id}/fetch`; no body; HTTP 201 for SUCCEEDED and controlled FAILED attempts, established 404 for a missing Source |
+| Security | Strict stored HTTPS URL, exact allowed hostname, all-address public DNS validation, IP-pinned hostname-verified TLS, per-redirect revalidation, fixed headers/user-agent, fresh robots policy, byte/time/redirect limits, full resource cleanup and sanitized error codes |
+| Transactions | Source identity is copied and the lookup transaction ended before network I/O; exact identity/location is revalidated before the shared T-053 aggregate flush and single commit; persistence failures roll back and propagate |
+| Persistence | No model or migration change; exact raw success bytes or controlled failure metadata use existing `SourceFetchRun`/`SourceSnapshot` tables; Alembic head remains `a9d3f6c2e841` |
+| Tests | Developer-run local evidence: 54 focused T-054, 218 complete T-048–T-054 source, and 523 full-suite tests passed with one existing warning; required regressions and static/database checks passed on dedicated `_test` databases |
+| Notes | T-054 is not approved. No sitemap traversal, crawler, retry, scheduling, extraction, downstream knowledge, Source mutation, AI/LLM, learner/public behavior, infrastructure, T-055 definition, or T-055 implementation was added. |

@@ -1,6 +1,7 @@
 import ipaddress
+from typing import Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,34 +38,27 @@ class Settings(BaseSettings):
     official_discovery_redirect_limit: int = Field(default=3, ge=0)
     official_discovery_user_agent: str = "AssamExamAI-OfficialDiscovery/1.0"
     source_snapshot_max_bytes: int = Field(default=5_242_880, gt=0)
+    source_fetch_allowed_hosts: str = ""
+    source_fetch_connect_timeout_seconds: float = Field(default=5.0, gt=0)
+    source_fetch_read_timeout_seconds: float = Field(default=10.0, gt=0)
+    source_fetch_robots_max_bytes: int = Field(default=262_144, gt=0)
+    source_fetch_response_max_bytes: int = Field(default=5_242_880, gt=0)
+    source_fetch_redirect_limit: int = Field(default=3, ge=0)
+    source_fetch_user_agent: str = "AssamExamAI-SourceFetch/1.0"
 
     @field_validator("official_discovery_allowed_hosts")
     @classmethod
     def validate_official_discovery_allowed_hosts(cls, value: str) -> str:
-        if not value.strip():
-            return ""
-        raw_hosts = value.split(",")
-        if any(not host.strip() for host in raw_hosts):
-            raise ValueError("official discovery allowlist contains an empty entry")
-        hosts = [host.strip().rstrip(".").lower() for host in raw_hosts]
-        for host in hosts:
-            if any(character.isspace() for character in host):
-                raise ValueError(
-                    "official discovery allowlist entries cannot contain whitespace"
-                )
-            try:
-                ipaddress.ip_address(host)
-            except ValueError:
-                pass
-            else:
-                raise ValueError("official discovery allowlist entries must be hostnames")
-            if host == "localhost" or not _valid_official_hostname(host):
-                raise ValueError("official discovery allowlist contains an invalid hostname")
-        return ",".join(dict.fromkeys(hosts))
+        return _validate_hostname_allowlist(value, "official discovery")
 
-    @field_validator("official_discovery_user_agent")
+    @field_validator("source_fetch_allowed_hosts")
     @classmethod
-    def validate_official_discovery_user_agent(cls, value: str) -> str:
+    def validate_source_fetch_allowed_hosts(cls, value: str) -> str:
+        return _validate_hostname_allowlist(value, "source fetch")
+
+    @field_validator("official_discovery_user_agent", "source_fetch_user_agent")
+    @classmethod
+    def validate_user_agent(cls, value: str) -> str:
         normalized = value.strip()
         if (
             not normalized
@@ -74,8 +68,16 @@ class Settings(BaseSettings):
                 for character in normalized
             )
         ):
-            raise ValueError("official discovery user agent is invalid")
+            raise ValueError("user agent is invalid")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_source_fetch_limits(self) -> Self:
+        if self.source_fetch_response_max_bytes > self.source_snapshot_max_bytes:
+            raise ValueError(
+                "source fetch response limit cannot exceed source snapshot limit"
+            )
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -83,6 +85,27 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+
+def _validate_hostname_allowlist(value: str, label: str) -> str:
+    if not value.strip():
+        return ""
+    raw_hosts = value.split(",")
+    if any(not host.strip() for host in raw_hosts):
+        raise ValueError(f"{label} allowlist contains an empty entry")
+    hosts = [host.strip().rstrip(".").lower() for host in raw_hosts]
+    for host in hosts:
+        if any(character.isspace() for character in host):
+            raise ValueError(f"{label} allowlist entries cannot contain whitespace")
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            pass
+        else:
+            raise ValueError(f"{label} allowlist entries must be hostnames")
+        if host == "localhost" or not _valid_official_hostname(host):
+            raise ValueError(f"{label} allowlist contains an invalid hostname")
+    return ",".join(dict.fromkeys(hosts))
 
 
 settings = Settings()

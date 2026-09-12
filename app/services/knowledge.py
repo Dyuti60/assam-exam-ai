@@ -91,6 +91,7 @@ from app.schemas.knowledge import (
     SourceFetchRunResponse,
     SourceFetchStatus,
     SourceFetchSucceededCreate,
+    SourceSnapshotContentType,
     SourceSnapshotResponse,
     SyllabusVersionCreate,
     SyllabusVersionResponse,
@@ -107,6 +108,7 @@ from app.services.official_site_discovery import (
     OfficialSiteDiscoveryAdapter,
 )
 from app.services.pdf_renderer import render_content_document_pdf
+from app.services.source_fetch_executor import SourceFetchExecutor, SourceFetchResult
 
 
 class ResourceNotFoundError(Exception):
@@ -137,10 +139,12 @@ class KnowledgeService:
         self,
         session: Session,
         official_site_adapter: OfficialSiteDiscoveryAdapter | None = None,
+        source_fetch_executor: SourceFetchExecutor | None = None,
     ) -> None:
         self.session = session
         self.repository = KnowledgeRepository(session)
         self.official_site_adapter = official_site_adapter or OfficialSiteDiscoveryAdapter()
+        self.source_fetch_executor = source_fetch_executor or SourceFetchExecutor()
 
     def create_source(self, request: SourceCreate) -> Source:
         source = Source(**request.model_dump())
@@ -158,8 +162,8 @@ class KnowledgeService:
             raise InvalidRequestError(
                 f"requested_url must match Source {source_id} location"
             )
+        requested_url = source.location
 
-        snapshot: SourceSnapshot | None = None
         if isinstance(request, SourceFetchSucceededCreate):
             maximum_encoded_length = 4 * (
                 (settings.source_snapshot_max_bytes + 2) // 3
@@ -183,24 +187,85 @@ class KnowledgeService:
                 raise InvalidRequestError(
                     "decoded source snapshot exceeds configured byte limit"
                 )
-            snapshot = SourceSnapshot(
-                source_id=source_id,
-                requested_url=request.requested_url,
-                run_status=SourceFetchStatus.SUCCEEDED.value,
+            result = SourceFetchResult(
+                status=request.status,
+                requested_url=requested_url,
                 final_url=request.final_url,
+                http_status=request.http_status,
+                error_code=None,
                 content_type=request.content_type.value,
-                byte_size=len(content_bytes),
-                sha256=sha256(content_bytes).hexdigest(),
                 content_bytes=content_bytes,
             )
+        else:
+            result = SourceFetchResult(
+                status=request.status,
+                requested_url=requested_url,
+                final_url=request.final_url,
+                http_status=request.http_status,
+                error_code=request.error_code,
+            )
+        return self._persist_source_fetch_result(source_id, result)
+
+    def fetch_source(self, source_id: int) -> SourceFetchRunResponse:
+        source = self.repository.get_source(source_id)
+        if source is None:
+            raise ResourceNotFoundError("Source", source_id)
+        requested_url = source.location
+        self.session.rollback()
+        result = self.source_fetch_executor.fetch(requested_url)
+        return self._persist_source_fetch_result(source_id, result)
+
+    def _persist_source_fetch_result(
+        self,
+        source_id: int,
+        result: SourceFetchResult,
+    ) -> SourceFetchRunResponse:
+        source = self.repository.get_source(source_id)
+        if source is None:
+            raise ResourceNotFoundError("Source", source_id)
+        if source.location != result.requested_url:
+            raise InvalidRequestError(
+                f"requested_url must match Source {source_id} location"
+            )
+
+        snapshot: SourceSnapshot | None = None
+        if result.status is SourceFetchStatus.SUCCEEDED:
+            if (
+                result.final_url is None
+                or result.http_status is None
+                or not 200 <= result.http_status <= 299
+                or result.content_type
+                not in {item.value for item in SourceSnapshotContentType}
+                or result.content_bytes is None
+                or not result.content_bytes
+                or len(result.content_bytes) > settings.source_snapshot_max_bytes
+                or result.error_code is not None
+            ):
+                raise InvalidRequestError("successful Source fetch result is invalid")
+            snapshot = SourceSnapshot(
+                source_id=source_id,
+                requested_url=result.requested_url,
+                run_status=SourceFetchStatus.SUCCEEDED.value,
+                final_url=result.final_url,
+                content_type=result.content_type,
+                byte_size=len(result.content_bytes),
+                sha256=sha256(result.content_bytes).hexdigest(),
+                content_bytes=result.content_bytes,
+            )
+        elif (
+            result.error_code is None
+            or result.content_type is not None
+            or result.content_bytes is not None
+        ):
+            raise InvalidRequestError("failed Source fetch result is invalid")
 
         source_fetch_run = SourceFetchRun(
             source_id=source_id,
-            requested_url=request.requested_url,
-            status=request.status.value,
-            final_url=request.final_url,
-            http_status=request.http_status,
-            error_code=getattr(request, "error_code", None),
+            requested_url=result.requested_url,
+            status=result.status.value,
+            final_url=result.final_url,
+            http_status=result.http_status,
+            error_code=result.error_code,
             snapshot=snapshot,
         )
         try:

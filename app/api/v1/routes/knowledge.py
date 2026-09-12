@@ -186,6 +186,20 @@ def create_source(request: SourceCreate, db: DatabaseSession) -> SourceResponse:
 
 
 @router.post(
+    "/sources/{source_id}/fetch",
+    response_model=SourceFetchRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def fetch_source(source_id: int, db: DatabaseSession) -> SourceFetchRunResponse:
+    try:
+        return KnowledgeService(db).fetch_source(source_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except InvalidRequestError as error:
+        raise _unprocessable(error) from error
+
+
+@router.post(
     "/sources/{source_id}/fetch-runs",
     response_model=SourceFetchRunResponse,
     status_code=status.HTTP_201_CREATED,
