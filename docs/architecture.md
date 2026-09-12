@@ -36,17 +36,23 @@ This section describes only the repository inspected on 2026-09-12 in Asia/Kolka
 | --- | --- |
 | Project | Python `>=3.12,<3.13`, managed with `uv` |
 | API | FastAPI app with health, internal knowledge creation/retrieval/review routes, and a read-only deterministic Topic-priority assessment under `/api/v1` |
-| Configuration | Pydantic Settings loading `.env`; tracked `.env.example`; separate validated official-discovery, Source-fetch, snapshot-byte, and deterministic-extraction input/text/chunk limits |
+| Configuration | Pydantic Settings loading `.env`; tracked `.env.example`; separate validated discovery/fetch/extraction limits plus secret-safe Gemini provider, explicit model, allowlist, timeout, output-token, and temperature settings |
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; twenty-nine migrations exist, including Topic classification, provenance and approval foundations, sourced exam inputs, ContentVersion identity, versioned NoteDraft ownership, complete internal MCQ candidates, independent review and controlled release for candidates and drafts, immutable ContentPackage membership/review/release, immutable render-ready ContentDocument snapshots with independent review and controlled release, deterministic PDF artifact persistence with independent review and controlled release, immutable source-discovery audit snapshots, independent SourceCandidate review, controlled candidate-to-Source promotion provenance, terminal Source fetch/snapshot persistence, and deterministic extraction-run/ordered-chunk persistence |
-| Persistence model | `Exam`, sourced `SyllabusVersion`, ordered syllabus/Topic mappings, `ContentVersion` identity, `QuestionBankItem`, ordered `QuestionBankOption` records, sourced `PreviousPaper` and Topic-linked `PreviousQuestion` occurrences, `Topic`, trusted `Source`, untrusted `SourceDiscoveryRun` and ordered `SourceCandidate` audit records, immutable `SourceCandidatePromotion` provenance, terminal `SourceFetchRun` records and immutable `SourceSnapshot` bytes, terminal `SourceExtractionRun` records and immutable ordered `SourceChunk` text slices, `Evidence`, `Claim`, `Verification`, `VerificationEvidence`, `NoteDraft`, `ContentPackage`, `ContentPackageNoteDraft`, `ContentPackageQuestionBankItem`, `ContentDocument`, `PdfArtifact`, and ordered provenance associations |
-| Application layers | Pydantic knowledge schemas, a transactional knowledge service, and a SQLAlchemy knowledge repository |
-| Tests | Five hundred fifty-four tests cover the foundation, immutable source-discovery run/candidate snapshots, candidate review/promotion, bounded official-site discovery, terminal Source fetch/snapshot persistence, the controlled Source fetch executor, and deterministic local extraction of all supported snapshot types into checksummed normalized text slices with exact provenance, ordered offsets, bounded failures, PostgreSQL constraints, transaction separation, and atomicity; ContentVersion ownership and complete internal MCQ-candidate constraints; sourced exam inputs; deterministic Topic priority; provenance; knowledge APIs; approval/release boundaries; version-scoped released-asset manifests; ContentPackage membership/review/release/read boundaries; ContentDocument rendering/review/release; deterministic PDF artifacts and delivery; stored snapshots; locking; transactional failure atomicity; and the complete internal deliverable workflow |
-| Agents | Package placeholders only; no agent behavior is implemented |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; thirty migrations exist, including the prior knowledge/content/source foundations and provider-neutral immutable AI prompt-version and terminal execution-audit persistence |
+| Persistence model | Existing knowledge, canonical-content, deliverable, discovery, fetch, extraction, and provenance models plus immutable `AiPromptVersion` contracts and terminal `AiExecutionRun` structured audit records |
+| Application layers | Existing knowledge layers plus isolated AI schemas, repository, prompt/audit services, provider protocol/coordinator, and Gemini adapter; knowledge-domain services import no Gemini SDK type |
+| Tests | Seven hundred sixty-nine tests cover all prior boundaries plus prompt canonicalization/change sensitivity, closed immutable prompt APIs, concurrent uniqueness, strict shared Settings/execution-option validation, canonical structured execution audits, coordinator-owned read/write session and connection isolation, complete ordinary-Exception Gemini and provider-result boundaries, hostile API-error mapping, exact transaction counts, prompt revalidation, rollback, PostgreSQL constraints including bounded request/model identity and PostgreSQL-rendered safety metadata, read-only audit retrieval, repeated independent runs, and secret safety |
+| Agents | Provider-neutral execution infrastructure exists, but no domain-generating agent is implemented |
 
 ### Current runtime flow
+
+The Gemini adapter uses an inner mapping boundary for known API, timeout, transport, safety, and invalid-response cases, enclosed by a true outer ordinary-`Exception` boundary that also covers execution of the API-error mapper, client construction, context entry, generation, response normalization, context exit, and cleanup. Known safe failures retain stable specific codes; any other ordinary `Exception` becomes the sanitized fallback `AI_PROVIDER_ERROR` with provider details suppressed and safe chaining. Already-normalized `AiProviderError` values pass through unchanged. `BaseException` subclasses such as `KeyboardInterrupt`, `SystemExit`, and `GeneratorExit` are not swallowed. API-error code/status metadata is read defensively and only exact bounded built-in scalars are compared; hostile subclasses, getters, hashing, equality, comparison, value access, or conversion cannot escape or expose upstream text or credentials. Candidate and safety collections remain bounded under the same trust rule.
+
+The provider-neutral coordinator independently normalizes the returned provider result before parsing or persistence. It accepts only the exact `AiProviderResult` contract and exact bounded primitive fields, rejects scalar subclasses and unrepresentable token/cost values, omits unsafe optional JSON metadata, allowlists provider error codes, and converts arbitrary provider/JSON/schema ordinary exceptions to stable audited failures without retaining raw output or error text. Schema-normalized output remains local until JSON dumping and canonical hashing both succeed, so any later normalization failure persists a `FAILED` audit with null output fields. Optional safety metadata accepts only exact built-in JSON trees and is bounded using PostgreSQL-style rendered JSON text rather than compact canonical length. Provider identity is captured and validated before any session or provider I/O. Execution model identifiers use the same ASCII grammar and 128-character bound in Settings, execution options, ORM metadata, and migration constraints.
+
+AI timeout, maximum-output-token, and temperature values use the same shared finite-number and bounds validators in Settings and `AiExecutionOptions`. Programmatic booleans are rejected before numeric coercion, while valid numeric environment strings remain accepted.
 
 ```mermaid
 flowchart TD
@@ -56,10 +62,17 @@ flowchart TD
     APP --> ROUTER["/api/v1 router"]
     ROUTER --> HEALTH["GET /health"]
     ROUTER --> KNOWLEDGE["Knowledge routes"]
+    ROUTER --> AIAPI["Prompt/audit routes"]
     KNOWLEDGE --> SCHEMAS["Pydantic schemas"]
     SCHEMAS --> SERVICE["KnowledgeService"]
     SERVICE --> REPOSITORY["KnowledgeRepository"]
     REPOSITORY --> ENGINE
+    AIAPI --> AISCHEMAS["Closed AI schemas"]
+    AISCHEMAS --> AICOORDINATOR["Prompt services / coordinator"]
+    AICOORDINATOR --> AIREPOSITORY["AiRepository"]
+    AICOORDINATOR --> PROVIDER["AiProvider protocol"]
+    PROVIDER --> GEMINI["Gemini adapter when enabled"]
+    AIREPOSITORY --> ENGINE
     ENGINE --> PG["PostgreSQL"]
 ```
 
@@ -102,7 +115,10 @@ erDiagram
     TOPIC ||--o{ NOTE_DRAFT : "source topic"
     NOTE_DRAFT ||--|{ NOTE_DRAFT_CLAIM : "records in position order"
     CLAIM ||--o{ NOTE_DRAFT_CLAIM : "used by draft"
+    AI_PROMPT_VERSION ||--o{ AI_EXECUTION_RUN : "immutable prompt snapshot"
 ```
+
+`AiPromptVersion` checksums the canonical sorted, compact, Unicode-preserving UTF-8 JSON representation of its key/version, templates, and input/output schema identifiers. The coordinator validates registered Pydantic contracts and simple named placeholders before I/O, hashes canonical structured input and rendered prompts, and makes at most one provider call without an open database transaction. Afterward it revalidates exact prompt identity/checksum and persists one immutable terminal audit. Provider-returned JSON is strictly validated and canonicalized before storage. Blank credentials are never exposed and yield an audited `AI_PROVIDER_DISABLED` result without outbound I/O; invalid input, prompt rendering, or model configuration is rejected before I/O without an audit row. Shared validation bounds requests to 120 seconds, 8,192 output tokens, temperature 0 through 2, and safe model identifiers up to 128 characters. Temperature zero reduces sampling variability but is not represented as deterministic model output.
 
 `SourceDiscoveryRun` is an immutable audit record for one completed discovery attempt. A successful run stores zero or more normalized, position-ordered `SourceCandidate` leads; a failed run stores an error and no candidates. PostgreSQL enforces lifecycle consistency, candidate normalization, per-run position and location uniqueness, and a composite same-run `SUCCEEDED` invariant. Manual and bounded official-site discovery create the same terminal aggregate; retrieval returns stored order without writes. Candidates remain untrusted leads until separately reviewed and optionally promoted into a curated Source.
 

@@ -1,3 +1,4 @@
+from app.repositories.ai import AiRepository
 from app.repositories.knowledge import KnowledgeRepository
 
-__all__ = ["KnowledgeRepository"]
+__all__ = ["AiRepository", "KnowledgeRepository"]

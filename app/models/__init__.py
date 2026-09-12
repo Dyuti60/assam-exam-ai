@@ -1,3 +1,5 @@
+from app.models.ai_execution_run import AiExecutionRun
+from app.models.ai_prompt_version import AiPromptVersion
 from app.models.base import Base
 from app.models.claim import Claim
 from app.models.claim_evidence import claim_evidence
@@ -33,6 +35,8 @@ from app.models.verification import Verification
 from app.models.verification_evidence import VerificationEvidence
 
 __all__ = [
+    "AiExecutionRun",
+    "AiPromptVersion",
     "Base",
     "Claim",
     "ContentDocument",
