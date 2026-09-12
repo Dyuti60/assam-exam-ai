@@ -10025,3 +10025,13 @@ No automatic Claim approval, generated Verification, NoteDraft/QuestionBankItem 
 Independent-review correction note (2026-09-13 Asia/Kolkata, UTC+05:30): T-057 now uses strict PostgreSQL-range request/path IDs; strict positive bounded configuration; explicit chunk-count, character, UTF-8 byte, canonical-JSON, Claim, citation, and unique-Evidence limits; and pre-provider contiguous chunk-position validation. Citation coordinates are explicitly zero-based Python Unicode code-point offsets relative to one selected chunk, with inclusive start and exclusive end. Expanded local PostgreSQL-backed tests cover canonical audited input, Assamese/NFC-combining/emoji/newline/overlap slices, hostile schema and grounding cases, configuration and output bounds, caller-session and transaction behavior, genuine independent-connection uniqueness concurrency, and exact representative named constraints. T-057 remains Ready for review and unapproved; T-058 is neither defined nor implemented.
 
 Correction validation note: developer-local runs passed 42 focused T-057, 506 T-048–T-057 source/AI, 35 provenance/T-047, 228 canonical/document/artifact, and 811 full-suite tests with one existing Starlette warning. Ruff, dependency lock, fresh and seeded migration validation, Alembic head/check, PostgreSQL probes, diff/whitespace/final-newline, secret, ignored-env, and protected-stash checks passed using dedicated `_test` databases. No live Gemini/public-network request or GitHub CI claim occurred. T-057 remains Ready for review and unapproved; T-058 remains undefined and unimplemented.
+
+---
+
+## T-057 approval record
+
+Status: **Approved**.
+
+Implementation commit `901090625c11b005f486df8cf0693f77a139c260`, with exact parent `1b35a20ef731edeb8939991e7fe2347d637c6246`, was reviewed against the complete T-057 contract and approved with no blocking findings. Reviewer-local PostgreSQL evidence passed 42 focused T-057 tests, 369 selected T-053–T-057 source/AI regressions, 35 provenance/T-047 regressions, 228 canonical/document/artifact regressions, and all 811 tests with one existing Starlette warning. Ruff, dependency-lock verification, fresh upgrade, seeded downgrade/re-upgrade, one Alembic head with no drift, PostgreSQL probes, diff/whitespace, ignored-env, value-suppressing secret, and protected-stash checks passed on dedicated `_test` databases. No live Gemini or public-network request occurred, and no GitHub CI result is claimed.
+
+T-057 preserves exact extraction, chunk, snapshot, Source, prompt, provider, model, execution, Evidence, Claim, and citation provenance. Generated Claims remain DRAFT and UNVERIFIED until the existing independent human-review and Verification workflows act. T-058 remains undefined and unimplemented.

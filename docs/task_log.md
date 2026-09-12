@@ -2019,3 +2019,17 @@ Independent-review correction evidence (2026-09-12 Asia/Kolkata, UTC+05:30): out
 Independent-review correction (2026-09-13 Asia/Kolkata, UTC+05:30): bounded all request/path IDs to PostgreSQL integer range; made all T-057 limit settings strict, positive, and conservatively bounded; added UTF-8 input, canonical-JSON, and unique-Evidence bounds; rejected non-contiguous stored chunk positions before provider I/O; and defined citation coordinates as zero-based Python Unicode code points with inclusive start and exclusive end. Focused evidence now covers exact canonical audit JSON/hashes, Assamese text, NFC combining behavior, emoji, newlines, overlap chunks, hostile outputs, every configured limit class, caller-session preservation, no added connection during provider I/O, no post-commit SQL, genuine independent-connection PostgreSQL uniqueness concurrency, exact named representative constraint failures, and retained rollback/read-only behavior. T-057 remains Ready for review and unapproved.
 
 Correction validation evidence: 42 focused T-057, 506 T-048–T-057 source/AI, 35 provenance/T-047, 228 canonical/document/artifact, and 811 full-suite tests passed locally with one existing Starlette warning. Changed-file Ruff, lock verification, fresh upgrade, seeded migration cycle, Alembic head/check, direct PostgreSQL probes, diff/whitespace/final-newline, ignored-env, value-suppressing secret, and protected-stash checks passed using only dedicated `_test` databases. No live Gemini or public-network call occurred; this is developer-local evidence, not GitHub CI.
+
+---
+
+## T-057 approved
+
+| Field | Value |
+| --- | --- |
+| Status | Approved |
+| Implementation | `901090625c11b005f486df8cf0693f77a139c260` |
+| Exact parent | `1b35a20ef731edeb8939991e7fe2347d637c6246` |
+| Review outcome | Approved after complete local diff inspection and PostgreSQL-backed validation; no blocking findings |
+| Reviewer evidence | 42 focused T-057, 369 selected T-053–T-057 source/AI, 35 provenance/T-047, 228 canonical/document/artifact, and 811 full-suite tests passed with one existing Starlette warning |
+| Migration and quality | Fresh upgrade and seeded `c9f2a6d4e817 → d7e3a9c5f218 → c9f2a6d4e817 → d7e3a9c5f218` passed; Alembic head/check, Ruff, lock, PostgreSQL probes, diff, whitespace, ignored-env, secret, and protected-stash checks passed on `_test` databases |
+| Boundaries | Claims remain DRAFT/UNVERIFIED proposals with exact source/chunk/prompt/provider/model/execution provenance; no automatic approval, Verification generation, canonical-content generation, release/publication, embedding/RAG, learner/public API, or T-058 behavior |
