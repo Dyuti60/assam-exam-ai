@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Self
+from typing import Annotated, Literal, Self
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -37,6 +38,49 @@ class SourceCandidateApprovalStatus(StrEnum):
     DRAFT = "DRAFT"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+
+
+class SourceFetchStatus(StrEnum):
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class SourceSnapshotContentType(StrEnum):
+    PDF = "application/pdf"
+    TEXT = "text/plain"
+    HTML = "text/html"
+    JSON = "application/json"
+    XML = "application/xml"
+    TEXT_XML = "text/xml"
+
+
+def _validate_fetch_url(value: str) -> str:
+    if (
+        value != value.strip()
+        or not value
+        or len(value) > 2_048
+        or any(
+            character.isspace()
+            or ord(character) < 32
+            or 127 <= ord(character) <= 159
+            for character in value
+        )
+    ):
+        raise ValueError("URL is invalid")
+    parsed = urlsplit(value)
+    try:
+        _ = parsed.port
+    except ValueError as error:
+        raise ValueError("URL has an invalid port") from error
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+    ):
+        raise ValueError("URL must be an absolute HTTP(S) URL without credentials")
+    return value
 
 
 class SourceCandidateCreate(BaseModel):
@@ -203,6 +247,81 @@ class SourceResponse(SourceCreate):
 
     id: int
     created_at: datetime
+
+
+class SourceFetchSucceededCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal[SourceFetchStatus.SUCCEEDED]
+    requested_url: str
+    final_url: str
+    http_status: int = Field(ge=200, le=299)
+    content_type: SourceSnapshotContentType
+    content_base64: str = Field(min_length=1)
+
+    @field_validator("requested_url", "final_url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        return _validate_fetch_url(value)
+
+    @field_validator("content_type", mode="before")
+    @classmethod
+    def normalize_content_type(cls, value: object) -> object:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if not normalized:
+                raise ValueError("content_type must not be blank")
+            return normalized
+        return value
+
+class SourceFetchFailedCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal[SourceFetchStatus.FAILED]
+    requested_url: str
+    final_url: str | None = None
+    http_status: int | None = Field(default=None, ge=100, le=599)
+    error_code: str = Field(
+        min_length=1,
+        max_length=100,
+        pattern=r"^[A-Z][A-Z0-9_]*$",
+    )
+
+    @field_validator("requested_url", "final_url")
+    @classmethod
+    def validate_url(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_fetch_url(value)
+
+
+SourceFetchRunCreate = Annotated[
+    SourceFetchSucceededCreate | SourceFetchFailedCreate,
+    Field(discriminator="status"),
+]
+
+
+class SourceSnapshotResponse(BaseModel):
+    id: int
+    source_fetch_run_id: int
+    source_id: int
+    requested_url: str
+    final_url: str
+    content_type: SourceSnapshotContentType
+    byte_size: int
+    sha256: str
+    content_base64: str
+    created_at: datetime
+
+
+class SourceFetchRunResponse(BaseModel):
+    id: int
+    source_id: int
+    requested_url: str
+    status: SourceFetchStatus
+    final_url: str | None
+    http_status: int | None
+    error_code: str | None
+    created_at: datetime
+    snapshot: SourceSnapshotResponse | None
 
 
 class SourceCandidatePromotionResponse(BaseModel):

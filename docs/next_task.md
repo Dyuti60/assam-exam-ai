@@ -9234,3 +9234,7 @@ Do not push.
 Do not create a PR.
 Do not self-approve.
 Do not define or implement T-054.
+
+## T-053 implementation note
+
+Implementation note (2026-09-12 Asia/Kolkata, UTC+05:30): added terminal `SourceFetchRun` and immutable successful `SourceSnapshot` persistence through exactly three create/read endpoints. Closed discriminated requests require the Source's exact stored URL; success accepts bounded valid base64 and a supported normalized content type, then stores exact bytes with server-computed size and lowercase SHA-256, while failure stores a stable bounded error and no snapshot. Migration `a9d3f6c2e841`, parent `f6b2d8c4a731`, adds composite Source/run/snapshot agreement, successful-state, lifecycle, byte/checksum, uniqueness, index, and restricted-deletion constraints without inferring records. Successful aggregates commit once and persistence failures roll back; retrieval is lock-free, no-autoflush, and never reconstructs stored state. Developer-run local tests passed 27 focused and 469 full-suite, each with one existing warning; fresh and seeded migration cycles, direct PostgreSQL probes, Ruff, dependency-lock, Alembic, and diff checks passed on dedicated `_test` databases. T-053 is Ready for review, not approved. No network fetch, DNS, redirect, retry, extraction, OCR, chunking, object storage, Source mutation, Evidence/Claim/Verification generation, AI/LLM, public/learner API, infrastructure, T-054 definition, or T-054 implementation was added.

@@ -23,6 +23,8 @@ from app.models import (
     SourceCandidate,
     SourceCandidatePromotion,
     SourceDiscoveryRun,
+    SourceFetchRun,
+    SourceSnapshot,
     SyllabusVersion,
     Topic,
     Verification,
@@ -50,6 +52,36 @@ class KnowledgeRepository:
 
     def get_source(self, source_id: int) -> Source | None:
         return self.session.get(Source, source_id)
+
+    def add_source_fetch_run(
+        self,
+        source_fetch_run: SourceFetchRun,
+    ) -> SourceFetchRun:
+        self.session.add(source_fetch_run)
+        self.session.flush()
+        return source_fetch_run
+
+    def get_source_fetch_run(
+        self,
+        source_fetch_run_id: int,
+    ) -> SourceFetchRun | None:
+        statement = (
+            select(SourceFetchRun)
+            .options(joinedload(SourceFetchRun.snapshot))
+            .where(SourceFetchRun.id == source_fetch_run_id)
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
+    def get_source_snapshot(
+        self,
+        source_snapshot_id: int,
+    ) -> SourceSnapshot | None:
+        statement = select(SourceSnapshot).where(
+            SourceSnapshot.id == source_snapshot_id
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
 
     def add_source_discovery_run(
         self,

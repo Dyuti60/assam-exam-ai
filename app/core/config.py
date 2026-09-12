@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     official_discovery_candidate_limit: int = Field(default=50, gt=0)
     official_discovery_redirect_limit: int = Field(default=3, ge=0)
     official_discovery_user_agent: str = "AssamExamAI-OfficialDiscovery/1.0"
+    source_snapshot_max_bytes: int = Field(default=5_242_880, gt=0)
 
     @field_validator("official_discovery_allowed_hosts")
     @classmethod

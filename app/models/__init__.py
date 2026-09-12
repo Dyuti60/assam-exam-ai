@@ -22,6 +22,8 @@ from app.models.source import Source
 from app.models.source_candidate import SourceCandidate
 from app.models.source_candidate_promotion import SourceCandidatePromotion
 from app.models.source_discovery_run import SourceDiscoveryRun
+from app.models.source_fetch_run import SourceFetchRun
+from app.models.source_snapshot import SourceSnapshot
 from app.models.syllabus_version import SyllabusVersion
 from app.models.syllabus_version_topic import SyllabusVersionTopic
 from app.models.topic import Topic
@@ -50,6 +52,8 @@ __all__ = [
     "SourceCandidate",
     "SourceCandidatePromotion",
     "SourceDiscoveryRun",
+    "SourceFetchRun",
+    "SourceSnapshot",
     "SyllabusVersion",
     "SyllabusVersionTopic",
     "Topic",

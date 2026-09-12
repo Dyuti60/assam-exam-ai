@@ -1818,3 +1818,17 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Content Factory / Source Ingestion Foundation |
 | Scope | Models, migration, create/read APIs, lifecycle constraints, exact bytes/checksum metadata, atomicity, tests and documentation; no outbound networking, extraction, chunks, AI, or T-054 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-053 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Terminal Source fetch-run persistence and one immutable exact-byte snapshot for each successful API-created attempt; no network execution |
+| API | `POST /api/v1/sources/{source_id}/fetch-runs`, `GET /api/v1/source-fetch-runs/{source_fetch_run_id}`, and `GET /api/v1/source-snapshots/{source_snapshot_id}` with 201/200/404/422 behavior |
+| Persistence | Migration `a9d3f6c2e841`, parent `f6b2d8c4a731`; adds `source_fetch_runs`, `source_snapshots`, Source/requested-URL and successful-run composite integrity, exact byte/checksum checks, uniqueness, indexes, and restricted deletion |
+| Transactions | Request shape precedes Source/exact-URL validation; decoded size and SHA-256 are server-derived; a complete successful run/snapshot flushes atomically and commits once; every persistence failure rolls back |
+| Tests | Developer-run local evidence: focused T-053, 27 passed with one existing warning; full suite, 469 passed with one existing warning. Fresh and seeded migration cycles, PostgreSQL constraints, Ruff, lock, Alembic and diff checks passed on dedicated `_test` databases. |
+| Notes | T-053 is not approved. No networking, executor, extraction, Source mutation, Evidence/Claim/Verification generation, AI/LLM, public/learner behavior, infrastructure, T-054 definition, or T-054 implementation was added. |

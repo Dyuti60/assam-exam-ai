@@ -46,7 +46,10 @@ from app.schemas.knowledge import (
     SourceCreate,
     SourceDiscoveryRunCreate,
     SourceDiscoveryRunResponse,
+    SourceFetchRunCreate,
+    SourceFetchRunResponse,
     SourceResponse,
+    SourceSnapshotResponse,
     SyllabusVersionCreate,
     SyllabusVersionResponse,
     TopicCreate,
@@ -55,7 +58,12 @@ from app.schemas.knowledge import (
     VerificationCreate,
     VerificationResponse,
 )
-from app.services import KnowledgeService, ResourceConflictError, ResourceNotFoundError
+from app.services import (
+    InvalidRequestError,
+    KnowledgeService,
+    ResourceConflictError,
+    ResourceNotFoundError,
+)
 
 router = APIRouter()
 
@@ -68,6 +76,13 @@ def _not_found(error: ResourceNotFoundError) -> HTTPException:
 
 def _conflict(error: ResourceConflictError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+
+
+def _unprocessable(error: InvalidRequestError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=str(error),
+    )
 
 
 @router.post(
@@ -168,6 +183,52 @@ def promote_source_candidate(
 @router.post("/sources", response_model=SourceResponse, status_code=201)
 def create_source(request: SourceCreate, db: DatabaseSession) -> SourceResponse:
     return KnowledgeService(db).create_source(request)
+
+
+@router.post(
+    "/sources/{source_id}/fetch-runs",
+    response_model=SourceFetchRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_source_fetch_run(
+    source_id: int,
+    request: SourceFetchRunCreate,
+    db: DatabaseSession,
+) -> SourceFetchRunResponse:
+    try:
+        return KnowledgeService(db).create_source_fetch_run(source_id, request)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except InvalidRequestError as error:
+        raise _unprocessable(error) from error
+
+
+@router.get(
+    "/source-fetch-runs/{source_fetch_run_id}",
+    response_model=SourceFetchRunResponse,
+)
+def get_source_fetch_run(
+    source_fetch_run_id: int,
+    db: DatabaseSession,
+) -> SourceFetchRunResponse:
+    try:
+        return KnowledgeService(db).get_source_fetch_run(source_fetch_run_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.get(
+    "/source-snapshots/{source_snapshot_id}",
+    response_model=SourceSnapshotResponse,
+)
+def get_source_snapshot(
+    source_snapshot_id: int,
+    db: DatabaseSession,
+) -> SourceSnapshotResponse:
+    try:
+        return KnowledgeService(db).get_source_snapshot(source_snapshot_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
 
 
 @router.post("/exams", response_model=ExamResponse, status_code=201)

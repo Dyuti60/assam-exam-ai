@@ -1,3 +1,5 @@
+import base64
+import binascii
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -5,6 +7,7 @@ from hashlib import sha256
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models import (
     Claim,
     ContentDocument,
@@ -26,6 +29,8 @@ from app.models import (
     SourceCandidate,
     SourceCandidatePromotion,
     SourceDiscoveryRun,
+    SourceFetchRun,
+    SourceSnapshot,
     SyllabusVersion,
     SyllabusVersionTopic,
     Topic,
@@ -82,6 +87,11 @@ from app.schemas.knowledge import (
     SourceCreate,
     SourceDiscoveryRunCreate,
     SourceDiscoveryRunResponse,
+    SourceFetchRunCreate,
+    SourceFetchRunResponse,
+    SourceFetchStatus,
+    SourceFetchSucceededCreate,
+    SourceSnapshotResponse,
     SyllabusVersionCreate,
     SyllabusVersionResponse,
     TopicCreate,
@@ -110,6 +120,10 @@ class ResourceConflictError(Exception):
     pass
 
 
+class InvalidRequestError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class PdfArtifactDownload:
     filename: str
@@ -131,6 +145,96 @@ class KnowledgeService:
     def create_source(self, request: SourceCreate) -> Source:
         source = Source(**request.model_dump())
         return self._commit(self.repository.add_source(source))
+
+    def create_source_fetch_run(
+        self,
+        source_id: int,
+        request: SourceFetchRunCreate,
+    ) -> SourceFetchRunResponse:
+        source = self.repository.get_source(source_id)
+        if source is None:
+            raise ResourceNotFoundError("Source", source_id)
+        if request.requested_url != source.location:
+            raise InvalidRequestError(
+                f"requested_url must match Source {source_id} location"
+            )
+
+        snapshot: SourceSnapshot | None = None
+        if isinstance(request, SourceFetchSucceededCreate):
+            maximum_encoded_length = 4 * (
+                (settings.source_snapshot_max_bytes + 2) // 3
+            )
+            if len(request.content_base64) > maximum_encoded_length:
+                raise InvalidRequestError(
+                    "decoded source snapshot exceeds configured byte limit"
+                )
+            try:
+                content_bytes = base64.b64decode(
+                    request.content_base64,
+                    validate=True,
+                )
+            except (binascii.Error, ValueError) as error:
+                raise InvalidRequestError("content_base64 must be valid base64") from error
+            if not content_bytes:
+                raise InvalidRequestError(
+                    "content_base64 must decode to nonempty bytes"
+                )
+            if len(content_bytes) > settings.source_snapshot_max_bytes:
+                raise InvalidRequestError(
+                    "decoded source snapshot exceeds configured byte limit"
+                )
+            snapshot = SourceSnapshot(
+                source_id=source_id,
+                requested_url=request.requested_url,
+                run_status=SourceFetchStatus.SUCCEEDED.value,
+                final_url=request.final_url,
+                content_type=request.content_type.value,
+                byte_size=len(content_bytes),
+                sha256=sha256(content_bytes).hexdigest(),
+                content_bytes=content_bytes,
+            )
+
+        source_fetch_run = SourceFetchRun(
+            source_id=source_id,
+            requested_url=request.requested_url,
+            status=request.status.value,
+            final_url=request.final_url,
+            http_status=request.http_status,
+            error_code=getattr(request, "error_code", None),
+            snapshot=snapshot,
+        )
+        try:
+            self.repository.add_source_fetch_run(source_fetch_run)
+            source_fetch_run_id = source_fetch_run.id
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_run = self.repository.get_source_fetch_run(source_fetch_run_id)
+        if stored_run is None:
+            raise RuntimeError(
+                f"SourceFetchRun {source_fetch_run_id} missing after successful creation"
+            )
+        return self._source_fetch_run_response(stored_run)
+
+    def get_source_fetch_run(
+        self,
+        source_fetch_run_id: int,
+    ) -> SourceFetchRunResponse:
+        source_fetch_run = self.repository.get_source_fetch_run(source_fetch_run_id)
+        if source_fetch_run is None:
+            raise ResourceNotFoundError("SourceFetchRun", source_fetch_run_id)
+        return self._source_fetch_run_response(source_fetch_run)
+
+    def get_source_snapshot(
+        self,
+        source_snapshot_id: int,
+    ) -> SourceSnapshotResponse:
+        source_snapshot = self.repository.get_source_snapshot(source_snapshot_id)
+        if source_snapshot is None:
+            raise ResourceNotFoundError("SourceSnapshot", source_snapshot_id)
+        return self._source_snapshot_response(source_snapshot)
 
     def create_source_discovery_run(
         self,
@@ -1747,6 +1851,46 @@ class KnowledgeService:
         source_candidate: SourceCandidate,
     ) -> SourceCandidateResponse:
         return SourceCandidateResponse.model_validate(source_candidate)
+
+    @classmethod
+    def _source_fetch_run_response(
+        cls,
+        source_fetch_run: SourceFetchRun,
+    ) -> SourceFetchRunResponse:
+        return SourceFetchRunResponse(
+            id=source_fetch_run.id,
+            source_id=source_fetch_run.source_id,
+            requested_url=source_fetch_run.requested_url,
+            status=source_fetch_run.status,
+            final_url=source_fetch_run.final_url,
+            http_status=source_fetch_run.http_status,
+            error_code=source_fetch_run.error_code,
+            created_at=source_fetch_run.created_at,
+            snapshot=(
+                cls._source_snapshot_response(source_fetch_run.snapshot)
+                if source_fetch_run.snapshot is not None
+                else None
+            ),
+        )
+
+    @staticmethod
+    def _source_snapshot_response(
+        source_snapshot: SourceSnapshot,
+    ) -> SourceSnapshotResponse:
+        return SourceSnapshotResponse(
+            id=source_snapshot.id,
+            source_fetch_run_id=source_snapshot.source_fetch_run_id,
+            source_id=source_snapshot.source_id,
+            requested_url=source_snapshot.requested_url,
+            final_url=source_snapshot.final_url,
+            content_type=source_snapshot.content_type,
+            byte_size=source_snapshot.byte_size,
+            sha256=source_snapshot.sha256,
+            content_base64=base64.b64encode(source_snapshot.content_bytes).decode(
+                "ascii"
+            ),
+            created_at=source_snapshot.created_at,
+        )
 
     @staticmethod
     def _source_candidate_promotion_response(
