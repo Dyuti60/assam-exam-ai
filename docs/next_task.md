@@ -9874,3 +9874,138 @@ Complete implementation-ownership audit note (2026-09-12 Asia/Kolkata, UTC+05:30
 Normative T-056 transaction correction (2026-09-12 Asia/Kolkata, UTC+05:30): coordinator contract item 9's post-commit reload clause is superseded. The coordinator must materialize the terminal audit response before its single commit and must perform no post-commit SQL or lazy ORM access. This matches the coordinator-owned session design and its explicit transaction tests.
 
 Independent-review correction note (2026-09-12 Asia/Kolkata, UTC+05:30): schema-normalized output is held in local temporaries until canonical hashing succeeds, preventing partial success output on a failed audit. Optional safety metadata is limited to exact built-in JSON trees and measured with PostgreSQL-style rendered JSON text, so the reviewed 3,281-compact-byte/4,100-rendered-byte object is truncated before persistence. The exact canonicalization and metadata regressions passed 2 tests; complete T-056 passed 215; exact hostile reproduction 3; Gemini/mapping 106; T-053–T-055 112; source pipeline 249; provenance/T-047 35; canonical/document/artifact 228; and the full suite 769 in 47.30s, each with one existing warning. Ruff, lock, Alembic head/check, fresh upgrade, seeded downgrade/re-upgrade, PostgreSQL, secret, whitespace, and diff checks passed on dedicated `_test` databases. No live Gemini request, real secret, GitHub CI claim, commit, push, approval, or T-057 work occurred. T-056 remains Ready for review.
+
+---
+
+## T-056 approval record
+
+Status: **Approved**.
+
+Implementation commit `34e7d2223a072cdf5d428616a2d6fbae39bc0537` has exact parent `b23d98b237c2880b8c17f828f04cd9c063339afa`. Independent reviewer `/root/t056_independent_review` inspected the complete implementation and returned `APPROVED` with no blocking findings. Developer-local validation passed 215 focused T-056 tests and 769 full-suite tests; reviewer-local validation independently passed the 33-test hostile selection and all 215 focused tests. Both validations used dedicated PostgreSQL `_test` databases. Ruff, dependency lock, Alembic head/check, fresh and seeded migration validation, PostgreSQL constraints, diff/whitespace, ignored-env, value-suppressing secret, and protected-stash checks passed. No live Gemini request occurred, no real secret was used or disclosed, and no GitHub CI result is claimed.
+
+# T-057 — Grounded Evidence and DRAFT Claim extraction agent
+
+## Role and synchronization
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read `AGENTS.md`, the live repository, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt before editing.
+
+1. Confirm branch `main`, fetch `origin/main`, require a clean working tree, and require HEAD to be the documentation commit that approves T-056 and issues T-057.
+2. Confirm T-056 implementation commit `34e7d2223a072cdf5d428616a2d6fbae39bc0537` has exact parent `b23d98b237c2880b8c17f828f04cd9c063339afa`.
+3. Inspect T-055 SourceExtractionRun/SourceChunk persistence, T-056 prompt/execution contracts and coordinator, existing Evidence/Claim/link/review behavior, migrations, configuration, dependencies, Docker, tests, and documentation.
+4. Confirm one Alembic head `c9f2a6d4e817`. Stop on material divergence.
+
+## Context and bounded goal
+
+T-055 stores immutable deterministic SourceChunks with exact SourceSnapshot and Source provenance. T-056 stores immutable prompt contracts and terminal provider-neutral AI execution audits. Add the smallest controlled internal agent that submits a bounded set of stored chunks to one compatible immutable prompt contract selected by the trusted internal caller and one server-selected provider/model configuration, strictly validates grounded structured output, and atomically persists proposed Evidence plus DRAFT Claims and their exact provenance.
+
+The trust boundary is:
+
+```text
+immutable SourceChunks
+        ↓
+versioned server-owned prompt + provider-neutral execution audit
+        ↓
+strict grounded structured output validation
+        ↓
+stored Evidence + DRAFT Claims with immutable extraction provenance
+        ↓
+existing independent Claim review and Verification workflows
+```
+
+AI output is a proposal, not verified fact. Every generated Claim must remain `DRAFT` and `UNVERIFIED`; T-057 must never approve, verify, release, publish, or generate canonical learner content.
+
+## API boundary
+
+Add exactly one execution endpoint and one stored-run retrieval endpoint:
+
+- `POST /api/v1/source-extraction-runs/{source_extraction_run_id}/claim-extractions`
+- `GET /api/v1/claim-extraction-runs/{claim_extraction_run_id}`
+
+The POST accepts a closed request containing exactly one positive `ai_prompt_version_id`. Provider, model, timeout, output limit, temperature, prompt templates, schema contracts, SourceChunk selection/order, and generation options remain server-owned. Return HTTP 201 with the stored extraction response. The GET returns the identical stored response without provider I/O, regeneration, revalidation, repair, locking, or mutation.
+
+Use exact established 404 details for missing SourceExtractionRun, AiPromptVersion, or ClaimExtractionRun. Reject a non-SUCCEEDED source extraction, a prompt whose registered input/output contract is not the T-057 claim-extraction contract, or an input that exceeds configured chunk/character limits before provider I/O with stable deterministic 409 or 422 behavior as appropriate. Do not add list, update, delete, retry, approval, Verification, release, publication, or arbitrary prompt-execution endpoints.
+
+## Structured contract and grounding
+
+Define one closed versioned input contract and one closed strict output contract. The canonical input must include the exact ordered selected chunks with their IDs, positions, Source ID, SourceSnapshot ID, SourceExtractionRun ID, offsets, text, and checksums. Preserve chunk order and never ask the provider to fetch, infer, or cite an external URL.
+
+Each proposed output item must contain a nonblank bounded Claim statement and one or more citations identifying an input `source_chunk_id` plus exact chunk-relative character start/end offsets. Optional subject/predicate/object fields may be accepted only when bounded and schema-valid. For every citation, validate server-side that:
+
+- the chunk was present in this execution input;
+- offsets are integers with `0 <= start < end <= len(chunk.text)`;
+- the cited text is the exact stored chunk slice and is nonblank;
+- the citation Source, SourceSnapshot, and extraction identities agree with stored provenance;
+- no output-supplied Source, snapshot, checksum, text, status, or identifier can override database truth.
+
+Reject malformed, ungrounded, duplicate, out-of-range, cross-source, or fabricated citations as a controlled failed AI execution and create no Evidence, Claim, or provenance row. Provider success alone never authorizes domain persistence.
+
+## Persistence and provenance
+
+Add the minimum immutable extraction-run and association persistence required to retain:
+
+- ClaimExtractionRun identity and exact SourceExtractionRun, SourceSnapshot, Source, AiPromptVersion, AiExecutionRun, prompt checksum, provider key, model identifier, terminal domain status/error, and UTC creation/completion metadata;
+- each created Evidence ID and its exact SourceChunk ID, SourceSnapshot ID, Source ID, cited chunk-relative offsets, exact cited text checksum, and deterministic output position;
+- each created Claim ID, deterministic output position, and links to its supporting generated Evidence rows.
+
+Reuse the existing Evidence, Claim, and `claim_evidence` domain records rather than copying their semantics. Evidence content must be the exact cited stored chunk slice and its location reference must be deterministic and provenance-safe. Every generated Claim must persist with `approval_status='DRAFT'`, null approval metadata, `verification_status='UNVERIFIED'`, null confidence/verification time, and only the validated fields supplied by the structured contract.
+
+Use named PostgreSQL constraints and composite foreign keys where practical to enforce exact run/chunk/snapshot/Source/prompt/execution agreement, unique output positions, non-negative positions, valid ranges, nonblank fields, lowercase checksums, one domain extraction per terminal AI execution, and restricted deletion of referenced provenance. Do not infer rows for historical chunks, prompts, executions, Evidence, or Claims. PostgreSQL cannot validate semantic substring equality cheaply; the service must validate exact slices before constructing the atomic aggregate and documentation must state that boundary honestly.
+
+Create exactly one Alembic migration after `c9f2a6d4e817`. Edit no historical migration. Downgrade must remove only T-057 provenance objects/supporting constraints and preserve every pre-T-057 record. Keep model metadata and migration names aligned so Alembic reports no drift.
+
+## Coordinator, transactions, and atomicity
+
+Use the T-056 `AiExecutionCoordinator` through its provider-neutral interface; knowledge/domain services must not import Gemini SDK types. The operation must:
+
+1. load and copy the exact successful SourceExtractionRun, ordered chunks, and immutable prompt contract under a short read-only transaction;
+2. validate input bounds and contract compatibility;
+3. close the read transaction before provider I/O;
+4. invoke the coordinator exactly once with canonical server-owned input and the strict registered output schema;
+5. receive one stored terminal AiExecutionRun;
+6. if the AI execution failed, persist no Evidence/Claim/domain-provenance aggregate and return a stable controlled domain result;
+7. on validated AI success, revalidate exact extraction/chunk/prompt/execution identities and checksums;
+8. atomically insert the ClaimExtractionRun, Evidence, DRAFT Claims, Claim–Evidence links, and provenance associations;
+9. flush as required, commit exactly once, and materialize the stored response without post-commit lazy SQL;
+10. roll back every persistence failure and re-raise unknown database errors.
+
+No database transaction, row lock, or checked-out connection may remain during provider I/O. Do not retry the provider. Concurrent duplicate domain persistence for one AiExecutionRun must be protected by named database uniqueness and only that exact violation may map to a stable conflict. A terminal failed AiExecutionRun remains an audit record even when no domain records are created.
+
+## Read behavior
+
+Retrieval must use stored fields and persisted position ordering under `session.no_autoflush`. It performs no provider call, prompt rendering, hashing repair, chunk rebuilding, grounding re-evaluation, lock, flush, commit, approval transition, or current-state re-evaluation. Later Claim review, Verification, Source changes allowed by existing APIs, or downstream content state must not rewrite the extraction audit or its provenance.
+
+## Configuration and provider safety
+
+Add only conservative positive non-secret limits for selected chunks, total input characters, output claims, and citations per claim if needed. Keep existing Gemini configuration and secret handling unchanged. No new provider, API key, external service, queue, storage backend, or Docker service is required. Automated tests must inject fake providers and must never make a live Gemini or public-network request.
+
+## Required tests
+
+Use only PostgreSQL databases ending in `_test`. Cover at minimum:
+
+- exact create/retrieve contracts and established 404/409/422 behavior;
+- deterministic chunk selection, position ordering, canonical input, and stable input hashes;
+- exact provider/model/prompt/execution and Source/extraction/snapshot/chunk provenance;
+- strict output schemas, extra-field rejection, missing/blank claims, and bounded counts;
+- fabricated, missing, duplicate, cross-source, out-of-range, blank, or mismatched citations producing no domain rows;
+- exact cited Evidence slices/checksums and deterministic location references;
+- Claims created only as DRAFT/UNVERIFIED with null decision/confidence metadata;
+- one AI call, no retry, and no live provider/network use;
+- provider I/O with no open database transaction, row lock, or checked-out connection;
+- controlled provider/schema failure leaving no Evidence/Claim/domain-run rows while preserving the terminal AI audit;
+- successful aggregate persistence with one domain commit and exact ordered links;
+- injected post-flush failure rolling back the complete domain aggregate without altering the already terminal AI audit;
+- exact revalidation after I/O and concurrent duplicate authority;
+- read-only stable retrieval with fixed query behavior and no provider/hash/mutation work;
+- PostgreSQL provenance, uniqueness, range, checksum, terminal-state, and restricted-deletion probes under nested savepoints;
+- fresh and seeded migration upgrade/downgrade/re-upgrade preserving all T-056 and earlier records with zero inferred T-057 rows;
+- existing Claim approval, Verification, Source extraction, T-056 execution, canonical content, document, artifact, and T-047 regressions remain compatible.
+
+## Documentation, validation, and exclusions
+
+Update `docs/architecture.md` and `docs/workflow.md` only for implemented reality. Append T-057 implementation evidence to `docs/task_log.md` and beneath this prompt; keep T-057 only `Ready for review`. Do not define or implement T-058.
+
+Run focused T-057 tests, complete T-053–T-057 source/AI tests, Source/Evidence/Claim/Verification tests, T-047, canonical-content/document/artifact regressions, the full suite, Ruff on all changed/new Python files, `uv lock --check`, Alembic heads/check, fresh and seeded migration cycles, direct PostgreSQL probes, diff/whitespace/final-newline checks, secret scan, and final Git status. Report local developer evidence, not GitHub CI.
+
+Explicitly exclude automatic Claim approval, generated Verification verdicts, NoteDraft/QuestionBankItem creation, content/package/document/artifact generation, release/publication, embeddings/vector/RAG, arbitrary prompt execution, source discovery/fetch/extraction changes, retry/scheduler/queue/worker, learner/public APIs, authentication, deployment, infrastructure, and T-058.
+
+Leave T-057 uncommitted and unpushed for independent review. Do not commit, push, create a PR, self-approve, define T-058, or implement T-058.

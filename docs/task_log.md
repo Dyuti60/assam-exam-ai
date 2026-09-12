@@ -1973,3 +1973,30 @@ Fourth focused correction evidence (2026-09-12 Asia/Kolkata, UTC+05:30): a true 
 Complete T-056 implementation-ownership audit evidence (2026-09-12 Asia/Kolkata, UTC+05:30): retained and reverified the true outer Gemini lifecycle/mapping/cleanup boundary, total exact-primitive `_map_api_error`, unswallowed `BaseException`, and coordinator-owned read/write session design. Additional audit fixes prevent scalar subclasses or malformed generic provider results from crossing the coordinator, sanitize arbitrary provider/JSON/schema exceptions, allowlist provider error codes, bound representable cost/token/optional metadata, validate provider identity before sessions or I/O, reject unsafe numeric strings/subclasses and coerced prompt integers, cover C1 request-ID controls, and align execution model storage with the configured 128-character grammar. Exact exploit reproduction passed 3 tests, the Gemini/mapping matrix 106, complete T-056 213, T-053–T-055 112, source pipeline 249, provenance/T-047 35, canonical/document/artifact 228, and the full suite 767 with one existing warning. Ruff, lock, one Alembic head/check, fresh upgrade, seeded downgrade/re-upgrade preserving five prior rows with zero inferred AI rows, PostgreSQL constraints/restricted deletion, secret, whitespace, and diff checks passed on dedicated `_test` databases. No live Gemini request, real key, GitHub CI claim, commit, push, approval, or T-057 work occurred. T-056 remains Ready for review.
 
 Independent-review correction evidence (2026-09-12 Asia/Kolkata, UTC+05:30): output fields are now assigned only after schema dumping and canonical hashing both succeed, so the `{"x":1e400}` canonicalization failure persists exactly one sanitized `FAILED` audit with null output fields, one commit, and zero rollbacks. Safety metadata now accepts only exact built-in JSON trees and is bounded using PostgreSQL-style rendered text; the reviewed 410-entry object (3,281 compact bytes, 4,100 rendered bytes) is safely replaced by bounded truncation metadata before persistence. The coordinator contract remains pre-commit materialization with no post-commit SQL. Exact exploit reproduction passed 3 tests, Gemini/mapping 106, complete T-056 215, T-053–T-055 112, source pipeline 249, provenance/T-047 35, canonical/document/artifact 228, and the full suite 769 in 47.30s, each with one existing warning. Ruff, lock, one Alembic head/check, fresh upgrade, seeded downgrade/re-upgrade, PostgreSQL constraints/restricted deletion, secret, whitespace, and diff checks passed using only `_test` databases. No live Gemini request, real key, GitHub CI claim, commit, push, approval, or T-057 work occurred. T-056 remains Ready for review.
+
+---
+
+## T-056 approved
+
+| Field | Value |
+| --- | --- |
+| Status | Approved |
+| Implementation | `34e7d2223a072cdf5d428616a2d6fbae39bc0537` |
+| Exact parent | `b23d98b237c2880b8c17f828f04cd9c063339afa` |
+| Independent review | `/root/t056_independent_review`: `APPROVED`; no blocking findings |
+| Developer evidence | 215 focused, 112 T-053–T-055, 249 source-pipeline, 35 provenance/T-047, 228 canonical/document/artifact, and 769 full-suite tests passed with one existing warning; Ruff, lock, Alembic, fresh/seeded migration, PostgreSQL, diff, whitespace, secret, ignored-env, and stash checks passed on `_test` databases |
+| Reviewer evidence | 33 hostile tests passed with 182 deselected; 215 focused tests passed; fresh upgrade, Ruff, lock, Alembic, diff, whitespace, final-newline, secret, and stash checks passed on a separate `_test` database |
+| Safety | No live Gemini request; no real key used, persisted, logged, returned, or disclosed; protected pre-T-056 stash remained unchanged |
+| Boundaries | No domain generation, arbitrary execution API, automatic review/release, embedding/RAG, scheduler/worker, learner/public API, deployment, or infrastructure |
+
+## T-057 issued — Grounded Evidence and DRAFT Claim extraction agent
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Use immutable SourceChunks and the T-056 provider-neutral execution authority to propose source-grounded Evidence and DRAFT Claims with exact audit provenance |
+| Architectural phase | Content Factory / Grounded Knowledge Proposal |
+| Trust boundary | AI proposes; stored source evidence supports; Claims remain DRAFT until independent human review |
+| Scope | One controlled internal extraction operation, immutable extraction provenance, atomic Evidence/Claim/link persistence, tests, migration, and documentation |
+| Exclusions | No automatic Claim approval, Verification verdict, canonical-content generation, release/publication, embeddings/RAG, scheduling, learner/public delivery, or T-058 |
+| Full implementation prompt | Appended to `docs/next_task.md` |
