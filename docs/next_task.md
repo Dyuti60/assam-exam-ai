@@ -9238,3 +9238,198 @@ Do not define or implement T-054.
 ## T-053 implementation note
 
 Implementation note (2026-09-12 Asia/Kolkata, UTC+05:30): added terminal `SourceFetchRun` and immutable successful `SourceSnapshot` persistence through exactly three create/read endpoints. Closed discriminated requests require the Source's exact stored URL; success accepts bounded valid base64 and a supported normalized content type, then stores exact bytes with server-computed size and lowercase SHA-256, while failure stores a stable bounded error and no snapshot. Migration `a9d3f6c2e841`, parent `f6b2d8c4a731`, adds composite Source/run/snapshot agreement, successful-state, lifecycle, byte/checksum, uniqueness, index, and restricted-deletion constraints without inferring records. Successful aggregates commit once and persistence failures roll back; retrieval is lock-free, no-autoflush, and never reconstructs stored state. Developer-run local tests passed 27 focused and 469 full-suite, each with one existing warning; fresh and seeded migration cycles, direct PostgreSQL probes, Ruff, dependency-lock, Alembic, and diff checks passed on dedicated `_test` databases. T-053 is Ready for review, not approved. No network fetch, DNS, redirect, retry, extraction, OCR, chunking, object storage, Source mutation, Evidence/Claim/Verification generation, AI/LLM, public/learner API, infrastructure, T-054 definition, or T-054 implementation was added.
+
+
+# T-054 — Controlled Source fetch executor
+
+## Context and objective
+
+T-053 persists immutable terminal fetch attempts and exact successful SourceSnapshot bytes but deliberately performs no networking. T-054 adds the bounded synchronous executor that fetches one existing curated Source and records the result through the approved T-053 persistence semantics.
+
+Add exactly one operation that:
+
+1. resolves one Source;
+2. validates its stored URL against an explicit fetch allowlist and outbound security policy;
+3. evaluates current robots policy for the fixed fetch user-agent;
+4. fetches the Source URL once under strict limits;
+5. maps the complete result to one terminal SourceFetchRun and optional SourceSnapshot;
+6. persists through the same atomic run/snapshot boundary.
+
+No extraction, parsing into Evidence, scheduling, retry queue or AI is part of T-054.
+
+## Starting-state verification
+
+1. Confirm `main`, synchronize `origin/main`, require a clean tree and confirm HEAD is the docs commit approving T-053 and issuing T-054.
+2. Confirm T-053 commit `a6018e3afd869b419cae4df003ef72dcfbef6fbd` has exact parent `92d2b2cb94ae3449099cca098626fc25e842e3d0`.
+3. Read T-052 safe discovery networking, T-053 persistence, Source/promotion models, routes, settings, dependencies, migrations and tests.
+4. Confirm one Alembic head `a9d3f6c2e841`. Stop on material divergence.
+
+## API
+
+Add exactly:
+
+`POST /api/v1/sources/{source_id}/fetch`
+
+It accepts no request body and returns HTTP 201 with the existing `SourceFetchRunResponse`.
+
+- Missing Source: exact established 404.
+- A completed successful fetch returns SUCCEEDED with its nested immutable snapshot.
+- Controlled policy/network/HTTP/content failures return HTTP 201 with a persisted FAILED run and stable sanitized error code.
+- Persistence failures roll back and propagate; they are not converted into fetch results.
+- Each invocation is an independent attempt. Do not deduplicate, overwrite or mutate prior runs/snapshots.
+
+Preserve the manual T-053 `POST /sources/{source_id}/fetch-runs` and both retrieval APIs unchanged.
+
+## Eligibility and stored URL
+
+Use only `Source.location` as requested_url. Do not accept or construct another caller-controlled URL.
+
+The Source must be an existing curated Source. Both currently supported origins remain compatible:
+
+- Source created through an immutable T-051 SourceCandidatePromotion;
+- directly created Source retained for backward compatibility.
+
+Eligibility is determined by existence plus outbound URL policy, not candidate's later review state. Promotion provenance does not automatically trigger fetching.
+
+Require the stored Source URL to be an absolute HTTPS URL with no credentials or fragment, default port only, a valid configured hostname, and length/control-character safety. Query strings may be retained exactly subject to documented canonical request behavior.
+
+## Reusable safe network boundary
+
+Refactor or generalize T-052's pinned HTTPS client only as needed. Do not duplicate inconsistent SSRF/TLS/redirect logic.
+
+Before every robots, Source and redirect connection:
+
+- require HTTPS, default port and exact allowed hostname;
+- resolve all A/AAAA answers and reject empty, mixed or any non-global/private/loopback/link-local/reserved/multicast/unspecified result;
+- connect to a previously validated public IP while retaining original hostname SNI and certificate verification;
+- revalidate every redirect and enforce a conservative redirect cap;
+- disable ambient proxies and credentials;
+- enforce independent connect/read timeouts and exact response byte limits;
+- close response, connection, TLS socket and raw socket on every path;
+- send only fixed safe headers and user-agent;
+- store no resolved addresses, upstream bodies, credentials, exception text or stack traces in errors.
+
+Document the exact DNS-rebinding guarantee without overstating it.
+
+## Robots policy
+
+Before fetching the Source URL, retrieve its origin's canonical `/robots.txt` through the same safe client and fixed Source-fetch user-agent.
+
+- Require a valid bounded text robots response.
+- Denied Source URL produces `FETCH_ROBOTS_DENIED`.
+- Unavailable, malformed/undecodable or oversized robots data produces a stable sanitized failure.
+- Apply rules to the exact requested Source URL.
+- Do not reuse stale T-052 robots results.
+- Do not discover or traverse sitemaps in T-054.
+
+## Fetch result policy
+
+Supported successful media types must match T-053's SourceSnapshotContentType vocabulary:
+
+- `application/pdf`;
+- `text/plain`;
+- `text/html`;
+- `application/json`;
+- `application/xml`;
+- `text/xml`.
+
+Normalize Content-Type by removing parameters and lowercasing. Unsupported or missing types produce `FETCH_UNSUPPORTED_CONTENT_TYPE` and no snapshot.
+
+- Only final HTTP 200–299 responses are SUCCEEDED.
+- Non-2xx terminal responses are FAILED with `FETCH_HTTP_STATUS`, retaining final URL and HTTP status but no response bytes.
+- Empty 2xx bodies produce `FETCH_EMPTY_CONTENT`.
+- Oversized bodies produce `FETCH_RESPONSE_TOO_LARGE`.
+- Timeout, DNS, TLS/connect, redirect-policy, robots and general transport failures map to distinct stable bounded codes.
+- The successful snapshot contains the exact received body bytes, normalized media type, requested URL, final URL and status. T-053 remains the authority for server-derived byte size and SHA-256.
+- Do not decompress archives, extract text, parse HTML/PDF/JSON/XML content, execute scripts, follow page links or fetch embedded resources.
+
+Ensure error mapping is centralized, deterministic and sanitized.
+
+## Configuration
+
+Add separate non-secret Source-fetch settings, validated fail-fast:
+
+- allowed hosts;
+- connect/read timeout;
+- robots maximum bytes;
+- Source response maximum bytes;
+- redirect limit;
+- fixed user-agent.
+
+The response maximum must not exceed T-053 `source_snapshot_max_bytes`; fail configuration startup if inconsistent. Empty fetch allowlist disables execution safely. Do not require an API key, secret, external provider, proxy, queue, object storage or new Docker service.
+
+Prefer reuse of standard-library and existing dependencies. If a dependency change is genuinely required, update `pyproject.toml` and `uv.lock` and justify it.
+
+## Transaction and layering
+
+Perform Source lookup and copy the required immutable fields, then ensure no database transaction remains open during robots or Source network I/O. Do not hold locks across network calls.
+
+After networking completes, invoke a shared internal T-053 creation path using the exact stored Source identity/requested URL and either:
+
+- successful raw bytes plus final URL/status/content type; or
+- failed error code plus known final URL/status.
+
+Avoid base64 encode/decode round trips inside the server. Refactor T-053 service internals so manual base64 intake and executor raw-byte intake converge on one validation/persistence authority.
+
+Before persistence, revalidate the Source still exists with the exact same location, or rely on a clearly documented restricted composite database authority without allowing stale mismatched persistence. Do not mutate Source.content_hash.
+
+Persist run/snapshot with one commit. Roll back every persistence failure. No locks or writes affect SourceCandidate, promotion, discovery, Evidence, Claim or content domains.
+
+## Migration
+
+Prefer no migration and no model change. T-053 tables represent the required terminal result.
+
+If persistence cannot represent an essential truthful field, stop and report rather than broadening scope. Do not edit historical migrations. Retain one Alembic head and no drift.
+
+## Required tests
+
+Use PostgreSQL databases ending in `_test`. Never call the public internet; inject fake DNS, sockets/TLS/connections or controlled transports.
+
+Cover at minimum:
+
+- promoted and direct Sources can be fetched under policy;
+- exact successful bytes, final URL, media type, status, size and SHA-256 persist through T-053;
+- PDF and UTF-8 text success;
+- missing Source exact 404 before network;
+- stored HTTP URL, credentials, fragment, nondefault port, IP literal, localhost, malformed/unsafe/overlong URL and disallowed host become sanitized FAILED runs without outbound connection;
+- empty allowlist disables safely;
+- IPv4/IPv6 unsafe and mixed DNS answers are rejected;
+- hostname-based TLS verification and pinned validated IP are retained;
+- redirects are revalidated, capped and cleaned up on every hop;
+- current robots allow/deny/unavailable/timeout/oversize handling;
+- supported Content-Type normalization and every unsupported/missing type failure;
+- non-2xx, empty, oversized, timeout, DNS, TLS, redirect and transport failures persist exact stable FAILED runs with no snapshot;
+- raw upstream body/exception/address/secret never appears in error_code;
+- all resources close on success and every failure;
+- network I/O occurs with no open database transaction and no row locks;
+- shared raw-byte/manual-base64 persistence produces identical metadata;
+- Source deletion/location race cannot create mismatched provenance;
+- success and controlled failure commit exactly once;
+- injected post-flush persistence failure rolls back run and snapshot;
+- repeated attempts remain independent;
+- no Source/content_hash/candidate/promotion/other-domain mutation;
+- all T-048–T-053 and canonical/document/artifact regressions remain compatible.
+
+Remove instrumentation hooks in `finally`.
+
+## Documentation
+
+Update implemented reality in architecture/workflow and append T-054 implementation records to task_log/next_task. Keep history append-only, mark T-054 only **Ready for review**, and do not define T-055.
+
+## Exclusions
+
+No sitemap discovery, arbitrary crawling, page-link traversal, retry, scheduling, background job, queue, object storage, extraction, OCR, chunking, embeddings, Evidence/Claim/Verification creation, notes/questions, AI/LLM/provider/API key/RAG, Source review/release/update, learner/public APIs, auth, frontend, deployment, infrastructure or T-055.
+
+## Validation and handoff
+
+Run focused T-054, complete T-048–T-054, Source/Evidence/Claim/Verification, T-047, canonical/document/artifact and full suites; Ruff; `uv lock --check`; Alembic heads/check; fresh upgrade; diff checks; and final status. Report local results as developer evidence, not CI.
+
+Report exact Git state/files, endpoint, eligibility, URL/SSRF/TLS/redirect/robots/content/error policy, resource cleanup, transaction timing, shared T-053 persistence, atomicity, tests, configuration/dependency/migration decisions and exclusions.
+
+Leave T-054 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-055.

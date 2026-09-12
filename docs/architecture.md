@@ -117,6 +117,9 @@ T-052 was independently reviewed as the complete two-commit range from issuance 
 
 `POST /api/v1/sources/{source_id}/fetch-runs` records one already-completed terminal Source fetch result without performing network work. FAILED runs retain a bounded stable error and no snapshot. SUCCEEDED runs atomically retain one immutable `SourceSnapshot` with exact supplied bytes, normalized supported content type, server-computed byte size, and lowercase SHA-256. Composite PostgreSQL references bind the requested URL to the Source and bind a snapshot's Source, requested/final URLs, and SUCCEEDED state to its run; named checks enforce terminal metadata, bytes, and checksum integrity. PostgreSQL cannot cheaply require every directly inserted SUCCEEDED parent to own a child, so the service constructs and commits that aggregate atomically. Read APIs return stored run/snapshot state under `no_autoflush` without hashing, repair, locks, or writes. No fetch executor, DNS, HTTP, extraction, or Source mutation is implemented.
 
+
+T-053 was independently reviewed after push at immutable commit `a6018e3afd869b419cae4df003ef72dcfbef6fbd`, whose exact parent is issuance commit `92d2b2cb94ae3449099cca098626fc25e842e3d0`, and approved with no blocking finding. The persisted terminal run and optional immutable byte snapshot preserve exact Source URL provenance, server-derived size/checksum, lifecycle constraints and rollback-safe creation without networking. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. T-054 is issued separately as the controlled outbound fetch executor.
+
 ## Planned architecture — not implemented
 
 The repository instructions describe this target flow:

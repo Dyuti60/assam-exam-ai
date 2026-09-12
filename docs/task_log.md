@@ -1832,3 +1832,32 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Transactions | Request shape precedes Source/exact-URL validation; decoded size and SHA-256 are server-derived; a complete successful run/snapshot flushes atomically and commits once; every persistence failure rolls back |
 | Tests | Developer-run local evidence: focused T-053, 27 passed with one existing warning; full suite, 469 passed with one existing warning. Fresh and seeded migration cycles, PostgreSQL constraints, Ruff, lock, Alembic and diff checks passed on dedicated `_test` databases. |
 | Notes | T-053 is not approved. No networking, executor, extraction, Source mutation, Evidence/Claim/Verification generation, AI/LLM, public/learner behavior, infrastructure, T-054 definition, or T-054 implementation was added. |
+
+
+---
+
+## T-053 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-053` |
+| Implementation commit | `a6018e3afd869b419cae4df003ef72dcfbef6fbd` |
+| Base/task-issuance commit | `92d2b2cb94ae3449099cca098626fc25e842e3d0` |
+| Review state | **APPROVED** |
+| Approved capability | Immutable terminal Source fetch-run persistence with exact successful byte snapshots, server-derived size/SHA-256 and read-only retrieval |
+| Persistence | Migration `a9d3f6c2e841`, parent `f6b2d8c4a731`; SourceFetchRun/SourceSnapshot lifecycle, provenance, checksum, byte-size, uniqueness and restricted-deletion constraints match model metadata |
+| Validation evidence | Developer-recorded: 27 focused, 164 complete source, 35 provenance/T-047, 228 canonical/document/artifact and 469 full-suite tests; Ruff, lock, fresh upgrade, seeded migration cycle, PostgreSQL, Alembic and diff checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | Exact one-commit diff matches the discriminated API, Source URL agreement, server-owned byte metadata, atomicity, model/migration parity, stored retrieval, tests, documentation and exclusions with no blocking finding. |
+| Boundaries | No DNS, HTTP, redirects, retry, Source mutation, extraction, chunks, AI/LLM, queue, storage service, learner/public behavior, infrastructure or T-054 behavior. |
+
+---
+
+## T-054 issued — Controlled Source fetch executor
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Safely fetch one curated Source under an explicit outbound policy and atomically record the terminal run and exact successful snapshot through T-053 |
+| Architectural phase | Content Factory / Source Ingestion Foundation |
+| Scope | One synchronous fetch endpoint, allowlist/SSRF/TLS/redirect/robots/content policy, terminal persistence reuse, tests, settings and documentation; no extraction, chunks, AI, background jobs or T-055 |
+| Full implementation prompt | Appended to `docs/next_task.md` |

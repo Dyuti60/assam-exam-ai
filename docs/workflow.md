@@ -1710,3 +1710,16 @@ flowchart LR
 - Migration `a9d3f6c2e841` follows `f6b2d8c4a731`. Composite restricted references enforce Source/requested-URL agreement and snapshot/run Source, requested/final URL and SUCCEEDED-state agreement; named checks enforce terminal fields, HTTP ranges, nonblank metadata, exact positive byte size, and lowercase SHA-256. One snapshot per run is unique. The service supplies the parent/child completeness guarantee that PostgreSQL cannot cheaply enforce without a circular/deferred design.
 - Developer-run local evidence: focused T-053, 27 passed with one existing warning; full suite, 469 passed with one existing warning. Fresh upgrade, seeded upgrade/downgrade/re-upgrade with direct and promoted Sources, no-inference checks, direct PostgreSQL probes, Ruff, dependency-lock, Alembic and diff checks passed on dedicated `_test` databases.
 - T-053 is Ready for review, not approved. No outbound fetch executor, DNS, redirects, retries, extraction, OCR, chunks, object storage, Evidence/Claim/Verification generation, Source lifecycle, AI/LLM, learner/public API, infrastructure, or T-054 work was added.
+
+
+### T-053 post-push review and T-054 issuance
+
+- **APPROVED** at immutable implementation commit `a6018e3afd869b419cae4df003ef72dcfbef6fbd`, whose exact parent is T-053 issuance commit `92d2b2cb94ae3449099cca098626fc25e842e3d0`.
+- The one-commit diff adds only terminal SourceFetchRun and immutable SourceSnapshot persistence, closed create/read schemas and routes, matching model/migration constraints, atomic service/repository behavior, focused PostgreSQL tests, one non-secret byte limit, and current-state documentation.
+- SUCCEEDED requests require exact Source/requested-URL agreement, supported normalized content type, 2xx status and nonempty bounded base64; the server derives exact decoded bytes, size and lowercase SHA-256. FAILED requests retain a stable error code and no snapshot.
+- Composite restricted references bind run URL to Source and snapshot identity/status/URLs to its successful run. PostgreSQL enforces lifecycle, HTTP, nonblank, byte-size, checksum, one-snapshot and ownership invariants; the documented parent-has-child service invariant is not overstated as a database guarantee.
+- Success flushes the complete aggregate and commits once; every persistence failure rolls back. Retrieval uses stored fields under no-autoflush without locks, writes, rehashing or repair.
+- Developer-recorded evidence is 27 focused T-053 tests, 164 complete T-048–T-053 source tests, 35 provenance/T-047 tests, 228 canonical/document/artifact regressions and 469 full-suite tests, plus successful Ruff, lock, migration cycle, PostgreSQL probes, Alembic and diff checks.
+- GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No outbound network, Source mutation, extraction, chunks, AI/LLM, queue, object storage, learner/public behavior, infrastructure or T-054 implementation was included.
+- T-054 separately executes one bounded safe fetch for a curated Source and records its terminal result through the approved T-053 persistence boundary.
