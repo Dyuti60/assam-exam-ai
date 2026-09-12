@@ -10035,3 +10035,190 @@ Status: **Approved**.
 Implementation commit `901090625c11b005f486df8cf0693f77a139c260`, with exact parent `1b35a20ef731edeb8939991e7fe2347d637c6246`, was reviewed against the complete T-057 contract and approved with no blocking findings. Reviewer-local PostgreSQL evidence passed 42 focused T-057 tests, 369 selected T-053–T-057 source/AI regressions, 35 provenance/T-047 regressions, 228 canonical/document/artifact regressions, and all 811 tests with one existing Starlette warning. Ruff, dependency-lock verification, fresh upgrade, seeded downgrade/re-upgrade, one Alembic head with no drift, PostgreSQL probes, diff/whitespace, ignored-env, value-suppressing secret, and protected-stash checks passed on dedicated `_test` databases. No live Gemini or public-network request occurred, and no GitHub CI result is claimed.
 
 T-057 preserves exact extraction, chunk, snapshot, Source, prompt, provider, model, execution, Evidence, Claim, and citation provenance. Generated Claims remain DRAFT and UNVERIFIED until the existing independent human-review and Verification workflows act. T-058 remains undefined and unimplemented.
+
+---
+
+# T-058 — Grounded Claim verification proposal agent
+
+## Role and synchronization
+
+You are implementing one bounded ASSAM_EXAM_AI task in the VS Code working tree. Read `AGENTS.md`, the live repository, `docs/architecture.md`, `docs/workflow.md`, `docs/task_log.md`, and this complete prompt before editing.
+
+1. Confirm branch `main`, fetch `origin/main`, require a clean working tree, and require HEAD to be the documentation commit that approves T-057 and issues T-058.
+2. Confirm T-057 implementation commit `901090625c11b005f486df8cf0693f77a139c260` has exact parent `1b35a20ef731edeb8939991e7fe2347d637c6246`.
+3. Inspect T-055 SourceChunk persistence, T-056 prompt/execution contracts and coordinator, T-057 ClaimExtractionRun and exact Evidence/Claim/citation provenance, the existing Verification and Claim-review behavior, migrations, settings, tests, dependencies, Docker, and documentation.
+4. Confirm one Alembic head `d7e3a9c5f218`. Stop and report material divergence before editing.
+
+## Context and bounded goal
+
+T-057 turns exact stored SourceChunk slices into Evidence and DRAFT/UNVERIFIED Claim proposals with immutable AI and source provenance. The existing `POST /api/v1/verifications` boundary creates a Verification and immediately updates the Claim's current verification summary. T-058 must not let AI cross that trust boundary.
+
+Add the smallest controlled internal agent that evaluates exactly one T-057-generated Claim against its own stored cited Evidence, records one immutable grounded verification proposal, and leaves the existing Claim and Verification records unchanged.
+
+```text
+T-057 DRAFT/UNVERIFIED Claim
+        +
+exact cited Evidence and SourceChunk provenance
+        ↓
+versioned server-owned verification prompt
+        ↓
+provider-neutral T-056 execution audit
+        ↓
+strict grounded verification proposal
+        ↓
+future human Verification decision and Claim review
+```
+
+AI proposes. It does not verify, approve, reject, release, publish, or alter factual state.
+
+## API boundaries
+
+Add exactly:
+
+- `POST /api/v1/claims/{claim_id}/verification-proposals`
+- `GET /api/v1/claim-verification-runs/{claim_verification_run_id}`
+
+The POST accepts one closed request containing exactly a positive `ai_prompt_version_id`. Provider, model, prompt templates, schemas, evidence selection/order, timeout, output limit, temperature, and generation options remain server-owned. Return HTTP 201 with the stored proposal response.
+
+The GET returns the identical stored proposal and position-ordered evidence assessments without provider I/O, prompt rendering, revalidation, repair, locking, or mutation.
+
+Use established exact 404 details for missing Claim, AiPromptVersion, or ClaimVerificationRun. Return a stable HTTP 409 before provider I/O when the Claim:
+
+- is not a member of a successful T-057 ClaimExtractionRun;
+- is not currently `DRAFT` and `UNVERIFIED` with null review/verification metadata;
+- has no exact T-057 citation provenance; or
+- is paired with an incompatible prompt contract.
+
+Use standard HTTP 422 for malformed request identifiers or request shape. Do not add list, update, delete, retry, approval, Verification-creation, release, publication, or arbitrary prompt-execution endpoints.
+
+## Versioned structured contracts
+
+Define one closed `grounded-claim-verification` v1 input contract. Its canonical server-owned input must contain:
+
+- exact Claim ID, statement, optional subject/predicate/object, DRAFT approval state, and UNVERIFIED verification state;
+- exact ClaimExtractionRun ID and Claim output position;
+- exact SourceExtractionRun, SourceSnapshot, and Source IDs and snapshot checksum;
+- exact position-ordered cited Evidence records;
+- for every Evidence item, its Evidence ID, SourceChunk ID, citation position, chunk-relative offsets, exact content, cited-text checksum, chunk checksum, deterministic location reference, and ownership identifiers.
+
+Define one closed strict output contract containing:
+
+- exactly one proposed verdict from the existing `VerificationVerdict` vocabulary;
+- a finite confidence value from 0 through 1;
+- nonblank bounded reasoning;
+- one or more evidence assessments, each identifying an input `evidence_id`, assigning exactly `SUPPORTS`, `CONTRADICTS`, or `CONTEXT`, and optionally supplying bounded nonblank reasoning.
+
+Reject extra fields, wrong types, blank values, non-finite numbers, duplicate Evidence references, missing/fabricated Evidence IDs, or output that cites Evidence outside the exact input. Require every assessment to resolve to stored T-057 provenance. The provider cannot supply or override Claim, Source, snapshot, chunk, checksum, prompt, model, execution, status, timestamp, or ownership values.
+
+The service must validate verdict/role consistency conservatively. At minimum, `SUPPORTED` requires supporting Evidence, `CONTRADICTED` requires contradicting Evidence, `CONFLICTING` requires both, and uncertainty verdicts must not be represented as conclusive support. Invalid semantics are controlled grounding failures, never successful proposals.
+
+## Persistence and provenance
+
+Add the minimum immutable persistence for:
+
+- `ClaimVerificationRun`, retaining its identity; exact ClaimExtractionRun and Claim; exact SourceExtractionRun, SourceSnapshot, Source, and snapshot checksum; exact AiPromptVersion and AiExecutionRun; copied prompt checksum, provider key, model identifier, and terminal AI status; terminal domain status/error; proposed verdict, confidence, reasoning on success; and UTC creation/completion metadata;
+- `ClaimVerificationEvidence`, retaining the run, Evidence, SourceChunk, source/extraction/snapshot ownership, cited offsets and checksum, deterministic assessment position, assigned evidence role, and optional bounded assessment reasoning.
+
+Use persisted association positions for response order. Do not copy SourceSnapshot bytes or whole SourceChunk text into new provenance tables; the immutable Evidence content and identifiers remain authoritative.
+
+Create exactly one Alembic revision after `d7e3a9c5f218`. Edit no historical migration. Use named checks, unique constraints, and composite foreign keys where practical to enforce:
+
+- exact ClaimVerificationRun agreement with the successful T-057 run, Claim membership, source provenance, prompt, and AI execution;
+- one domain verification proposal per terminal AI execution;
+- valid SUCCEEDED/FAILED terminal metadata;
+- success-only verdict/confidence/reasoning and evidence-assessment rows;
+- finite confidence in `[0, 1]`;
+- bounded nonblank stable errors and text;
+- lowercase SHA-256 format;
+- unique non-negative assessment positions and unique Evidence membership per run;
+- exact Evidence/SourceChunk/source/extraction/snapshot/checksum agreement; and
+- restricted deletion of referenced Claim, Evidence, SourceChunk, extraction, snapshot, Source, prompt, and AI execution provenance.
+
+PostgreSQL cannot cheaply prove semantic agreement between a proposed verdict and the set of evidence roles. The service owns that validation before atomic persistence, and documentation must state this honestly.
+
+Do not infer proposal rows for historical Claims, Evidence, T-057 runs, prompts, or executions. Downgrade removes only T-058 tables and supporting constraints while preserving every earlier record.
+
+## Service, transaction, and concurrency behavior
+
+Use `AiExecutionCoordinator` only through its provider-neutral interface. No knowledge or verification-proposal service may import Gemini SDK types.
+
+The operation must:
+
+1. Load and copy the exact Claim, its successful T-057 membership, exact ordered citations/Evidence, SourceChunk provenance, and compatible immutable prompt under a short read-only transaction.
+2. Enforce conservative configured limits on Evidence count, total evidence characters/UTF-8 bytes, canonical input bytes, reasoning, and assessments before provider I/O.
+3. Close the read transaction and release its connection before invoking the provider.
+4. Invoke the coordinator exactly once with the canonical server-owned input and strict registered output schema; never retry.
+5. Preserve the terminal AiExecutionRun whether it succeeds or fails.
+6. If AI execution fails or its structural output is invalid, create no T-058 domain row and return a stable controlled conflict.
+7. Strictly validate Evidence grounding and verdict/role consistency.
+8. Revalidate exact Claim state, T-057 membership, Evidence, SourceChunk, prompt, and AI execution identities/checksums after provider I/O.
+9. Persist one successful or semantic-FAILED ClaimVerificationRun and its complete successful evidence-assessment aggregate with one domain commit.
+10. Roll back every persistence failure and re-raise unknown database errors. Translate only the named concurrent one-domain-run-per-AI-execution uniqueness violation to a stable conflict.
+
+Do not hold a database transaction, checked-out connection, or row lock during provider I/O. Do not lock or mutate the Claim, Evidence, T-057 provenance, Verification rows, Source pipeline, prompt, execution audit, or any canonical-content record.
+
+Repeated invocations are independent AI attempts with distinct AiExecutionRuns. Later human Claim review, human Verification creation, or downstream content changes must not rewrite a stored proposal. A stale in-flight attempt must fail exact revalidation rather than applying a proposal to changed Claim/provenance state.
+
+## Existing Verification boundary
+
+T-058 must not create a row in `verifications`, `verification_evidence`, or update `Claim.verification_status`, `Claim.confidence`, `Claim.last_verified_at`, `Claim.approval_status`, `Claim.approval_decided_at`, or `Claim.reviewer_note`.
+
+The existing Verification API remains the separately controlled factual-decision boundary. T-058 output is advisory audit material for a future explicit human workflow; it is not itself a Verification and cannot be treated as approved knowledge.
+
+## Retrieval
+
+Retrieve one stored ClaimVerificationRun under `session.no_autoflush` using fixed eager-loading queries and persisted assessment positions. Retrieval performs no provider call, prompt work, JSON validation, hashing, grounding re-evaluation, locks, writes, flush, commit, Claim-summary repair, or current-state eligibility check.
+
+## Required tests
+
+Use only PostgreSQL databases ending in `_test`. Tests must inject fake providers and make no live Gemini or public-network request. Cover at minimum:
+
+- exact POST/GET contracts and stable 404/409/422 behavior;
+- strict positive PostgreSQL-range IDs and closed request/output schemas;
+- deterministic evidence selection, persisted ordering, canonical input, and stable input hashes;
+- exact Claim/T-057/Source/extraction/snapshot/chunk/Evidence/prompt/provider/model/execution provenance;
+- success for every permitted VerificationVerdict when role semantics are satisfied;
+- invalid verdict-role combinations, fabricated/missing/duplicate Evidence, extra fields, wrong types, blanks, non-finite confidence, excessive counts/text/bytes, and cross-source provenance producing no factual mutation;
+- Claim eligibility restricted to T-057-generated DRAFT/UNVERIFIED state;
+- one provider call, no retry, and no connection, transaction, or lock during provider I/O;
+- provider/schema failure retaining only the terminal AI audit;
+- semantic grounding failure retaining a FAILED domain proposal with no assessment rows;
+- successful proposal persistence with one domain commit and exact assessment order;
+- injected post-flush failure rolling back the complete T-058 aggregate without altering the terminal AI audit;
+- exact post-I/O revalidation and genuine concurrent duplicate authority using independent PostgreSQL connections;
+- direct named PostgreSQL lifecycle, confidence, checksum, ordering, uniqueness, composite-provenance, and restricted-deletion probes under nested savepoints;
+- stable read-only retrieval with fixed query behavior and no provider/hash/mutation work;
+- the Claim and all existing Verification, review, Evidence, T-057, Source, canonical-content, document, and artifact rows remaining unchanged;
+- fresh migration upgrade and seeded `d7e3a9c5f218 → T-058 → d7e3a9c5f218 → T-058` preservation with zero inferred proposal rows;
+- all T-053 through T-057, Source/Evidence/Claim/Verification, T-047, canonical-content, document, and artifact regressions remaining compatible.
+
+Remove every SQLAlchemy event listener or instrumentation hook in `finally`.
+
+## Configuration and scope
+
+Add only conservative positive non-secret proposal limits if required. Keep the existing provider, Gemini secret handling, model selection, dependency set, and T-056 coordinator semantics unchanged. No API key, new provider, external service, queue, storage backend, Docker service, or infrastructure change is expected.
+
+Inspect and report decisions for `pyproject.toml`, `uv.lock`, `.env.example`, `app/core/config.py`, `docker-compose.yml`, `AGENTS.md`, and `README.md`. If a dependency or infrastructure change appears necessary, stop and report the architectural reason rather than expanding scope.
+
+## Documentation, validation, and exclusions
+
+Update `docs/architecture.md` and `docs/workflow.md` only for implemented reality. Append T-058 implementation evidence to `docs/task_log.md` and beneath this prompt. Keep T-058 only `Ready for review`; do not mark it approved. Do not define or implement T-059.
+
+Run focused T-058 tests; complete T-053–T-058 source/AI tests; existing Source/Evidence/Claim/Verification and T-047 tests; canonical-content, ContentPackage, ContentDocument, PdfArtifact regressions; the full suite; Ruff on all changed/new Python files; `uv lock --check`; Alembic heads/check; fresh and seeded migration cycles; direct PostgreSQL probes; diff/whitespace/final-newline checks; value-suppressing secret scan; ignored-env check; and final Git status. Report local developer evidence, not GitHub CI.
+
+Explicitly exclude:
+
+- creation of `Verification` or `VerificationEvidence` rows;
+- mutation of Claim verification summary or human approval state;
+- automatic approval, factual trust, release, or publication;
+- NoteDraft, QuestionBankItem, ContentPackage, ContentDocument, or PdfArtifact generation;
+- embeddings, vectors, semantic retrieval, or RAG;
+- arbitrary prompt execution;
+- source discovery, promotion, fetch, snapshot, or extraction changes;
+- retry, scheduler, queue, or worker behavior;
+- learner/public APIs, authentication, frontend, deployment, or infrastructure; and
+- T-059 definition or implementation.
+
+Preserve the core rule: **AI proposes. Evidence supports. Humans approve.**
+
+Leave T-058 uncommitted and unpushed for independent review. Do not commit, push, create a PR, self-approve, define T-059, or implement T-059.

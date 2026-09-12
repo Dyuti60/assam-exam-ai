@@ -2033,3 +2033,15 @@ Correction validation evidence: 42 focused T-057, 506 T-048–T-057 source/AI, 3
 | Reviewer evidence | 42 focused T-057, 369 selected T-053–T-057 source/AI, 35 provenance/T-047, 228 canonical/document/artifact, and 811 full-suite tests passed with one existing Starlette warning |
 | Migration and quality | Fresh upgrade and seeded `c9f2a6d4e817 → d7e3a9c5f218 → c9f2a6d4e817 → d7e3a9c5f218` passed; Alembic head/check, Ruff, lock, PostgreSQL probes, diff, whitespace, ignored-env, secret, and protected-stash checks passed on `_test` databases |
 | Boundaries | Claims remain DRAFT/UNVERIFIED proposals with exact source/chunk/prompt/provider/model/execution provenance; no automatic approval, Verification generation, canonical-content generation, release/publication, embedding/RAG, learner/public API, or T-058 behavior |
+
+## T-058 issued — Grounded Claim verification proposal agent
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Evaluate one T-057-generated DRAFT/UNVERIFIED Claim against its exact stored Evidence and chunk provenance through the T-056 provider-neutral execution authority, then retain an immutable verification proposal without changing the Claim or creating a Verification |
+| Architectural phase | Content Factory / Grounded Verification Proposal |
+| Trust boundary | AI proposes a verdict; stored Evidence supports or contradicts it; the existing human Verification and Claim-approval workflows remain authoritative |
+| Scope | One controlled proposal operation, one stored-run retrieval boundary, strict grounded contracts, immutable proposal/evidence provenance, migration, tests, and documentation |
+| Exclusions | No `Verification` creation, Claim summary/review mutation, automatic approval, canonical-content generation, release/publication, embedding/RAG, scheduling, learner/public delivery, or T-059 |
+| Full implementation prompt | Appended to `docs/next_task.md` |

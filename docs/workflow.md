@@ -1802,4 +1802,10 @@ flowchart LR
 
 - **APPROVED** at immutable implementation commit `901090625c11b005f486df8cf0693f77a139c260`, whose exact parent is T-057 issuance commit `1b35a20ef731edeb8939991e7fe2347d637c6246`.
 - Reviewer-local PostgreSQL validation passed 42 focused T-057 tests, 369 selected T-053–T-057 source/AI regressions, 35 provenance/T-047 regressions, 228 canonical/document/artifact regressions, and all 811 tests with one existing Starlette warning. Ruff, lock, Alembic head/check, fresh and seeded migration cycles, PostgreSQL probes, secret, ignored-env, whitespace, diff, and protected-stash checks passed on dedicated `_test` databases.
-- No live Gemini or public-network request occurred, no real secret was found, and no GitHub CI result is claimed. T-058 remains undefined and unimplemented.
+- No live Gemini or public-network request occurred, no real secret was found, and no GitHub CI result is claimed. T-057 introduced no T-058 implementation.
+
+### T-058 issuance
+
+- T-058 is issued as a grounded Claim verification **proposal** agent over exact T-057 Claim/Evidence/chunk provenance and the T-056 provider-neutral execution authority.
+- It must persist an immutable advisory proposal and ordered Evidence assessments without creating an existing `Verification`, changing the Claim summary or human-review state, or treating AI output as factual approval.
+- The planned boundaries are one controlled POST by Claim ID and one stored-run GET. T-058 is not implemented by this documentation change, and T-059 is not defined.
