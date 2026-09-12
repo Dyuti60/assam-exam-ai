@@ -3,6 +3,10 @@ from app.models.ai_prompt_version import AiPromptVersion
 from app.models.base import Base
 from app.models.claim import Claim
 from app.models.claim_evidence import claim_evidence
+from app.models.claim_extraction_citation import ClaimExtractionCitation
+from app.models.claim_extraction_claim import ClaimExtractionClaim
+from app.models.claim_extraction_evidence import ClaimExtractionEvidence
+from app.models.claim_extraction_run import ClaimExtractionRun
 from app.models.content_document import ContentDocument
 from app.models.content_package import ContentPackage
 from app.models.content_package_note_draft import ContentPackageNoteDraft
@@ -39,6 +43,10 @@ __all__ = [
     "AiPromptVersion",
     "Base",
     "Claim",
+    "ClaimExtractionCitation",
+    "ClaimExtractionClaim",
+    "ClaimExtractionEvidence",
+    "ClaimExtractionRun",
     "ContentDocument",
     "ContentPackage",
     "ContentPackageNoteDraft",

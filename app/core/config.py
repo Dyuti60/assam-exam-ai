@@ -4,7 +4,7 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Self
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 AI_REQUEST_TIMEOUT_MAX_SECONDS = 120.0
@@ -12,6 +12,13 @@ AI_MAX_OUTPUT_TOKENS_LIMIT = 8_192
 AI_TEMPERATURE_MIN = 0.0
 AI_TEMPERATURE_MAX = 2.0
 AI_MODEL_IDENTIFIER_MAX_LENGTH = 128
+CLAIM_EXTRACTION_MAX_CHUNKS_LIMIT = 100
+CLAIM_EXTRACTION_MAX_INPUT_CHARACTERS_LIMIT = 100_000
+CLAIM_EXTRACTION_MAX_INPUT_BYTES_LIMIT = 400_000
+CLAIM_EXTRACTION_MAX_CANONICAL_JSON_BYTES_LIMIT = 500_000
+CLAIM_EXTRACTION_MAX_CLAIMS_LIMIT = 50
+CLAIM_EXTRACTION_MAX_CITATIONS_PER_CLAIM_LIMIT = 10
+CLAIM_EXTRACTION_MAX_EVIDENCE_LIMIT = 500
 AI_MODEL_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
 AI_NUMBER_PATTERN = re.compile(
     r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"
@@ -116,6 +123,68 @@ class Settings(BaseSettings):
         default=0.0, ge=AI_TEMPERATURE_MIN, le=AI_TEMPERATURE_MAX
     )
     ai_model_allowlist: str = ""
+    claim_extraction_max_chunks: int = Field(
+        default=50, gt=0, le=CLAIM_EXTRACTION_MAX_CHUNKS_LIMIT
+    )
+    claim_extraction_max_input_characters: int = Field(
+        default=50_000, gt=0, le=CLAIM_EXTRACTION_MAX_INPUT_CHARACTERS_LIMIT
+    )
+    claim_extraction_max_input_bytes: int = Field(
+        default=200_000, gt=0, le=CLAIM_EXTRACTION_MAX_INPUT_BYTES_LIMIT
+    )
+    claim_extraction_max_canonical_json_bytes: int = Field(
+        default=250_000,
+        gt=0,
+        le=CLAIM_EXTRACTION_MAX_CANONICAL_JSON_BYTES_LIMIT,
+    )
+    claim_extraction_max_claims: int = Field(
+        default=25, gt=0, le=CLAIM_EXTRACTION_MAX_CLAIMS_LIMIT
+    )
+    claim_extraction_max_citations_per_claim: int = Field(
+        default=5, gt=0, le=CLAIM_EXTRACTION_MAX_CITATIONS_PER_CLAIM_LIMIT
+    )
+    claim_extraction_max_evidence: int = Field(
+        default=125, gt=0, le=CLAIM_EXTRACTION_MAX_EVIDENCE_LIMIT
+    )
+
+    @field_validator(
+        "claim_extraction_max_chunks",
+        "claim_extraction_max_input_characters",
+        "claim_extraction_max_input_bytes",
+        "claim_extraction_max_canonical_json_bytes",
+        "claim_extraction_max_claims",
+        "claim_extraction_max_citations_per_claim",
+        "claim_extraction_max_evidence",
+        mode="before",
+    )
+    @classmethod
+    def validate_claim_extraction_limits(
+        cls, value: object, info: ValidationInfo
+    ) -> int:
+        limits = {
+            "claim_extraction_max_chunks": CLAIM_EXTRACTION_MAX_CHUNKS_LIMIT,
+            "claim_extraction_max_input_characters": (
+                CLAIM_EXTRACTION_MAX_INPUT_CHARACTERS_LIMIT
+            ),
+            "claim_extraction_max_input_bytes": CLAIM_EXTRACTION_MAX_INPUT_BYTES_LIMIT,
+            "claim_extraction_max_canonical_json_bytes": (
+                CLAIM_EXTRACTION_MAX_CANONICAL_JSON_BYTES_LIMIT
+            ),
+            "claim_extraction_max_claims": CLAIM_EXTRACTION_MAX_CLAIMS_LIMIT,
+            "claim_extraction_max_citations_per_claim": (
+                CLAIM_EXTRACTION_MAX_CITATIONS_PER_CLAIM_LIMIT
+            ),
+            "claim_extraction_max_evidence": CLAIM_EXTRACTION_MAX_EVIDENCE_LIMIT,
+        }
+        if type(value) is int:
+            parsed = value
+        elif type(value) is str and re.fullmatch(r"[1-9][0-9]*", value):
+            parsed = int(value)
+        else:
+            raise ValueError(f"{info.field_name} is invalid")
+        if parsed > limits[info.field_name]:
+            raise ValueError(f"{info.field_name} is invalid")
+        return parsed
 
     @field_validator("official_discovery_allowed_hosts")
     @classmethod

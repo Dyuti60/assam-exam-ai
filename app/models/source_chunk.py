@@ -57,6 +57,13 @@ class SourceChunk(Base):
             "char_end",
             name="uq_source_chunks_run_range",
         ),
+        UniqueConstraint(
+            "id",
+            "source_extraction_run_id",
+            "source_snapshot_id",
+            "source_id",
+            name="uq_source_chunks_claim_extraction_provenance",
+        ),
         ForeignKeyConstraint(
             [
                 "source_extraction_run_id",

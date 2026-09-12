@@ -2000,3 +2000,22 @@ Independent-review correction evidence (2026-09-12 Asia/Kolkata, UTC+05:30): out
 | Scope | One controlled internal extraction operation, immutable extraction provenance, atomic Evidence/Claim/link persistence, tests, migration, and documentation |
 | Exclusions | No automatic Claim approval, Verification verdict, canonical-content generation, release/publication, embeddings/RAG, scheduling, learner/public delivery, or T-058 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-057 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | One provider-neutral grounded-claim operation over an exact successful SourceExtractionRun and its ordered immutable SourceChunks, plus stored domain-run retrieval |
+| API | `POST /api/v1/source-extraction-runs/{source_extraction_run_id}/claim-extractions`; `GET /api/v1/claim-extraction-runs/{claim_extraction_run_id}` |
+| Persistence | Migration `d7e3a9c5f218`, parent `c9f2a6d4e817`; immutable ClaimExtractionRun with independently ordered Evidence, Claim, and citation provenance associations |
+| Trust | Exact validated chunk slices become Evidence; every generated Claim is DRAFT and UNVERIFIED with null review/verification metadata; existing human review and Verification remain independent |
+| Transactions | Source extraction/chunks and prompt are copied before provider I/O; the coordinator records one terminal AI audit; successful grounded domain persistence commits once, while provider/schema failures create no T-057 rows and unknown failures roll back fully |
+| Validation | Developer-local: 16 focused, 480 source/AI, 35 provenance/T-047, 266 canonical/document/artifact, and 785 full-suite tests passed with one existing warning; Ruff, lock, Alembic, fresh/seeded migration, PostgreSQL, secret, diff, whitespace, and final-newline checks passed on `_test` databases |
+| Boundaries | No automatic approval, Verification generation, canonical notes/questions, content/package/document/artifact generation, release/publication, embeddings/RAG, arbitrary execution API, scheduler/worker, learner/public API, infrastructure, or T-058 |
+
+Independent-review correction (2026-09-13 Asia/Kolkata, UTC+05:30): bounded all request/path IDs to PostgreSQL integer range; made all T-057 limit settings strict, positive, and conservatively bounded; added UTF-8 input, canonical-JSON, and unique-Evidence bounds; rejected non-contiguous stored chunk positions before provider I/O; and defined citation coordinates as zero-based Python Unicode code points with inclusive start and exclusive end. Focused evidence now covers exact canonical audit JSON/hashes, Assamese text, NFC combining behavior, emoji, newlines, overlap chunks, hostile outputs, every configured limit class, caller-session preservation, no added connection during provider I/O, no post-commit SQL, genuine independent-connection PostgreSQL uniqueness concurrency, exact named representative constraint failures, and retained rollback/read-only behavior. T-057 remains Ready for review and unapproved.
+
+Correction validation evidence: 42 focused T-057, 506 T-048–T-057 source/AI, 35 provenance/T-047, 228 canonical/document/artifact, and 811 full-suite tests passed locally with one existing Starlette warning. Changed-file Ruff, lock verification, fresh upgrade, seeded migration cycle, Alembic head/check, direct PostgreSQL probes, diff/whitespace/final-newline, ignored-env, value-suppressing secret, and protected-stash checks passed using only dedicated `_test` databases. No live Gemini or public-network call occurred; this is developer-local evidence, not GitHub CI.

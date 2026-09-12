@@ -40,11 +40,11 @@ This section describes only the repository inspected on 2026-09-12 in Asia/Kolka
 | Logging | Root stdout handler with duplicate-handler protection |
 | Database access | Synchronous SQLAlchemy engine, session factory, and `get_db()` dependency |
 | Local database | Docker Compose defines PostgreSQL 17 using a pgvector image |
-| Migrations | Alembic is connected to application settings and `Base.metadata`; thirty migrations exist, including the prior knowledge/content/source foundations and provider-neutral immutable AI prompt-version and terminal execution-audit persistence |
-| Persistence model | Existing knowledge, canonical-content, deliverable, discovery, fetch, extraction, and provenance models plus immutable `AiPromptVersion` contracts and terminal `AiExecutionRun` structured audit records |
-| Application layers | Existing knowledge layers plus isolated AI schemas, repository, prompt/audit services, provider protocol/coordinator, and Gemini adapter; knowledge-domain services import no Gemini SDK type |
-| Tests | Seven hundred sixty-nine tests cover all prior boundaries plus prompt canonicalization/change sensitivity, closed immutable prompt APIs, concurrent uniqueness, strict shared Settings/execution-option validation, canonical structured execution audits, coordinator-owned read/write session and connection isolation, complete ordinary-Exception Gemini and provider-result boundaries, hostile API-error mapping, exact transaction counts, prompt revalidation, rollback, PostgreSQL constraints including bounded request/model identity and PostgreSQL-rendered safety metadata, read-only audit retrieval, repeated independent runs, and secret safety |
-| Agents | Provider-neutral execution infrastructure exists, but no domain-generating agent is implemented |
+| Migrations | Alembic is connected to application settings and `Base.metadata`; thirty-one migrations exist, including the prior knowledge/content/source and provider-neutral AI foundations plus immutable grounded Claim-extraction provenance |
+| Persistence model | Existing knowledge, canonical-content, deliverable, discovery, fetch, extraction, and AI audit models plus `ClaimExtractionRun` and position-ordered Evidence, Claim, and citation provenance associations |
+| Application layers | Existing knowledge and AI layers plus an isolated provider-neutral grounded Claim-extraction route, strict schemas, service, and repository; domain coordination imports no Gemini SDK type |
+| Tests | Seven hundred eighty-five tests cover all prior boundaries plus bounded grounded-claim input, strict output and citation validation, exact chunk/prompt/execution provenance, DRAFT/UNVERIFIED creation, transaction separation and rollback, stable retrieval, and PostgreSQL integrity |
+| Agents | One controlled grounded Evidence and DRAFT Claim proposal agent exists; independent Claim review and Verification remain separate |
 
 ### Current runtime flow
 
@@ -68,11 +68,16 @@ flowchart TD
     SERVICE --> REPOSITORY["KnowledgeRepository"]
     REPOSITORY --> ENGINE
     AIAPI --> AISCHEMAS["Closed AI schemas"]
+    ROUTER --> CLAIMAPI["Grounded claim-extraction routes"]
     AISCHEMAS --> AICOORDINATOR["Prompt services / coordinator"]
     AICOORDINATOR --> AIREPOSITORY["AiRepository"]
     AICOORDINATOR --> PROVIDER["AiProvider protocol"]
     PROVIDER --> GEMINI["Gemini adapter when enabled"]
     AIREPOSITORY --> ENGINE
+    CLAIMAPI --> CLAIMSERVICE["ClaimExtractionService"]
+    CLAIMSERVICE --> AICOORDINATOR
+    CLAIMSERVICE --> CLAIMREPOSITORY["ClaimExtractionRepository"]
+    CLAIMREPOSITORY --> ENGINE
     ENGINE --> PG["PostgreSQL"]
 ```
 
@@ -116,6 +121,13 @@ erDiagram
     NOTE_DRAFT ||--|{ NOTE_DRAFT_CLAIM : "records in position order"
     CLAIM ||--o{ NOTE_DRAFT_CLAIM : "used by draft"
     AI_PROMPT_VERSION ||--o{ AI_EXECUTION_RUN : "immutable prompt snapshot"
+    SOURCE_EXTRACTION_RUN ||--o{ CLAIM_EXTRACTION_RUN : "grounds proposal run"
+    AI_EXECUTION_RUN ||--o| CLAIM_EXTRACTION_RUN : "authorizes at most one domain run"
+    CLAIM_EXTRACTION_RUN ||--o{ CLAIM_EXTRACTION_EVIDENCE : "orders exact citations"
+    CLAIM_EXTRACTION_RUN ||--o{ CLAIM_EXTRACTION_CLAIM : "orders proposed claims"
+    SOURCE_CHUNK ||--o{ CLAIM_EXTRACTION_EVIDENCE : "provides exact slice"
+    EVIDENCE ||--o| CLAIM_EXTRACTION_EVIDENCE : "retains generated evidence"
+    CLAIM ||--o| CLAIM_EXTRACTION_CLAIM : "retains draft proposal"
 ```
 
 `AiPromptVersion` checksums the canonical sorted, compact, Unicode-preserving UTF-8 JSON representation of its key/version, templates, and input/output schema identifiers. The coordinator validates registered Pydantic contracts and simple named placeholders before I/O, hashes canonical structured input and rendered prompts, and makes at most one provider call without an open database transaction. Afterward it revalidates exact prompt identity/checksum and persists one immutable terminal audit. Provider-returned JSON is strictly validated and canonicalized before storage. Blank credentials are never exposed and yield an audited `AI_PROVIDER_DISABLED` result without outbound I/O; invalid input, prompt rendering, or model configuration is rejected before I/O without an audit row. Shared validation bounds requests to 120 seconds, 8,192 output tokens, temperature 0 through 2, and safe model identifiers up to 128 characters. Temperature zero reduces sampling variability but is not represented as deterministic model output.
@@ -338,3 +350,5 @@ T-054 was independently reviewed after push at immutable commit `47872fea4b0c984
 T-055 was independently reviewed after push at immutable commit 83f253efa3fee0b78c24fcb759e7b09b35b89011, whose exact parent is issuance commit 300b4954057dbd76aaa59007865af71490a69747, and approved with no blocking finding. The reviewed boundary deterministically converts exact immutable SourceSnapshot bytes into terminal extraction audit records and checksummed position-ordered chunks with snapshot/Source/hash provenance, without network or downstream knowledge creation. The committed lock resolves pypdf 6.18.1 inside the documented 6.x extractor contract. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. T-056 is issued separately for provider-neutral AI execution tracking and a Gemini adapter; it creates no Evidence, Claims, Verifications, notes, questions, approvals or releases.
 
 T-056 is approved at implementation commit `34e7d2223a072cdf5d428616a2d6fbae39bc0537`, whose exact parent is issuance commit `b23d98b237c2880b8c17f828f04cd9c063339afa`. The system now has immutable checksummed prompt versions, terminal structured AI execution audits, a provider-neutral coordinator, and an isolated Gemini adapter with bounded secret-safe configuration. Provider I/O occurs outside database transactions, exact prompt provenance is revalidated before one terminal commit, and no arbitrary HTTP execution or generated domain content exists. T-057 is issued separately for a grounded Evidence and DRAFT Claim extraction agent over stored SourceChunks; it must preserve chunk, snapshot, prompt, provider, model, and execution provenance and must never approve Claims automatically.
+
+`POST /api/v1/source-extraction-runs/{source_extraction_run_id}/claim-extractions` is the controlled T-057 proposal boundary. It copies one successful extraction and its contiguous position-ordered chunks, checks a caller-selected immutable prompt against the fixed `grounded-claim-extraction` v1 input/output contracts, enforces configured chunk, character, UTF-8 byte, canonical-JSON, Claim, citation, and unique-Evidence limits, closes the read transaction, and invokes the provider-neutral T-056 coordinator once. A failed provider or structural-schema audit returns a stable conflict and creates no T-057 row; a structurally valid but ungrounded result is retained as a FAILED domain run with no Evidence or Claim. Citation offsets are zero-based Python Unicode code-point offsets relative to the selected chunk, with an inclusive start and exclusive end; the service derives the exact nonblank slice and its UTF-8 SHA-256 from stored text. The service revalidates extraction, chunk, prompt, and execution identity after provider I/O, then commits one complete aggregate of exact-slice Evidence, DRAFT/UNVERIFIED Claims, ordinary Claim-Evidence links, and immutable ordered provenance. PostgreSQL enforces structural ownership, position, range, checksum, lifecycle, uniqueness, and restricted-deletion invariants; semantic substring equality remains a service validation because PostgreSQL cannot cheaply enforce it. `GET /api/v1/claim-extraction-runs/{claim_extraction_run_id}` returns only stored audit and membership data without provider I/O, grounding repair, locks, or writes. Claim review and Verification remain independent, and no canonical content, release, publication, embedding/RAG, or learner behavior is created.

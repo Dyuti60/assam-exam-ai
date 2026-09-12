@@ -62,6 +62,14 @@ class SourceExtractionRun(Base):
             "status",
             name="uq_source_extraction_runs_id_snapshot_source_status",
         ),
+        UniqueConstraint(
+            "id",
+            "source_snapshot_id",
+            "source_id",
+            "snapshot_sha256",
+            "status",
+            name="uq_source_extraction_runs_claim_extraction_provenance",
+        ),
         ForeignKeyConstraint(
             ["source_snapshot_id", "source_id", "snapshot_sha256"],
             ["source_snapshots.id", "source_snapshots.source_id", "source_snapshots.sha256"],

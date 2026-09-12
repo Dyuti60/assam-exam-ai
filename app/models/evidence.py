@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, Text
+from sqlalchemy import ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -11,6 +11,13 @@ if TYPE_CHECKING:
 
 class Evidence(Base):
     __tablename__ = "evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "source_id",
+            name="uq_evidence_id_source",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,

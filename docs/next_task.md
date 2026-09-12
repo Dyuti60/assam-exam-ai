@@ -10009,3 +10009,19 @@ Run focused T-057 tests, complete T-053–T-057 source/AI tests, Source/Evidence
 Explicitly exclude automatic Claim approval, generated Verification verdicts, NoteDraft/QuestionBankItem creation, content/package/document/artifact generation, release/publication, embeddings/vector/RAG, arbitrary prompt execution, source discovery/fetch/extraction changes, retry/scheduler/queue/worker, learner/public APIs, authentication, deployment, infrastructure, and T-058.
 
 Leave T-057 uncommitted and unpushed for independent review. Do not commit, push, create a PR, self-approve, define T-058, or implement T-058.
+
+---
+
+## T-057 implementation note
+
+Status: **Ready for review**.
+
+Implemented the two bounded internal routes, the closed `grounded-claim-extraction` v1 contracts, provider-neutral coordinator integration, exact citation grounding, immutable domain-run and ordered provenance models, and migration `d7e3a9c5f218` after `c9f2a6d4e817`. Successful results atomically create exact-slice Evidence and only DRAFT/UNVERIFIED Claims. Provider or structural-schema failures retain the terminal AI audit but create no T-057 rows; semantic grounding failures retain a FAILED domain run with no Evidence or Claims. Retrieval returns stored order and provenance without provider work or mutation.
+
+Developer-local PostgreSQL evidence: 16 focused T-057 tests, 480 T-048–T-057 source/AI tests, 35 Source/Evidence/Claim/Verification and T-047 tests, 266 canonical-content/document/artifact regressions, and 785 full-suite tests passed with one existing Starlette warning. Ruff, `uv lock --check`, Alembic head/check, fresh upgrade, seeded `c9f2a6d4e817 → d7e3a9c5f218 → c9f2a6d4e817 → d7e3a9c5f218`, direct PostgreSQL probes, secret scan, and diff/whitespace/final-newline checks passed on dedicated `_test` databases. These are local developer results, not GitHub CI. No live Gemini or public-network call occurred.
+
+No automatic Claim approval, generated Verification, NoteDraft/QuestionBankItem or deliverable generation, release/publication, embeddings/vector/RAG, arbitrary prompt execution, source pipeline changes, retry/scheduler/worker, learner/public API, authentication, deployment, infrastructure, or T-058 work was added. T-057 is not approved.
+
+Independent-review correction note (2026-09-13 Asia/Kolkata, UTC+05:30): T-057 now uses strict PostgreSQL-range request/path IDs; strict positive bounded configuration; explicit chunk-count, character, UTF-8 byte, canonical-JSON, Claim, citation, and unique-Evidence limits; and pre-provider contiguous chunk-position validation. Citation coordinates are explicitly zero-based Python Unicode code-point offsets relative to one selected chunk, with inclusive start and exclusive end. Expanded local PostgreSQL-backed tests cover canonical audited input, Assamese/NFC-combining/emoji/newline/overlap slices, hostile schema and grounding cases, configuration and output bounds, caller-session and transaction behavior, genuine independent-connection uniqueness concurrency, and exact representative named constraints. T-057 remains Ready for review and unapproved; T-058 is neither defined nor implemented.
+
+Correction validation note: developer-local runs passed 42 focused T-057, 506 T-048–T-057 source/AI, 35 provenance/T-047, 228 canonical/document/artifact, and 811 full-suite tests with one existing Starlette warning. Ruff, dependency lock, fresh and seeded migration validation, Alembic head/check, PostgreSQL probes, diff/whitespace/final-newline, secret, ignored-env, and protected-stash checks passed using dedicated `_test` databases. No live Gemini/public-network request or GitHub CI claim occurred. T-057 remains Ready for review and unapproved; T-058 remains undefined and unimplemented.

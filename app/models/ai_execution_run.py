@@ -20,6 +20,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.ai_prompt_version import AiPromptVersion
+    from app.models.claim_extraction_run import ClaimExtractionRun
 
 
 class AiExecutionRun(Base):
@@ -99,6 +100,17 @@ class AiExecutionRun(Base):
             name="ck_ai_execution_runs_safety_metadata",
         ),
         UniqueConstraint("request_id", name="uq_ai_execution_runs_request_id"),
+        UniqueConstraint(
+            "id",
+            "ai_prompt_version_id",
+            "prompt_key",
+            "prompt_version",
+            "prompt_checksum",
+            "provider_key",
+            "model_id",
+            "status",
+            name="uq_ai_execution_runs_claim_extraction_provenance",
+        ),
         ForeignKeyConstraint(
             ["ai_prompt_version_id", "prompt_key", "prompt_version", "prompt_checksum"],
             [
@@ -147,4 +159,15 @@ class AiExecutionRun(Base):
     prompt_version_record: Mapped["AiPromptVersion"] = relationship(
         back_populates="executions",
         foreign_keys=[ai_prompt_version_id, prompt_key, prompt_version, prompt_checksum],
+    )
+    claim_extraction_run: Mapped["ClaimExtractionRun | None"] = relationship(
+        foreign_keys=(
+            "[ClaimExtractionRun.ai_execution_run_id, "
+            "ClaimExtractionRun.ai_prompt_version_id, ClaimExtractionRun.prompt_key, "
+            "ClaimExtractionRun.prompt_version, ClaimExtractionRun.prompt_checksum, "
+            "ClaimExtractionRun.provider_key, ClaimExtractionRun.model_id, "
+            "ClaimExtractionRun.ai_execution_status]"
+        ),
+        uselist=False,
+        overlaps="ai_execution",
     )

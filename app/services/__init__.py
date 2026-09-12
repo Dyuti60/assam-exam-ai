@@ -11,6 +11,9 @@ __all__ = [
     "AiPromptService",
     "AiProvider",
     "AiProviderError",
+    "ClaimExtractionConflictError",
+    "ClaimExtractionNotFoundError",
+    "ClaimExtractionService",
     "InvalidRequestError",
     "KnowledgeService",
     "ResourceConflictError",
@@ -22,4 +25,9 @@ from app.services.ai import (
     AiPromptService,
     AiProvider,
     AiProviderError,
+)
+from app.services.claim_extraction import (
+    ClaimExtractionConflictError,
+    ClaimExtractionNotFoundError,
+    ClaimExtractionService,
 )
