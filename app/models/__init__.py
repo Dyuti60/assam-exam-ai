@@ -21,7 +21,9 @@ from app.models.question_bank_option import QuestionBankOption
 from app.models.source import Source
 from app.models.source_candidate import SourceCandidate
 from app.models.source_candidate_promotion import SourceCandidatePromotion
+from app.models.source_chunk import SourceChunk
 from app.models.source_discovery_run import SourceDiscoveryRun
+from app.models.source_extraction_run import SourceExtractionRun
 from app.models.source_fetch_run import SourceFetchRun
 from app.models.source_snapshot import SourceSnapshot
 from app.models.syllabus_version import SyllabusVersion
@@ -51,7 +53,9 @@ __all__ = [
     "Source",
     "SourceCandidate",
     "SourceCandidatePromotion",
+    "SourceChunk",
     "SourceDiscoveryRun",
+    "SourceExtractionRun",
     "SourceFetchRun",
     "SourceSnapshot",
     "SyllabusVersion",

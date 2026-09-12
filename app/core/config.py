@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     source_fetch_response_max_bytes: int = Field(default=5_242_880, gt=0)
     source_fetch_redirect_limit: int = Field(default=3, ge=0)
     source_fetch_user_agent: str = "AssamExamAI-SourceFetch/1.0"
+    source_extraction_max_input_bytes: int = Field(default=5_242_880, gt=0)
+    source_extraction_max_characters: int = Field(default=2_000_000, gt=0)
+    source_extraction_max_chunks: int = Field(default=5_000, gt=0)
 
     @field_validator("official_discovery_allowed_hosts")
     @classmethod
@@ -76,6 +79,10 @@ class Settings(BaseSettings):
         if self.source_fetch_response_max_bytes > self.source_snapshot_max_bytes:
             raise ValueError(
                 "source fetch response limit cannot exceed source snapshot limit"
+            )
+        if self.source_extraction_max_input_bytes > self.source_snapshot_max_bytes:
+            raise ValueError(
+                "source extraction input limit cannot exceed source snapshot limit"
             )
         return self
 

@@ -46,6 +46,7 @@ from app.schemas.knowledge import (
     SourceCreate,
     SourceDiscoveryRunCreate,
     SourceDiscoveryRunResponse,
+    SourceExtractionRunResponse,
     SourceFetchRunCreate,
     SourceFetchRunResponse,
     SourceResponse,
@@ -241,6 +242,39 @@ def get_source_snapshot(
 ) -> SourceSnapshotResponse:
     try:
         return KnowledgeService(db).get_source_snapshot(source_snapshot_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+
+
+@router.post(
+    "/source-snapshots/{source_snapshot_id}/extractions",
+    response_model=SourceExtractionRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_source_extraction(
+    source_snapshot_id: int,
+    db: DatabaseSession,
+) -> SourceExtractionRunResponse:
+    try:
+        return KnowledgeService(db).create_source_extraction(source_snapshot_id)
+    except ResourceNotFoundError as error:
+        raise _not_found(error) from error
+    except ResourceConflictError as error:
+        raise _conflict(error) from error
+
+
+@router.get(
+    "/source-extraction-runs/{source_extraction_run_id}",
+    response_model=SourceExtractionRunResponse,
+)
+def get_source_extraction_run(
+    source_extraction_run_id: int,
+    db: DatabaseSession,
+) -> SourceExtractionRunResponse:
+    try:
+        return KnowledgeService(db).get_source_extraction_run(
+            source_extraction_run_id
+        )
     except ResourceNotFoundError as error:
         raise _not_found(error) from error
 

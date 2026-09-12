@@ -56,6 +56,12 @@ class SourceSnapshot(Base):
             "source_fetch_run_id",
             name="uq_source_snapshots_source_fetch_run_id",
         ),
+        UniqueConstraint(
+            "id",
+            "source_id",
+            "sha256",
+            name="uq_source_snapshots_id_source_sha256",
+        ),
         ForeignKeyConstraint(
             [
                 "source_fetch_run_id",

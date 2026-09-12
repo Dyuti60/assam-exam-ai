@@ -45,6 +45,11 @@ class SourceFetchStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class SourceExtractionStatus(StrEnum):
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
 class SourceSnapshotContentType(StrEnum):
     PDF = "application/pdf"
     TEXT = "text/plain"
@@ -322,6 +327,33 @@ class SourceFetchRunResponse(BaseModel):
     error_code: str | None
     created_at: datetime
     snapshot: SourceSnapshotResponse | None
+
+
+class SourceChunkResponse(BaseModel):
+    id: int
+    source_extraction_run_id: int
+    source_snapshot_id: int
+    source_id: int
+    position: int
+    char_start: int
+    char_end: int
+    text: str
+    sha256: str
+    created_at: datetime
+
+
+class SourceExtractionRunResponse(BaseModel):
+    id: int
+    source_snapshot_id: int
+    source_id: int
+    snapshot_sha256: str
+    extractor_key: str
+    status: SourceExtractionStatus
+    error_code: str | None
+    text_char_count: int | None
+    text_sha256: str | None
+    created_at: datetime
+    chunks: list[SourceChunkResponse]
 
 
 class SourceCandidatePromotionResponse(BaseModel):

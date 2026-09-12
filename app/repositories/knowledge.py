@@ -23,6 +23,7 @@ from app.models import (
     SourceCandidate,
     SourceCandidatePromotion,
     SourceDiscoveryRun,
+    SourceExtractionRun,
     SourceFetchRun,
     SourceSnapshot,
     SyllabusVersion,
@@ -79,6 +80,56 @@ class KnowledgeRepository:
     ) -> SourceSnapshot | None:
         statement = select(SourceSnapshot).where(
             SourceSnapshot.id == source_snapshot_id
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
+    def get_source_snapshot_exact(
+        self,
+        source_snapshot_id: int,
+        source_id: int,
+        content_type: str,
+        byte_size: int,
+        snapshot_sha256: str,
+    ) -> SourceSnapshot | None:
+        statement = select(SourceSnapshot).where(
+            SourceSnapshot.id == source_snapshot_id,
+            SourceSnapshot.source_id == source_id,
+            SourceSnapshot.content_type == content_type,
+            SourceSnapshot.byte_size == byte_size,
+            SourceSnapshot.sha256 == snapshot_sha256,
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
+    def get_source_extraction_for_snapshot(
+        self,
+        source_snapshot_id: int,
+        extractor_key: str,
+    ) -> SourceExtractionRun | None:
+        statement = select(SourceExtractionRun).where(
+            SourceExtractionRun.source_snapshot_id == source_snapshot_id,
+            SourceExtractionRun.extractor_key == extractor_key,
+        )
+        with self.session.no_autoflush:
+            return self.session.scalar(statement)
+
+    def add_source_extraction_run(
+        self,
+        source_extraction_run: SourceExtractionRun,
+    ) -> SourceExtractionRun:
+        self.session.add(source_extraction_run)
+        self.session.flush()
+        return source_extraction_run
+
+    def get_source_extraction_run(
+        self,
+        source_extraction_run_id: int,
+    ) -> SourceExtractionRun | None:
+        statement = (
+            select(SourceExtractionRun)
+            .options(selectinload(SourceExtractionRun.chunks))
+            .where(SourceExtractionRun.id == source_extraction_run_id)
         )
         with self.session.no_autoflush:
             return self.session.scalar(statement)

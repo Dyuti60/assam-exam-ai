@@ -1904,3 +1904,18 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Architectural phase | Content Factory / Ingestion Foundation |
 | Scope | Extraction-run/chunk models, migration, create/read APIs, bounded parsers, deterministic normalization/chunking, constraints, atomicity, tests and documentation; no AI, Gemini key, embeddings, Evidence/Claim generation or T-056 |
 | Full implementation prompt | Appended to `docs/next_task.md` |
+
+---
+
+## T-055 implementation record
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for review |
+| Scope | Deterministic local extraction of immutable SourceSnapshot bytes into terminal versioned runs and immutable ordered chunks; no network or AI |
+| API | `POST /api/v1/source-snapshots/{source_snapshot_id}/extractions` and `GET /api/v1/source-extraction-runs/{source_extraction_run_id}` with 201/200/404/409 behavior |
+| Persistence | Migration `b8f4e1c7d526`, parent `a9d3f6c2e841`; adds extraction runs, ordered chunks, exact snapshot/Source/checksum provenance, terminal/range/checksum/uniqueness constraints, and restricted parent deletion |
+| Parsing | Fixed `deterministic-text-v1` local parsers cover text, visible HTML, structural JSON, safe XML, and `pypdf` 6.x PDF; deterministic normalization and fixed 1,000/100 character chunk/overlap rules retain exact offsets and hashes |
+| Transactions | Snapshot data is copied and the read transaction ended before parsing; exact provenance is revalidated; one complete SUCCEEDED or FAILED aggregate commits once, and persistence failures roll back fully |
+| Validation | Developer-run local evidence: 31 focused and 554 full-suite tests passed with one existing warning; migration, PostgreSQL, Ruff, lock, Alembic, and diff checks passed on dedicated `_test` databases |
+| Notes | T-055 is not approved. No network, OCR, evidence/claim generation, canonical content, embeddings/RAG, AI/provider/API key, scheduler, learner/public behavior, infrastructure, T-056 definition, or T-056 implementation was added. |

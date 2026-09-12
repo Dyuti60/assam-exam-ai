@@ -28,7 +28,9 @@ from app.models import (
     Source,
     SourceCandidate,
     SourceCandidatePromotion,
+    SourceChunk,
     SourceDiscoveryRun,
+    SourceExtractionRun,
     SourceFetchRun,
     SourceSnapshot,
     SyllabusVersion,
@@ -87,6 +89,8 @@ from app.schemas.knowledge import (
     SourceCreate,
     SourceDiscoveryRunCreate,
     SourceDiscoveryRunResponse,
+    SourceExtractionRunResponse,
+    SourceExtractionStatus,
     SourceFetchRunCreate,
     SourceFetchRunResponse,
     SourceFetchStatus,
@@ -108,6 +112,11 @@ from app.services.official_site_discovery import (
     OfficialSiteDiscoveryAdapter,
 )
 from app.services.pdf_renderer import render_content_document_pdf
+from app.services.source_extractor import (
+    EXTRACTOR_KEY,
+    SourceExtractionError,
+    extract_document,
+)
 from app.services.source_fetch_executor import SourceFetchExecutor, SourceFetchResult
 
 
@@ -300,6 +309,132 @@ class KnowledgeService:
         if source_snapshot is None:
             raise ResourceNotFoundError("SourceSnapshot", source_snapshot_id)
         return self._source_snapshot_response(source_snapshot)
+
+    def create_source_extraction(
+        self,
+        source_snapshot_id: int,
+    ) -> SourceExtractionRunResponse:
+        source_snapshot = self.repository.get_source_snapshot(source_snapshot_id)
+        if source_snapshot is None:
+            raise ResourceNotFoundError("SourceSnapshot", source_snapshot_id)
+        if self.repository.get_source_extraction_for_snapshot(
+            source_snapshot_id,
+            EXTRACTOR_KEY,
+        ) is not None:
+            raise ResourceConflictError(
+                f"SourceSnapshot {source_snapshot_id} already has extraction "
+                f"{EXTRACTOR_KEY}"
+            )
+
+        source_id = source_snapshot.source_id
+        content_type = source_snapshot.content_type
+        byte_size = source_snapshot.byte_size
+        snapshot_sha256 = source_snapshot.sha256
+        content_bytes = bytes(source_snapshot.content_bytes)
+        self.session.rollback()
+
+        try:
+            extracted = extract_document(
+                content_bytes,
+                content_type,
+                max_input_bytes=settings.source_extraction_max_input_bytes,
+                max_characters=settings.source_extraction_max_characters,
+                max_chunks=settings.source_extraction_max_chunks,
+            )
+        except SourceExtractionError as error:
+            status = SourceExtractionStatus.FAILED.value
+            error_code = error.code
+            text_char_count = None
+            text_sha256 = None
+            chunks: list[SourceChunk] = []
+        else:
+            status = SourceExtractionStatus.SUCCEEDED.value
+            error_code = None
+            text_char_count = len(extracted.text)
+            text_sha256 = extracted.sha256
+            chunks = [
+                SourceChunk(
+                    source_snapshot_id=source_snapshot_id,
+                    source_id=source_id,
+                    run_status=SourceExtractionStatus.SUCCEEDED.value,
+                    position=chunk.position,
+                    char_start=chunk.char_start,
+                    char_end=chunk.char_end,
+                    text=chunk.text,
+                    sha256=chunk.sha256,
+                )
+                for chunk in extracted.chunks
+            ]
+
+        current_snapshot = self.repository.get_source_snapshot_exact(
+            source_snapshot_id,
+            source_id,
+            content_type,
+            byte_size,
+            snapshot_sha256,
+        )
+        if current_snapshot is None:
+            raise ResourceNotFoundError("SourceSnapshot", source_snapshot_id)
+        if self.repository.get_source_extraction_for_snapshot(
+            source_snapshot_id,
+            EXTRACTOR_KEY,
+        ) is not None:
+            raise ResourceConflictError(
+                f"SourceSnapshot {source_snapshot_id} already has extraction "
+                f"{EXTRACTOR_KEY}"
+            )
+
+        extraction_run = SourceExtractionRun(
+            source_snapshot_id=source_snapshot_id,
+            source_id=source_id,
+            snapshot_sha256=snapshot_sha256,
+            extractor_key=EXTRACTOR_KEY,
+            status=status,
+            error_code=error_code,
+            text_char_count=text_char_count,
+            text_sha256=text_sha256,
+            chunks=chunks,
+        )
+        try:
+            self.repository.add_source_extraction_run(extraction_run)
+            extraction_run_id = extraction_run.id
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            diagnostic = getattr(error.orig, "diag", None)
+            if (
+                getattr(diagnostic, "constraint_name", None)
+                != "uq_source_extraction_runs_snapshot_extractor"
+            ):
+                raise
+            raise ResourceConflictError(
+                f"SourceSnapshot {source_snapshot_id} already has extraction "
+                f"{EXTRACTOR_KEY}"
+            ) from error
+        except Exception:
+            self.session.rollback()
+            raise
+
+        stored_run = self.repository.get_source_extraction_run(extraction_run_id)
+        if stored_run is None:
+            raise RuntimeError(
+                f"SourceExtractionRun {extraction_run_id} missing after creation"
+            )
+        return self._source_extraction_run_response(stored_run)
+
+    def get_source_extraction_run(
+        self,
+        source_extraction_run_id: int,
+    ) -> SourceExtractionRunResponse:
+        extraction_run = self.repository.get_source_extraction_run(
+            source_extraction_run_id
+        )
+        if extraction_run is None:
+            raise ResourceNotFoundError(
+                "SourceExtractionRun",
+                source_extraction_run_id,
+            )
+        return self._source_extraction_run_response(extraction_run)
 
     def create_source_discovery_run(
         self,
@@ -1955,6 +2090,38 @@ class KnowledgeService:
                 "ascii"
             ),
             created_at=source_snapshot.created_at,
+        )
+
+    @staticmethod
+    def _source_extraction_run_response(
+        extraction_run: SourceExtractionRun,
+    ) -> SourceExtractionRunResponse:
+        return SourceExtractionRunResponse(
+            id=extraction_run.id,
+            source_snapshot_id=extraction_run.source_snapshot_id,
+            source_id=extraction_run.source_id,
+            snapshot_sha256=extraction_run.snapshot_sha256,
+            extractor_key=extraction_run.extractor_key,
+            status=extraction_run.status,
+            error_code=extraction_run.error_code,
+            text_char_count=extraction_run.text_char_count,
+            text_sha256=extraction_run.text_sha256,
+            created_at=extraction_run.created_at,
+            chunks=[
+                {
+                    "id": chunk.id,
+                    "source_extraction_run_id": chunk.source_extraction_run_id,
+                    "source_snapshot_id": chunk.source_snapshot_id,
+                    "source_id": chunk.source_id,
+                    "position": chunk.position,
+                    "char_start": chunk.char_start,
+                    "char_end": chunk.char_end,
+                    "text": chunk.text,
+                    "sha256": chunk.sha256,
+                    "created_at": chunk.created_at,
+                }
+                for chunk in extraction_run.chunks
+            ],
         )
 
     @staticmethod
