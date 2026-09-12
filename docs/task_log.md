@@ -1876,3 +1876,31 @@ The QuestionBankItem remains an internal, unreviewed and unreleased candidate. T
 | Persistence | No model or migration change; exact raw success bytes or controlled failure metadata use existing `SourceFetchRun`/`SourceSnapshot` tables; Alembic head remains `a9d3f6c2e841` |
 | Tests | Developer-run local evidence: 54 focused T-054, 218 complete T-048–T-054 source, and 523 full-suite tests passed with one existing warning; required regressions and static/database checks passed on dedicated `_test` databases |
 | Notes | T-054 is not approved. No sitemap traversal, crawler, retry, scheduling, extraction, downstream knowledge, Source mutation, AI/LLM, learner/public behavior, infrastructure, T-055 definition, or T-055 implementation was added. |
+
+---
+
+## T-054 review outcome
+
+| Field | Value |
+| --- | --- |
+| Task ID | `T-054` |
+| Implementation commit | `47872fea4b0c984d0c484c697edfad753eeae742` |
+| Base/task-issuance commit | `a821b18b6a768b762cc4bac73c462bc20adc7577` |
+| Review state | **APPROVED** |
+| Approved capability | One synchronous allowlisted, robots-aware, bounded Source fetch that records a sanitized terminal run and exact successful immutable snapshot through T-053 |
+| Persistence | Existing `SourceFetchRun`/`SourceSnapshot` aggregate; no model or migration change, Alembic head remains `a9d3f6c2e841` |
+| Validation evidence | Developer-recorded: 54 focused, 146 T-052–T-054 compatibility, 218 complete source, 35 provenance/T-047, 228 canonical/document/artifact and 523 full-suite tests; Ruff, lock, fresh upgrade, Alembic and diff checks passed. GitHub exposes no status contexts or workflow runs, so no CI pass is claimed. |
+| Review findings | Exact one-commit diff matches the issued endpoint, outbound policy, robots enforcement, resource cleanup, transaction separation, Source revalidation, shared raw-byte persistence, atomicity, tests, documentation and exclusions with no blocking finding. |
+| Boundaries | No extraction, chunks, OCR, crawler, retry, scheduling, queue, Source mutation, downstream knowledge creation, provider/API key, AI/LLM, learner/public behavior or infrastructure. |
+
+---
+
+## T-055 issued — Deterministic SourceSnapshot extraction and ordered chunks
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for VS Code Codex; not implemented |
+| Goal | Deterministically extract normalized text from one immutable successful SourceSnapshot and persist an immutable, checksummed, position-ordered chunk set with exact provenance |
+| Architectural phase | Content Factory / Ingestion Foundation |
+| Scope | Extraction-run/chunk models, migration, create/read APIs, bounded parsers, deterministic normalization/chunking, constraints, atomicity, tests and documentation; no AI, Gemini key, embeddings, Evidence/Claim generation or T-056 |
+| Full implementation prompt | Appended to `docs/next_task.md` |

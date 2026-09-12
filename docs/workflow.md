@@ -1733,3 +1733,15 @@ flowchart LR
 - Source lookup is rolled back before network I/O, so no database transaction or lock spans robots or Source fetching. After I/O, the service revalidates exact Source identity/location and passes raw bytes or failure metadata into the shared T-053 aggregate creator. Success and controlled failure commit once; persistence failures roll back and propagate.
 - Developer-run local evidence: 54 focused T-054 tests and 218 complete T-048–T-054 source tests passed with the existing warning. The full suite passed 523 tests with the same warning. Required provenance, T-047, canonical/document/artifact regressions, Ruff, dependency-lock, unchanged Alembic head/check, fresh upgrade and diff checks passed on dedicated `_test` databases.
 - T-054 is Ready for review, not approved. No migration, model, dependency, sitemap discovery, crawler, retry, scheduler, queue, extraction, Evidence/Claim/Verification creation, Source mutation, AI/LLM, learner/public API, infrastructure, T-055 definition, or T-055 implementation was added.
+
+### T-054 post-push review and T-055 issuance
+
+- **APPROVED** at immutable implementation commit `47872fea4b0c984d0c484c697edfad753eeae742`, whose exact parent is T-054 issuance commit `a821b18b6a768b762cc4bac73c462bc20adc7577`.
+- The one-commit diff adds only the controlled Source fetch route, dedicated validated settings, an injectable executor, a generalized pinned HTTPS client, exact T-053 raw-byte persistence reuse, focused tests, and current-state documentation.
+- URL, allowlist, all-address DNS, IP-pinned hostname-verified TLS, redirect, robots, status, content-type, byte and timeout policies are applied before persistence. Response, connection, TLS and raw sockets close on success and every failure path.
+- Stored unsafe Source locations become sanitized terminal FAILED attempts without network access. Successful bytes enter the shared persistence path without a base64 round trip; Source identity/location is revalidated after network work.
+- The initial Source read transaction is ended before robots or content I/O. Terminal results commit once, persistence failures roll back and propagate, and composite constraints remain the final authority for concurrent Source identity changes.
+- Developer-recorded evidence is 54 focused T-054 tests, 146 T-052–T-054 compatibility tests, 218 complete T-048–T-054 source tests, 35 provenance/T-047 tests, 228 canonical/document/artifact regressions and 523 full-suite tests, plus successful Ruff, dependency-lock, fresh upgrade, Alembic and diff checks.
+- GitHub exposes no status contexts or workflow runs, so no CI pass is claimed.
+- No migration, model, dependency, crawler, retry, scheduler, extraction, chunks, downstream knowledge creation, AI/LLM, learner/public behavior or infrastructure was included.
+- T-055 separately adds deterministic extraction and immutable ordered chunks from stored successful SourceSnapshots. It requires no Gemini key and performs no AI generation.

@@ -9437,3 +9437,204 @@ Do not define or implement T-055.
 ## T-054 implementation note
 
 Implementation note (2026-09-12 Asia/Kolkata, UTC+05:30): added exactly `POST /api/v1/sources/{source_id}/fetch`, accepting no body and recording one synchronous terminal attempt through the existing T-053 response and persistence boundary. The executor uses only the stored Source URL, a dedicated validated allowlist/user-agent/time/byte/redirect configuration, the generalized cleanup-safe T-052 pinned HTTPS client, all-answer public-IP validation, hostname-verified TLS, redirect revalidation, and a fresh bounded canonical robots decision. Stable sanitized failures persist without snapshots; successful supported responses preserve exact raw bytes and normalized type while T-053 derives size and lowercase SHA-256. The Source lookup transaction ends before network I/O, exact identity/location is revalidated before persistence, the aggregate commits once, and persistence failures roll back. Developer-run local evidence: 54 focused, 218 complete source, and 523 full-suite tests passed with one existing warning; required regressions, Ruff, lock, unchanged Alembic head/check, fresh upgrade, and diff checks passed on dedicated `_test` databases. T-054 is Ready for review, not approved. No migration/model/dependency change, sitemap traversal, crawler, retry, scheduler, extraction, Source mutation, downstream knowledge, AI/LLM, learner/public API, infrastructure, T-055 definition, or T-055 implementation was added.
+
+# T-055 — Deterministic SourceSnapshot extraction and ordered chunk persistence
+
+## Context and objective
+
+T-053 stores exact immutable successful SourceSnapshot bytes, and T-054 safely executes a controlled Source fetch into that persistence boundary. Add the deterministic ingestion layer that converts one stored successful snapshot into normalized text and an immutable ordered set of chunks with exact snapshot, Source, checksum, extractor-version and character-offset provenance.
+
+This task is deterministic parsing and persistence only. It must not call Gemini or any other AI provider, and it requires no API key. Do not create Evidence, Claims, Verifications, NoteDrafts, QuestionBankItems, embeddings, vector indexes, RAG retrieval, or orchestration.
+
+## Starting-state verification
+
+1. Confirm branch `main`, fetch `origin/main`, require a clean working tree, and require HEAD to be the documentation commit that approves T-054 and issues T-055.
+2. Confirm T-054 implementation commit `47872fea4b0c984d0c484c697edfad753eeae742` has exact parent `a821b18b6a768b762cc4bac73c462bc20adc7577`.
+3. Read T-053/T-054 SourceFetchRun and SourceSnapshot models, schemas, repository/service/routes, migrations and tests; also inspect dependencies, settings, Docker and documentation.
+4. Confirm one Alembic head `a9d3f6c2e841`. Stop and report any material divergence before editing.
+
+## API boundaries
+
+Add exactly:
+
+- `POST /api/v1/source-snapshots/{source_snapshot_id}/extractions`
+- `GET /api/v1/source-extraction-runs/{source_extraction_run_id}`
+
+The POST accepts no request body and returns HTTP 201 with one stored terminal extraction response. The GET returns the identical stored response and ordered chunks without reparsing or repair.
+
+Use stable resource errors:
+
+- missing snapshot: `SourceSnapshot <id> not found` — HTTP 404;
+- missing run: `SourceExtractionRun <id> not found` — HTTP 404;
+- duplicate extraction for the same snapshot and extractor version: `SourceSnapshot <id> already has extraction <extractor_key>` — HTTP 409.
+
+A controlled parser/encoding/limit failure returns HTTP 201 with a terminal FAILED run, one bounded stable error code, and no chunks. Persistence failures must roll back and propagate; do not translate them into parser failures.
+
+Do not add list, update, delete, retry, approval, release, promotion, or downstream-generation endpoints.
+
+## Persistence model
+
+Add `SourceExtractionRun` and `SourceChunk` with a new migration whose parent is `a9d3f6c2e841`.
+
+Each SourceExtractionRun must retain at least:
+
+- identity;
+- exact `source_snapshot_id` and `source_id`;
+- exact copied snapshot SHA-256;
+- fixed `extractor_key = "deterministic-text-v1"`;
+- terminal `SUCCEEDED` or `FAILED` status;
+- nullable stable `error_code`;
+- server-derived normalized-text character count;
+- server-derived normalized-text lowercase SHA-256 for SUCCEEDED;
+- stored UTC creation time.
+
+Each SourceChunk must retain at least:
+
+- identity;
+- exact extraction-run, SourceSnapshot and Source ownership;
+- zero-based `position`;
+- exact normalized-text `char_start` and exclusive `char_end`;
+- nonblank chunk text;
+- lowercase SHA-256 of the exact UTF-8 chunk bytes;
+- stored UTC creation time.
+
+Enforce with named PostgreSQL constraints and matching model metadata:
+
+- one extraction per `(source_snapshot_id, extractor_key)`;
+- terminal run metadata consistency: SUCCEEDED has text count/hash and at least one service-created chunk; FAILED has an error code, null success metadata and no service-created chunks;
+- exact run/snapshot/Source/snapshot-hash agreement through composite keys where practical;
+- exact chunk/run/snapshot/Source agreement;
+- unique chunk position and unique `(char_start, char_end)` within a run;
+- non-negative position/start, `char_end > char_start`, nonblank text, valid lowercase SHA-256 and positive success counts;
+- restricted deletion of referenced SourceSnapshots and Sources; cascade chunks only with their parent extraction run.
+
+Document honestly that PostgreSQL cannot cheaply require a successful parent to own at least one child without a circular/deferred design; the service must construct the complete successful aggregate atomically.
+
+Do not infer extraction rows or chunks for historical snapshots during upgrade. Downgrade must remove only T-055 objects and supporting constraints/indexes.
+
+## Supported content and deterministic extraction
+
+Support every currently accepted SourceSnapshot content type:
+
+- `text/plain`
+- `text/html`
+- `application/json`
+- `application/xml`
+- `text/xml`
+- `application/pdf`
+
+Rules:
+
+- Never fetch network resources during extraction.
+- Work only from the exact stored snapshot bytes and stored content type.
+- Enforce configured positive limits for input bytes, extracted characters and retained chunk count before persistence.
+- `text/plain`: strict UTF-8 decode, allowing a UTF-8 BOM only if handled deterministically.
+- HTML: parse locally; ignore comments, declarations, scripts, styles and non-visible metadata; extract visible text in document order; never resolve links or external entities.
+- JSON: strict UTF-8 and strict JSON parse; produce deterministic human-readable text from scalar values in structural order with a documented stable separator policy.
+- XML: reject DTD/entity declarations; parse without external resolution; extract text/tail content in document order.
+- PDF: extract pages in stored order using a suitable local library. Pin or constrain any newly required dependency in `pyproject.toml` and regenerate `uv.lock`. Record the extractor/library version in or as part of the fixed extractor contract, and test encrypted, malformed and textless PDFs as controlled failures. Do not add OCR.
+- Normalize Unicode to NFC; normalize CRLF/CR to LF; convert non-breaking space consistently; remove disallowed control characters; trim trailing horizontal whitespace; collapse excessive blank lines using one explicitly documented deterministic rule; trim outer blank space; require nonempty normalized text; end the normalized text with exactly one newline.
+- Compute the normalized-text SHA-256 from its exact UTF-8 bytes.
+
+Use bounded stable failure codes such as `EXTRACTION_UNSUPPORTED_CONTENT_TYPE`, `EXTRACTION_INVALID_ENCODING`, `EXTRACTION_INVALID_DOCUMENT`, `EXTRACTION_ENCRYPTED_PDF`, `EXTRACTION_EMPTY_TEXT`, `EXTRACTION_INPUT_TOO_LARGE`, `EXTRACTION_TEXT_TOO_LARGE`, and `EXTRACTION_CHUNK_LIMIT`. Never persist source bytes, extracted text, parser exception text, paths, secrets or stack traces in an error code.
+
+## Deterministic chunking
+
+Use fixed versioned chunking rules under `deterministic-text-v1`; do not accept caller-supplied chunk parameters.
+
+- Define conservative fixed maximum chunk characters and overlap characters, with overlap strictly smaller than the maximum.
+- Prefer the last paragraph boundary, then newline, then whitespace within the allowed window; otherwise split exactly at the maximum character boundary.
+- Advance deterministically with the fixed overlap while guaranteeing forward progress.
+- Each chunk must equal the exact normalized-text slice `text[char_start:char_end]`.
+- Store chunks in position order beginning at zero.
+- No chunk may be blank or exceed the fixed maximum.
+- The first chunk starts at zero; the final chunk ends at the normalized-text length; adjacent offset relationships must match the documented overlap policy.
+- Re-running the pure extractor/chunker over the same bytes and version must produce byte-identical normalized text, hashes, offsets, chunk texts and order.
+
+Keep pure parsing, normalization and chunking functions isolated and directly testable.
+
+## Service, repository and transactions
+
+- Retrieve only one stored SourceSnapshot and its necessary provenance without locks.
+- Copy the immutable bytes/metadata, end the read transaction, and perform parsing/chunking with no open database transaction.
+- Revalidate the exact snapshot identity, Source, content type, byte size and SHA-256 before persistence.
+- Detect an existing extraction under the same version before mutation. Protect concurrent duplicates with the named database uniqueness constraint and translate only that exact violation to the stable 409.
+- Build one terminal run and all chunks as one aggregate, flush atomically, commit exactly once and reload the stored response.
+- Roll back every persistence failure and re-raise unknown integrity failures.
+- Retrieval uses `session.no_autoflush`, stored fields and relationship position order; it performs no parsing, hashing, locks, writes or current-state re-evaluation.
+- Never mutate Source, SourceFetchRun, SourceSnapshot or any downstream record.
+
+## Tests
+
+Use dedicated PostgreSQL databases whose names end in `_test`. Add focused tests proving:
+
+- exact 404, 409 and terminal FAILED behavior;
+- successful extraction for all six supported content types;
+- exact deterministic normalization, one-final-newline rule, text hash and chunk hashes;
+- exact offsets, overlap, boundary preference, zero-based positions and stable order;
+- empty, malformed, invalid UTF-8, DTD/entity, encrypted/textless/malformed PDF and all configured limit failures;
+- no network access during parsing, including malicious HTML/XML/PDF references;
+- exact snapshot/Source/checksum provenance and PostgreSQL rejection of mismatches;
+- no historical inference during migration;
+- duplicate and concurrent duplicate handling;
+- parsing occurs with no open database transaction;
+- exact snapshot revalidation before persistence;
+- one commit for a complete successful or failed aggregate;
+- full rollback after injected post-flush failure;
+- retrieval equality, fixed eager-loading behavior and no mutation/reparse;
+- existing T-053 manual snapshots and T-054 executor snapshots both work identically;
+- Source, snapshot and downstream tables remain unchanged.
+
+Run migration/model constraint probes under nested savepoints. Use tiny deterministic fixtures; do not make public-network calls.
+
+## Required validation
+
+Run and report:
+
+- focused T-055 extraction/chunk tests;
+- complete T-048 through T-055 source pipeline suite;
+- T-053 and T-054 regressions explicitly;
+- existing Source/Evidence/Claim/Verification tests;
+- T-047 internal deliverable smoke test;
+- canonical content, document and artifact regressions;
+- complete test suite;
+- Ruff on every changed Python file;
+- `uv lock --check`;
+- `uv run alembic heads`;
+- `uv run alembic check`;
+- fresh database upgrade through the new head;
+- seeded upgrade/downgrade/re-upgrade cycle retaining representative Sources, runs and snapshots while inferring zero extractions/chunks;
+- direct PostgreSQL constraint and restricted-deletion probes;
+- `git diff --check`;
+- whitespace checks for every untracked file;
+- final `git status --short`.
+
+If a PDF dependency is added, include the exact `pyproject.toml` and `uv.lock` result. Report developer-run evidence accurately and do not call it GitHub CI.
+
+## Documentation and exclusions
+
+Update current architecture/workflow documentation and append implementation evidence to task history. Keep historical task records intact and record T-055 only as Ready for review.
+
+Explicitly exclude:
+
+- Gemini or any other AI provider/API key;
+- embeddings, vector database and RAG;
+- Evidence, Claim or Verification generation;
+- NoteDraft or QuestionBankItem generation;
+- automatic approval/release;
+- source discovery/fetch scheduling, retries, queues or workers;
+- OCR;
+- learner/public APIs, authentication, deployment or infrastructure;
+- T-056 definition or implementation.
+
+## Expected handoff
+
+Report starting/final Git state, exact files, dependencies, model/registration/migration/constraints, endpoint contracts, content-specific parsing, normalization/chunking contract, stable failures, transaction/concurrency behavior, migration cycle, focused/regression/full validation, documentation, unchanged components and explicit exclusions.
+
+Leave T-055 uncommitted and unpushed for independent review.
+
+Do not commit.
+Do not push.
+Do not create a PR.
+Do not self-approve.
+Do not define or implement T-056.
